@@ -1,8 +1,9 @@
-use clap::{App};
+use clap::App;
 #[macro_use]
 extern crate prettytable;
 use prettytable::{Cell, Row, Table};
 
+mod filename;
 mod reserved;
 
 fn main() {
@@ -21,11 +22,12 @@ fn main() {
         Some("reserved-words") => {
             let mut table = Table::new();
 
-            table.add_row(row!["Word", "Reason"]);
+            table.add_row(row!["Word", "Kind", "Reason"]);
 
             reserved::words().iter().for_each(|word| {
                 table.add_row(Row::new(vec![
                     Cell::new(word.word).style_spec("bFy"),
+                    Cell::new(&word.kind.to_string()).style_spec("Fb"),
                     Cell::new(word.reason),
                 ]));
             });

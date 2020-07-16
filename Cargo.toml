@@ -9,3 +9,13 @@ edition = "2018"
 [dependencies]
 clap = "3.0.0-beta.1"
 prettytable-rs = "^0.8"
+libc = "0.2.33"
+chrono = "0.4.13"
+
+[lib]
+name = "libmitre"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mitre"
+path = "src/main.rs"
