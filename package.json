@@ -1,0 +1,18 @@
+{
+  "name": "mitre",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test_node.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ffi-napi": "^3.0.1",
+    "ref-array-di": "^1.2.2",
+    "ref-napi": "^2.0.3",
+    "ref-struct-di": "^1.1.1"
+  }
+}
