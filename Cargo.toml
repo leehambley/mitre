@@ -10,6 +10,8 @@ clap = "3.0.0-beta.1"
 libc = "0.2.33"
 prettytable-rs = "^0.8"
 simple_logger = "1.6.0"
+envsubst = "0.2.0"
+filesystem = "0.4.4"
 
 [lib]
 crate-type = ["dylib"]

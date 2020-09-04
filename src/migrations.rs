@@ -1,124 +1,37 @@
-use super::reserved;
-use chrono::{NaiveDate, NaiveDateTime};
-use std::path::{Path, PathBuf};
+use super::filename;
+use std::fs;
+use std::io;
+use std::path::Path;
 
-// See https://docs.rs/chrono/0.3.1/chrono/format/strftime/index.html
-pub static FORMAT_STR: &str = "%Y%m%d%H%M%S";
-
-pub struct Parsed<'a> {
-  path: &'a Path,
-  date_time: NaiveDateTime,
-  flags: Vec<reserved::Word>,
+pub struct Migration<'a> {
+  parsed: filename::Parsed<'a>,
 }
 
-pub fn parse(p: &Path) -> Option<Parsed> {
-  if !reserved::words()
-    .iter()
-    .filter(|word| word.kind == reserved::Kind::Runner)
-    .any(|word| match p.extension() {
-      Some(ext) => ext == word.word,
-      _ => false,
-    })
-  {
-    return None;
+// TODO: anything to document here about max depth, and or/whether we
+// traverse filesystems, or whether there is a timeout (e.g slow network share)
+fn migrations(dir: &Path) -> Result<Vec<Migration>, io::Error> {
+  let migrations: Vec<Migration> = Vec::new();
+
+  for entry in fs::read_dir(dir)? {
+    let entry = entry?;
+    let path = entry.path();
+
+    let metadata = fs::metadata(&path)?;
+
+    println!(
+      "seconds, is read only: {:?}, size: {:?} bytes, filename: {:?}",
+      metadata.permissions().readonly(),
+      metadata.len(),
+      path.file_name().ok_or("No filename").unwrap()
+    );
   }
-
-  let file_name = match p.file_name() {
-    None => return None,
-    Some(file_name) => file_name.to_str().unwrap(),
-  };
-
-  let parts: Vec<&str> = file_name.split('_').collect();
-  eprintln!("{}", parts[0]);
-  let dt = match NaiveDateTime::parse_from_str(parts[0], FORMAT_STR) {
-    Ok(date_time) => date_time,
-    Err(_) => return None,
-  };
-
-  // get basename, check for timestamp at beignning
-  // if so check for one or more reserved words
-  // otherwise return nothing
-
-  Some(Parsed {
-    path: p,
-    date_time: dt,
-    flags: vec![],
-  })
+  return Ok(migrations);
 }
 
 #[cfg(test)]
 mod tests {
 
   use super::*;
-
-  #[test]
-  fn test_paths_with_no_extension_are_none() {
-    match parse(std::path::Path::new("./foo/bar")) {
-      Some(_) => panic!("shoud have been none"),
-      None => assert!(true),
-    }
-  }
-
-  #[test]
-  fn test_paths_with_no_timestamp_are_none() {
-    match parse(std::path::Path::new("./foo/bar.curl")) {
-      Some(_) => panic!("shoud have been none"),
-      None => assert!(true),
-    }
-  }
-
-  #[test]
-  fn test_parses_the_timestamp_correctly() -> Result<(), &'static str> {
-    match parse(std::path::Path::new("./foo/20200716120300_bar.curl")) {
-      Some(parsed) => {
-        assert_eq!(
-          parsed.date_time,
-          NaiveDate::from_ymd(2020, 7, 16).and_hms(12, 03, 00)
-        );
-        Ok(())
-      }
-      None => Err("expected to parse"),
-    }
-  }
-
-  #[test]
-  fn test_includes_the_given_path_in_the_response() {
-    let p = std::path::Path::new("./foo/20200716120300_bar.curl");
-
-    match parse(p) {
-      Some(parsed) => assert_eq!(parsed.path, p),
-      None => panic!("expected path to be parsable"),
-    }
-  }
-
-  #[test]
-  fn test_includes_the_given_path_in_the_response_when_is_a_dir() {
-    let p = std::path::Path::new("./foo/20200716120300_bar.curl/");
-
-    match parse(p) {
-      Some(parsed) => assert_eq!(parsed.path, p),
-      None => panic!("expected path to be parsable"),
-    }
-  }
-
-  #[test]
-  fn test_returns_result_error_if_no_timestamp_in_the_filename() {
-    let some_datetime = NaiveDate::from_ymd(2016, 7, 8).and_hms(9, 10, 11);
-    let some_timestamp = some_datetime.format(FORMAT_STR);
-
-    let mut path = PathBuf::new();
-    path.push("foo");
-    path.push("bar");
-    path.push(format!(
-      "{}_some_thing_here.curl",
-      some_timestamp.to_string()
-    ));
-
-    match parse(path.as_path()) {
-      Some(_) => assert!(true),
-      None => panic!("expected path to be parsable"),
-    }
-  }
 
   // unsupportted runner
   // use of reserved word out of place

@@ -1,0 +1,6 @@
+---
+es-docker:
+  runner: curl
+  hostname: es
+  protocol: http
+  logLevel: debug
