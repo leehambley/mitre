@@ -12,6 +12,7 @@ impl fmt::Display for Kind {
   }
 }
 
+#[derive(Debug)]
 pub struct Word {
   pub word: &'static str,
   pub reason: &'static str,

@@ -1,46 +1,90 @@
+extern crate pretty_env_logger;
+#[macro_use]
 use super::reserved;
-use chrono::{NaiveDate, NaiveDateTime};
-use std::path::{Path, PathBuf};
+use chrono::NaiveDateTime;
+use log::{info, trace, warn};
+use std::path::Path;
+#[cfg(test)]
+use std::path::PathBuf;
+
+#[cfg(test)]
+use chrono::NaiveDate;
 
 // See https://docs.rs/chrono/0.3.1/chrono/format/strftime/index.html
 pub static FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
-pub struct Parsed<'a> {
-  path: &'a Path,
-  date_time: NaiveDateTime,
-  flags: Vec<reserved::Word>,
+#[derive(Debug)]
+pub struct Parsed {
+  pub path: std::path::PathBuf,
+  pub date_time: NaiveDateTime,
+  pub flags: Vec<reserved::Word>,
 }
 
 pub fn parse(p: &Path) -> Option<Parsed> {
-  if !reserved::words()
+  let reserved_words = reserved::words();
+  let mut runner_reserved_words = reserved_words
     .iter()
-    .filter(|word| word.kind == reserved::Kind::Runner)
-    .any(|word| match p.extension() {
-      Some(ext) => ext == word.word,
-      _ => false,
-    })
-  {
+    .filter(|word| word.kind == reserved::Kind::Runner);
+
+  if runner_reserved_words.any(|word| match p.extension() {
+    Some(ext) => {
+      trace!("{:?} == {} ({})", ext, word.word, ext == word.word);
+      return ext == word.word;
+    }
+    _ => {
+      warn!(
+        "{} file extension is a reserved word, skipping {}",
+        p.display(),
+        word.word
+      );
+      return false;
+    }
+  }) {
+    warn!(
+      "{} file extension ({:?}) is a reserved word",
+      p.display(),
+      p.extension()
+    );
     return None;
   }
 
   let file_name = match p.file_name() {
-    None => return None,
-    Some(file_name) => file_name.to_str().unwrap(),
+    // p is a std::path::Path
+    Some(file_name) => match file_name.to_str() {
+      Some(file_name) => file_name,
+      None => {
+        trace!("{} couldn't be turned into a str", p.display());
+        return None; // open file deleted, no namy anymore?
+      }
+    },
+    None => {
+      debug!(
+        "{} has no filename anymore (file removed or renamed?)",
+        p.display()
+      );
+      return None;
+    } // open file deleted, no namy anymore?,
   };
-
   let parts: Vec<&str> = file_name.split('_').collect();
-  eprintln!("{}", parts[0]);
+
   let dt = match NaiveDateTime::parse_from_str(parts[0], FORMAT_STR) {
     Ok(date_time) => date_time,
-    Err(_) => return None,
+    Err(e) => {
+      debug!(
+        "{} could not parse a date from the file extension ({})",
+        p.display(),
+        e
+      );
+      return None;
+    }
   };
 
   // get basename, check for timestamp at beignning
   // if so check for one or more reserved words
   // otherwise return nothing
-
+  eprintln!("found some parsed {:?}", p.to_path_buf());
   Some(Parsed {
-    path: p,
+    path: p.to_path_buf(),
     date_time: dt,
     flags: vec![],
   })
@@ -56,6 +100,14 @@ mod tests {
     match parse(std::path::Path::new("./foo/bar")) {
       Some(_) => panic!("shoud have been none"),
       None => assert!(true),
+    }
+  }
+
+  #[test]
+  fn test_paths_with_no_reserved_word_extension_are_some() {
+    match parse(std::path::Path::new("./foo/bar.es-docker")) {
+      Some(_) => assert!(true),
+      None => panic!("shoud have been none"),
     }
   }
 

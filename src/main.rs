@@ -1,13 +1,20 @@
-use clap::{App, Arg, ArgMatches};
+extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
+
+use clap::{App, Arg};
 #[macro_use]
 extern crate prettytable;
 use prettytable::{Cell, Row, Table};
+use std::path::Path;
 
 mod filename;
 mod migrations;
 mod reserved;
 
 fn main() {
+  pretty_env_logger::init();
+
   let m = App::new("mitre")
     .version("0.1")
     .author("Lee Hambley <lee.hambley@gmail.com>")
@@ -56,8 +63,25 @@ fn main() {
     }
 
     Some("show-migrations") => {
+      info!("showing migrations");
       if let Some(ref matches) = m.subcommand_matches("show-migrations") {
         assert!(matches.is_present("directory"));
+        let path = Path::new(matches.value_of("directory").unwrap());
+        let migrations = match migrations::migrations(path) {
+          Ok(m) => m,
+          Err(_) => panic!("something happen"),
+        };
+
+        let mut table = Table::new();
+        table.add_row(row!["Filename"]);
+        migrations.iter().for_each(|migration| {
+          eprintln!("{:?}", migration);
+          table.add_row(Row::new(vec![Cell::new(
+            migration.parsed.path.to_str().unwrap(),
+          )
+          .style_spec("bFy")]));
+        });
+        table.printstd();
       }
     }
     Some("up") => {}   // up was used
