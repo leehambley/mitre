@@ -3,7 +3,6 @@ use std::os::raw::c_char;
 extern crate libc;
 mod reserved;
 
-#[no_mangle]
 #[repr(C)]
 pub struct ReservedWords {
     len: usize,
@@ -12,7 +11,6 @@ pub struct ReservedWords {
 
 #[repr(C)]
 #[derive(Debug)]
-#[no_mangle]
 pub struct ReservedWord {
     word: *mut c_char,
     reason: *mut c_char,
@@ -31,7 +29,7 @@ extern "C" fn reserved_word() -> *mut ReservedWord {
         kind: k.into_raw(),
     };
     eprintln!("{:?}", word);
-    return Box::into_raw(Box::new(word));
+    Box::into_raw(Box::new(word))
 }
 
 #[no_mangle]
@@ -57,7 +55,7 @@ extern "C" fn reserved_words() -> *mut ReservedWords {
         words: Box::into_raw(v.into_boxed_slice()) as *mut ReservedWord,
     };
 
-    return Box::into_raw(Box::new(rw));
+    Box::into_raw(Box::new(rw))
 }
 
 #[no_mangle]

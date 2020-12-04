@@ -2,85 +2,85 @@ use std::fmt;
 
 #[derive(Debug, PartialEq)]
 pub enum Kind {
-  Runner,
-  Flag,
+    Runner,
+    Flag,
 }
 
 impl fmt::Display for Kind {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    fmt::Debug::fmt(self, f)
-  }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
 }
 
 #[derive(Debug)]
 pub struct Word {
-  pub word: &'static str,
-  pub reason: &'static str,
-  pub kind: Kind,
+    pub word: &'static str,
+    pub reason: &'static str,
+    pub kind: Kind,
 }
 
 pub fn words() -> Vec<Word> {
-  return vec![
-    Word {
-      word: "bash3",
-      reason: "Used as an extension to activate the Bash (v3) runner.",
-      kind: Kind::Runner,
-    },
-    Word {
-      word: "bash4",
-      reason: "Used as an extension to activate the Bash (v4) runner.",
-      kind: Kind::Runner,
-    },
-    Word {
-      word: "python3",
-      reason: "Used an extension to activate the Python (v3) runner.",
-      kind: Kind::Runner,
-    },
-    Word {
-      word: "curl",
-      reason: "Used as an extension to activate the cURL runner.",
-      kind: Kind::Runner,
-    },
-    Word {
-      word: "rails",
-      reason: "Used as an extension to activate the (Ruby on) Rails runner.",
-      kind: Kind::Runner,
-    },
-    Word {
-      word: "sh",
-      reason: "Used as an extension to activate the POSIX sh runner.",
-      kind: Kind::Runner,
-    },
-    Word {
-      word: "kafka",
-      reason: "Used as an extension to activate the Kafka runner.",
-      kind: Kind::Runner,
-    },
-    Word {
-      word: "data",
-      reason: "Indicates this is a data migration (advisory only)",
-      kind: Kind::Flag,
-    },
-    Word {
-      word: "long",
-      reason: "Indicates this may be long running (advisory only, e.g changing an index)",
-      kind: Kind::Flag,
-    },
-    Word {
-      word: "risky",
-      reason: "Indicates this is risky migration (advisory only, e.g renaming a column)",
-      kind: Kind::Flag,
-    },
-  ];
+    return vec![
+        Word {
+            word: "bash3",
+            reason: "Used as an extension to activate the Bash (v3) runner.",
+            kind: Kind::Runner,
+        },
+        Word {
+            word: "bash4",
+            reason: "Used as an extension to activate the Bash (v4) runner.",
+            kind: Kind::Runner,
+        },
+        Word {
+            word: "python3",
+            reason: "Used an extension to activate the Python (v3) runner.",
+            kind: Kind::Runner,
+        },
+        Word {
+            word: "curl",
+            reason: "Used as an extension to activate the cURL runner.",
+            kind: Kind::Runner,
+        },
+        Word {
+            word: "rails",
+            reason: "Used as an extension to activate the (Ruby on) Rails runner.",
+            kind: Kind::Runner,
+        },
+        Word {
+            word: "sh",
+            reason: "Used as an extension to activate the POSIX sh runner.",
+            kind: Kind::Runner,
+        },
+        Word {
+            word: "kafka",
+            reason: "Used as an extension to activate the Kafka runner.",
+            kind: Kind::Runner,
+        },
+        Word {
+            word: "data",
+            reason: "Indicates this is a data migration (advisory only)",
+            kind: Kind::Flag,
+        },
+        Word {
+            word: "long",
+            reason: "Indicates this may be long running (advisory only, e.g changing an index)",
+            kind: Kind::Flag,
+        },
+        Word {
+            word: "risky",
+            reason: "Indicates this is risky migration (advisory only, e.g renaming a column)",
+            kind: Kind::Flag,
+        },
+    ];
 }
 
 #[cfg(test)]
 mod tests {
 
-  use super::*;
+    use super::*;
 
-  #[test]
-  fn test_words() {
-    assert!(words().iter().any(|v| v.word == "curl"));
-  }
+    #[test]
+    fn test_words() {
+        assert!(words().iter().any(|v| v.word == "curl"));
+    }
 }
