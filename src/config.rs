@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::error;
 use std::fmt;
@@ -49,8 +50,24 @@ impl From<serde_yaml::Error> for ConfigError {
 //
 // Load YAML using serde-yaml,
 //
+#[derive(Deserialize, Debug)]
+pub struct Configuration {
+  runner: Option<String>,
 
-pub struct Configuration {}
+  database: Option<String>, // used by MariaDB, MySQL, PostgreSQL runners
+
+  index: Option<String>, // used by ElasticSearch
+
+  database_number: Option<u8>, // used by Redis runner
+
+  // Maybe this should have another name, we also would
+  // probably accept IPs or anything resolveable here.
+  hostname: Option<String>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
+
+  // Max value for port on linux comes from `cat /proc/sys/net/ipv4/ip_local_port_range`
+  // u16 should be enough for most people most of the time.
+  port: Option<u16>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
+}
 
 pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError> {
   // File doesn't exist
@@ -58,11 +75,9 @@ pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError
   // File isn't readable
   // File isn't YAML
   // File isn't _valid_ YAML
-  let hm = HashMap::new();
-
   let f = std::fs::File::open(p)?;
-  let d: String = serde_yaml::from_reader(f)?;
-  println!("Read YAML string: {}", d);
+  let hm: HashMap<String, Configuration> = serde_yaml::from_reader(f)?;
+  println!("Read YAML string: {:?}", hm);
   Ok(hm) // Ok(serde_yaml::from_reader(f))
 }
 
