@@ -1,9 +1,10 @@
 extern crate env_logger;
-use super::reserved;
+use crate::reserved;
 
 use chrono::NaiveDateTime;
 use log::{info, warn};
 use std::fmt::Debug;
+
 use std::path::Path;
 
 #[cfg(test)]
@@ -18,7 +19,7 @@ pub static FORMAT_STR: &str = "%Y%m%d%H%M%S";
 pub struct Parsed {
     pub path: std::path::PathBuf,
     pub date_time: NaiveDateTime,
-    pub flags: Vec<reserved::Word>,
+    pub flags: Vec<&'static str>,
 }
 
 #[derive(Debug)]
@@ -52,6 +53,18 @@ pub fn parse(p: &Path) -> Result<Parsed, Problem> {
         .iter()
         .filter(|word| word.kind == reserved::Kind::Runner);
 
+    let flag_reserved_words = reserved_words
+        .iter()
+        .filter(|word| word.kind == reserved::Kind::Flag);
+
+    let dot_parts = p
+        .to_str()
+        .expect("p to_str")
+        .split(|x| x == std::path::MAIN_SEPARATOR || x == '.');
+
+    for s in dot_parts {
+        println!("dot parts: {:?} {:?}", p, s);
+    }
     match p.extension() {
         Some(_) => {}
         None => {
@@ -63,13 +76,8 @@ pub fn parse(p: &Path) -> Result<Parsed, Problem> {
     }
 
     let contains_any_runner_reserved_word = runner_reserved_words.any(|word| match p.extension() {
-        Some(ext) => {
-            if ext == word.word {
-                println!("{:?} matches {}", ext, word.word);
-            }
-            true
-        }
-        _ => {
+        Some(ext) => ext == word.word,
+        None => {
             info!(
                 "{} file extension is a reserved word, skipping {}",
                 p.display(),
@@ -78,11 +86,6 @@ pub fn parse(p: &Path) -> Result<Parsed, Problem> {
             false
         }
     });
-
-    println!(
-        "contains any reserved word {:?}",
-        contains_any_runner_reserved_word,
-    );
 
     if !contains_any_runner_reserved_word {
         warn!(
@@ -100,7 +103,7 @@ pub fn parse(p: &Path) -> Result<Parsed, Problem> {
         });
     }
 
-    let file_name = match p.file_name() {
+    let _file_name = match p.file_name() {
         Some(filename) => match filename.to_str() {
             Some(filename) => filename,
             None => panic!("to_str a filename failed (oom?)"),
@@ -113,27 +116,46 @@ pub fn parse(p: &Path) -> Result<Parsed, Problem> {
         }
     };
 
-    let parts: Vec<&str> = file_name.split('_').collect();
+    let parts: Vec<&str> = p
+        .to_str()
+        .expect("must be allocable")
+        .split(|x| x == std::path::MAIN_SEPARATOR || x == '_' || x == '.')
+        .collect();
 
-    let dt = match NaiveDateTime::parse_from_str(parts[0], FORMAT_STR) {
-        Ok(date_time) => date_time,
-        Err(e) => {
+    let mut flags = vec![];
+    for part in parts.iter() {
+        println!("part: {}", part);
+        for flag_reserved_word in flag_reserved_words.clone() {
+            if *part == flag_reserved_word.word {
+                flags.push(flag_reserved_word.word)
+            }
+        }
+    }
+
+    let dt = parts.iter().find_map(|p_x| {
+        println!("Checking {:?} for TS", p_x);
+        match NaiveDateTime::parse_from_str(p_x, FORMAT_STR) {
+            Ok(date_time) => Some(date_time),
+            Err(_) => None,
+        }
+    });
+
+    match dt {
+        None => {
             return Err(Problem {
                 reason: ProblemReason::TimestampDidNotParse,
                 hint: format!(
-                    "{} could not parse a date from the file extension ({})",
+                    "{} could not parse a date from the file extension",
                     p.display(),
-                    e
                 ),
-            });
+            })
         }
-    };
-
-    Ok(Parsed {
-        path: p.to_path_buf(),
-        date_time: dt,
-        flags: vec![],
-    })
+        Some(dt) => Ok(Parsed {
+            path: p.to_path_buf(),
+            date_time: dt,
+            flags,
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -167,16 +189,16 @@ mod tests {
 
     #[test]
     fn test_paths_with_no_timestamp_are_err() {
-        match parse(std::path::Path::new("./foo/bar.curl.my-conf")) {
+        match parse(std::path::Path::new("./foo/bar.my-conf.curl")) {
             Ok(_) => panic!("shoud have been none"),
             Err(_) => assert!(true),
         }
     }
 
     #[test]
-    fn test_parses_the_timestamp_correctly() -> Result<(), &'static str> {
+    fn test_parses_the_timestamp_correctly() -> Result<(), String> {
         match parse(std::path::Path::new(
-            "./foo/20200716120300_bar.curl.my-conf",
+            "./foo/20200716120300_bar.my-conf.curl",
         )) {
             Ok(parsed) => {
                 assert_eq!(
@@ -185,13 +207,13 @@ mod tests {
                 );
                 Ok(())
             }
-            Err(e) => panic!("expected to parse {:?}", e),
+            Err(e) => Err(format!("expected to parse {:?}", e)),
         }
     }
 
     #[test]
     fn test_includes_the_given_path_in_the_response() {
-        let p = std::path::Path::new("./foo/20200716120300_bar.docker-es");
+        let p = std::path::Path::new("./foo/20200716120300_bar.curl");
 
         match parse(p) {
             Ok(parsed) => assert_eq!(parsed.path, p),
@@ -224,6 +246,15 @@ mod tests {
 
         match parse(path.as_path()) {
             Ok(_) => assert!(true),
+            Err(e) => panic!("expected path to be parsable {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_that_the_directory_system_works_ok() {
+        let p = std::path::Path::new("./foo/20200716120300_bar/up.curl");
+        match parse(p) {
+            Ok(parsed) => assert_eq!(parsed.path, p),
             Err(e) => panic!("expected path to be parsable {:?}", e),
         }
     }

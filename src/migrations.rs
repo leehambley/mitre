@@ -1,5 +1,6 @@
 // #[cfg(not (test))]
-use super::filename;
+use crate::filename;
+// use ::phf::{phf_map, Map};
 use std::fmt;
 use std::fs;
 use std::io;
@@ -32,6 +33,12 @@ pub struct Migration {
     pub parsed: filename::Parsed,
     pub direction: Direction,
 }
+
+// static ICONS: Map<Direction, &'static str> = phf_map! {
+//   Direction::Up => "⬆",
+//   Direction::Down => "⬇",
+//   Direction::Change => "⭬",
+// };
 
 // TODO: anything to document here about max depth, and or/whether we
 // traverse filesystems, or whether there is a timeout (e.g slow network share)

@@ -1,9 +1,10 @@
 use std::fmt;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Kind {
     Runner,
     Flag,
+    Direction,
 }
 
 impl fmt::Display for Kind {
@@ -70,6 +71,21 @@ pub fn words() -> Vec<Word> {
             word: "risky",
             reason: "Indicates this is risky migration (advisory only, e.g renaming a column)",
             kind: Kind::Flag,
+        },
+        Word {
+            word: "up",
+            reason: "Used to indicate upward (forward) migrations",
+            kind: Kind::Direction,
+        },
+        Word {
+            word: "change",
+            reason: "Used to indicate change migrations (no implied direction)",
+            kind: Kind::Direction,
+        },
+        Word {
+            word: "down",
+            reason: "Used to indicate down (backwards) migrations",
+            kind: Kind::Direction,
         },
     ];
 }

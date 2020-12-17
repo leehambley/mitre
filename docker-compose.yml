@@ -2,19 +2,30 @@
 version: "3.1"
 
 services:
+
   mariadb:
     image: mariadb
     restart: always
     environment:
       - MYSQL_ROOT_PASSWORD=example
+    ports:
+      - 3306:3306
 
   postgres:
     image: postgres
     restart: always
-    ports:
-      - 5432:5432
     environment:
       - POSTGRES_PASSWORD=example
+    ports:
+      - 5432:5432
+
+  mysql:
+    image: mysql
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=example
+    ports:
+      - 3306:3307
 
   redis:
     image: redis

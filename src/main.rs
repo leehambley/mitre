@@ -8,6 +8,7 @@ extern crate prettytable;
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
 
+mod config;
 mod filename;
 mod migrations;
 mod reserved;
@@ -23,6 +24,18 @@ fn main() {
             App::new("reserved-words")
                 .about("utilties for reserved words")
                 .subcommand(App::new("ls").about("list reserved words")),
+        )
+        .subcommand(
+            App::new("show-config")
+                .about("for showing config file")
+                .arg(
+                    Arg::with_name("config_file")
+                        .long("config")
+                        .short('c')
+                        .takes_value(true)
+                        .value_name("CONFIG FILE")
+                        .about("The configuration file to use, no default"),
+                ),
         )
         .subcommand(
             App::new("show-migrations")
@@ -62,6 +75,19 @@ fn main() {
             table.printstd();
         }
 
+        Some("reserved-words") => {
+            if let Some(ref matches) = m.subcommand_matches("config_file") {
+                assert!(matches.is_present("config_file"));
+                let path = Path::new(matches.value_of("config_file").unwrap());
+                let migrations = match migrations::migrations(path) {
+                    Ok(m) => m,
+                    Err(_) => panic!("please specify config file"),
+                };
+                config::from_file(path);
+                println!("using {:?}", path);
+            }
+        }
+
         Some("show-migrations") => {
             info!("showing migrations");
             if let Some(ref matches) = m.subcommand_matches("show-migrations") {
@@ -73,20 +99,22 @@ fn main() {
                 };
 
                 let mut table = Table::new();
-                table.add_row(row!["Filename"]);
+                table.add_row(row!["Filename", "Date/Time", "Flags"]);
                 migrations.iter().for_each(|migration| {
                     eprintln!("{:?}", migration);
-                    table.add_row(Row::new(vec![Cell::new(
-                        migration.parsed.path.to_str().unwrap(),
-                    )
-                    .style_spec("bFy")]));
+                    table.add_row(Row::new(vec![
+                        Cell::new(migration.parsed.path.to_str().unwrap()).style_spec("bFy"),
+                        Cell::new(&format!("{}", migration.parsed.date_time.timestamp())[..])
+                            .style_spec("Fb"),
+                        Cell::new(&format!("{:?}", migration.parsed.flags)[..]),
+                    ]));
                 });
                 table.printstd();
             }
         }
         Some("up") => {}   // up was used
-        Some("down") => {} // dowm was used
-        Some("redo") => {} // dowm was used
+        Some("down") => {} // down was used
+        Some("redo") => {} // redo was used
         _ => {}            // Either no subcommand or one not tested for...
     }
 }
