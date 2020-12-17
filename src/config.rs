@@ -52,7 +52,7 @@ impl From<serde_yaml::Error> for ConfigError {
 //
 #[derive(Deserialize, Debug)]
 pub struct Configuration {
-  runner: Option<String>,
+  runner: String,
 
   database: Option<String>, // used by MariaDB, MySQL, PostgreSQL runners
 
