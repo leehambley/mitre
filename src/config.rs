@@ -52,7 +52,9 @@ impl From<serde_yaml::Error> for ConfigError {
 //
 #[derive(Deserialize, Debug)]
 pub struct Configuration {
-  runner: String,
+  // Runner is not optional, but we need to option it here to maintain
+  // serde::Deserialize compatibility
+  runner: Option<String>,
 
   database: Option<String>, // used by MariaDB, MySQL, PostgreSQL runners
 
@@ -68,6 +70,8 @@ pub struct Configuration {
   // u16 should be enough for most people most of the time.
   port: Option<u16>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
 }
+
+// TODO: validate at least one `mitre` config with a compatible runner in the HashMap<String,...>
 
 pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError> {
   // File doesn't exist

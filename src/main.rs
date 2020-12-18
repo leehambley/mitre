@@ -12,6 +12,10 @@ mod config;
 mod filename;
 mod migrations;
 mod reserved;
+mod runner;
+
+use runner::mariadb::MariaDB;
+use runner::Runner;
 
 fn main() {
   env_logger::init();
@@ -90,6 +94,8 @@ fn main() {
         println!("using {:?}", path);
       }
       println!("wat, no config");
+      let mdb = MariaDB {};
+      println!("{:?}", mdb.run());
     }
 
     Some("show-migrations") => {
