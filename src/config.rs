@@ -1,14 +1,16 @@
-use serde::Deserialize;
+extern crate yaml_rust;
 use std::collections::HashMap;
 use std::error;
 use std::fmt;
 use std::io;
+use std::io::Read;
 use std::path::Path;
+use yaml_rust::YamlLoader;
 
 #[derive(Debug)]
 pub enum ConfigError {
   Io(io::Error),
-  Yaml(serde_yaml::Error),
+  Yaml(yaml_rust::ScanError),
 }
 
 impl fmt::Display for ConfigError {
@@ -16,8 +18,8 @@ impl fmt::Display for ConfigError {
     match *self {
       // Underlying errors already impl `Display`, so we defer to
       // their implementations.
-      ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
-      ConfigError::Yaml(ref err) => write!(f, "YAML error: {}", err),
+      ConfigError::Io(ref err) => write!(f, "MITRE: IO error: {}", err),
+      ConfigError::Yaml(ref err) => write!(f, "MITRE: YAML error: {}", err),
     }
   }
 }
@@ -41,8 +43,14 @@ impl From<io::Error> for ConfigError {
   }
 }
 
-impl From<serde_yaml::Error> for ConfigError {
-  fn from(err: serde_yaml::Error) -> ConfigError {
+// impl From<serde_yaml::Error> for ConfigError {
+//   fn from(err: serde_yaml::Error) -> ConfigError {
+//     ConfigError::Yaml(err)
+//   }
+// }
+
+impl From<yaml_rust::ScanError> for ConfigError {
+  fn from(err: yaml_rust::ScanError) -> ConfigError {
     ConfigError::Yaml(err)
   }
 }
@@ -50,38 +58,56 @@ impl From<serde_yaml::Error> for ConfigError {
 //
 // Load YAML using serde-yaml,
 //
-#[derive(Deserialize, Debug)]
+#[derive(Debug)]
 pub struct Configuration {
   // Runner is not optional, but we need to option it here to maintain
   // serde::Deserialize compatibility
-  runner: Option<String>,
+  pub _runner: Option<String>,
 
-  database: Option<String>, // used by MariaDB, MySQL, PostgreSQL runners
+  pub database: Option<String>, // used by MariaDB, MySQL, PostgreSQL runners
 
-  index: Option<String>, // used by ElasticSearch
+  pub index: Option<String>, // used by ElasticSearch
 
-  database_number: Option<u8>, // used by Redis runner
+  pub database_number: Option<u8>, // used by Redis runner
 
   // Maybe this should have another name, we also would
   // probably accept IPs or anything resolveable here.
-  hostname: Option<String>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
+  pub ip_or_hostname: Option<String>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
 
   // Max value for port on linux comes from `cat /proc/sys/net/ipv4/ip_local_port_range`
   // u16 should be enough for most people most of the time.
-  port: Option<u16>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
+  pub port: Option<u16>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
+
+  pub username: Option<String>,
+  pub password: Option<String>,
 }
 
 // TODO: validate at least one `mitre` config with a compatible runner in the HashMap<String,...>
 
 pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError> {
-  // File doesn't exist
-  // File isn't a file
-  // File isn't readable
-  // File isn't YAML
-  // File isn't _valid_ YAML
-  let f = std::fs::File::open(p)?;
-  let hm: HashMap<String, Configuration> = serde_yaml::from_reader(f)?;
-  println!("Read YAML string: {:?}", hm);
+  // TODO: File doesn't exist
+  // TODO: File isn't a file
+  // TODO: File isn't readable
+  // TODO: File isn't YAML
+  // TODO: File isn't _valid_ YAML
+  let mut s = String::new();
+  let mut f = std::fs::File::open(p)?;
+  f.read_to_string(&mut s)?;
+  let yaml_docs = YamlLoader::load_from_str(&s)?;
+
+  let hm: HashMap<String, Configuration> = HashMap::new();
+  for yaml in yaml_docs {
+    println!(">>> yaml is {:?}", yaml);
+    yaml.into_iter().for_each(|item| {
+      println!("item: {:?}", item);
+    });
+    println!("after iter");
+    // for key in yaml_docs[yaml].into_iter() {
+    //   println!("a yaml {:?}", yaml);
+    // }
+  }
+  // let hm: HashMap<String, Configuration> = serde_yaml::from_reader(f)?;
+  // println!("Read YAML string: {:?}", hm);
   Ok(hm) // Ok(serde_yaml::from_reader(f))
 }
 

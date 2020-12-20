@@ -15,7 +15,10 @@ CREATE TABLE mitre_migrations (
 
   -- Simple metadata columns
   `applied_at` TIMESTAMP NOT NULL,
-  `apply_time_sec` BIGINT UNSIGNED NOT NULL
+  `apply_time_sec` BIGINT UNSIGNED NOT NULL,
+
+  -- Environment
+  `environment` TINYTEXT NOT NULL
 
 ) ENGINE=InnoDB;
 -- ENGINE=InnoDB is the default, but let's be explicit.

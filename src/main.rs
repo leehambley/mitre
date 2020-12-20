@@ -85,7 +85,18 @@ fn main() {
         let path = Path::new(matches.value_of("config_file").unwrap());
         match config::from_file(path) {
           Ok(c) => {
-            println!("loading config succeeded {:?}", c)
+            println!("loading config succeeded {:?}", c);
+            let mitre_config = c.get("es-mariadb").expect("must provide mitre config");
+            let mdb = MariaDB::new(mitre_config);
+            match mdb {
+              Ok(mut mmmdb) => {
+                println!("bootstrap {:?}", mmmdb.bootstrap());
+              }
+              Err(e) => {
+                println!("error connecting/reading config for mariadb {:?}", e);
+                std::process::exit(123);
+              }
+            };
           }
           Err(e) => {
             println!("error loading config: {:?}", e)
@@ -94,8 +105,6 @@ fn main() {
         println!("using {:?}", path);
       }
       println!("wat, no config");
-      let mdb = MariaDB {};
-      println!("{:?}", mdb.run());
     }
 
     Some("show-migrations") => {

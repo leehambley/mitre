@@ -3,16 +3,18 @@
 # migration is named like ???_foo_bar.es-docker.curl
 # then there must be an entry `runner: curl` with the
 # name `es-docker` to host it.
-es-maradb: &es-mariadb
-  runner: mysql
-  database: mitre-test
-  hostname: 127.0.0.1
-  port: 3306
+es-mariadb: &es-mariadb
+  _runner: mysql
+  database: mitre
+  ip_or_hostname: 127.0.0.1
   logLevel: debug
+  password: example
+  port: 3306
+  username: root
 
 es-docker:
-  runner: curl
-  hostname: es
+  _runner: curl
+  ip_or_hostname: es
   protocol: http
   logLevel: debug
 
