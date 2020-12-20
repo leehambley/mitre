@@ -5,7 +5,7 @@ use std::fmt;
 use std::io;
 use std::io::Read;
 use std::path::Path;
-use yaml_rust::YamlLoader;
+use yaml_rust::{Yaml, YamlLoader};
 
 #[derive(Debug)]
 pub enum ConfigError {
@@ -90,17 +90,23 @@ pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError
   // TODO: File isn't readable
   // TODO: File isn't YAML
   // TODO: File isn't _valid_ YAML
-  let mut s = String::new();
-  let mut f = std::fs::File::open(p)?;
-  f.read_to_string(&mut s)?;
+  let s = std::fs::read_to_string(p)?;
   let yaml_docs = YamlLoader::load_from_str(&s)?;
 
   let hm: HashMap<String, Configuration> = HashMap::new();
   for yaml in yaml_docs {
-    println!(">>> yaml is {:?}", yaml);
-    yaml.into_iter().for_each(|item| {
-      println!("item: {:?}", item);
-    });
+    match yaml {
+      Yaml::Hash(ref map) => {
+        for (k, v) in map {
+          println!("k: {:?} === v: {:?}", k, v);
+        }
+      }
+      _ => warn!("unexpected type at top level of YAML"),
+    }
+    // println!(">>> yaml is {:?}", yaml);
+    // let _ = yaml.into_iter().map(|item| {
+    //   println!("item: {:?}", item);
+    // });
     println!("after iter");
     // for key in yaml_docs[yaml].into_iter() {
     //   println!("a yaml {:?}", yaml);
