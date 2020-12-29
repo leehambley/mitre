@@ -10,6 +10,7 @@ use yaml_rust::{Yaml, YamlLoader};
 pub enum ConfigError {
     Io(io::Error),
     Yaml(yaml_rust::ScanError),
+    NoYamlHash(),
 }
 
 impl fmt::Display for ConfigError {
@@ -19,6 +20,10 @@ impl fmt::Display for ConfigError {
             // their implementations.
             ConfigError::Io(ref err) => write!(f, "MITRE: IO error: {}", err),
             ConfigError::Yaml(ref err) => write!(f, "MITRE: YAML error: {}", err),
+            ConfigError::NoYamlHash() => write!(
+                f,
+                "MITRE: YAML error: the top level doc in the yaml wasn't a hash"
+            ),
         }
     }
 }
@@ -32,6 +37,7 @@ impl error::Error for ConfigError {
             // implement `Error`.
             ConfigError::Io(ref err) => Some(err),
             ConfigError::Yaml(ref err) => Some(err),
+            ConfigError::NoYamlHash() => None {},
         }
     }
 }
@@ -40,7 +46,6 @@ impl From<io::Error> for ConfigError {
     fn from(err: io::Error) -> ConfigError {
         ConfigError::Io(err)
     }
-
 }
 
 // impl From<serde_yaml::Error> for ConfigError {
@@ -105,7 +110,7 @@ fn get_string(yaml: &yaml_rust::Yaml, search_key: String) -> Option<String> {
 fn as_string(yaml: &yaml_rust::Yaml) -> String {
     match yaml {
         yaml_rust::Yaml::String(yaml) => yaml.to_owned(),
-        _ => String::from("")
+        _ => String::from(""),
     }
 }
 
@@ -135,28 +140,25 @@ pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError
                                 database: get_string(config_value, String::from("database")),
                                 index: get_string(config_value, String::from("index")),
                                 database_number: Some(1),
-                                ip_or_hostname: get_string(config_value, String::from("ip_or_hostname")),
+                                ip_or_hostname: get_string(
+                                    config_value,
+                                    String::from("ip_or_hostname"),
+                                ),
                                 port: Some(1234),
                                 username: get_string(config_value, String::from("username")),
                                 password: get_string(config_value, String::from("password")),
                             };
                             hm.insert(as_string(k), c);
                         }
-                        _ => ()
+                        _ => (),
                     }
                 }
             }
-            _ => warn!("unexpected type at top level of YAML"),
+            _ => {
+                warn!("unexpected type at top level of YAML");
+                return Err(ConfigError::NoYamlHash {});
+            }
         }
-
-        // println!(">>> yaml is {:?}", yaml);
-        // let _ = yaml.into_iter().map(|item| {
-        //   println!("item: {:?}", item);
-        // });
-        // println!("after iter");
-        // for key in yaml_docs[yaml].into_iter() {
-        //   println!("a yaml {:?}", yaml);
-        // }
     }
     // let hm: HashMap<String, Configuration> = serde_yaml::from_reader(f)?;
     // println!("Read YAML string: {:?}", hm);
