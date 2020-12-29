@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::error;
 use std::fmt;
 use std::io;
-use std::io::Read;
 use std::path::Path;
 use yaml_rust::{Yaml, YamlLoader};
 
@@ -11,6 +10,7 @@ use yaml_rust::{Yaml, YamlLoader};
 pub enum ConfigError {
   Io(io::Error),
   Yaml(yaml_rust::ScanError),
+  NoYamlHash(),
 }
 
 impl fmt::Display for ConfigError {
@@ -20,6 +20,10 @@ impl fmt::Display for ConfigError {
       // their implementations.
       ConfigError::Io(ref err) => write!(f, "MITRE: IO error: {}", err),
       ConfigError::Yaml(ref err) => write!(f, "MITRE: YAML error: {}", err),
+      ConfigError::NoYamlHash() => write!(
+        f,
+        "MITRE: YAML error: the top level doc in the yaml wasn't a hash"
+      ),
     }
   }
 }
@@ -33,6 +37,7 @@ impl error::Error for ConfigError {
       // implement `Error`.
       ConfigError::Io(ref err) => Some(err),
       ConfigError::Yaml(ref err) => Some(err),
+      ConfigError::NoYamlHash() => None {},
     }
   }
 }
@@ -101,7 +106,10 @@ pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError
           println!("k: {:?} === v: {:?}", k, v);
         }
       }
-      _ => warn!("unexpected type at top level of YAML"),
+      _ => {
+        warn!("unexpected type at top level of YAML");
+        return Err(ConfigError::NoYamlHash {});
+      }
     }
     // println!(">>> yaml is {:?}", yaml);
     // let _ = yaml.into_iter().map(|item| {
