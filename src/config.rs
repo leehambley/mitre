@@ -88,7 +88,6 @@ pub struct Configuration {
 }
 
 fn get_string(yaml: &yaml_rust::Yaml, search_key: String) -> Option<String> {
-    println!("\n\n\n yaml: {:?} \n\t search_key: {:?}", yaml, search_key);
     let mut result: Option<String> = None;
 
     match yaml {
@@ -139,15 +138,19 @@ pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError
         .flat_map(|map| map.iter())
         .filter_map(|(k, v)| {
             if let Yaml::Hash(value) = v {
-                Some((k, value))
+                let is_anchor = value.keys().find(|key| as_string(key).eq("<<"));
+                if is_anchor == None {
+                    Some((k, v))
+                } else {
+                    let anchor_element = value.iter().next(); // shows up as <<
+                    let referenced_value = anchor_element.unwrap().1;
+                    Some((k, referenced_value))
+                }
             } else {
                 None
             }
         })
-        .for_each(|(k, value)| {
-            let strange_element = value.iter().next(); // shows up as <<
-            let config_value = strange_element.unwrap().1;
-            println!("k: {:?} === v: {:?}", k, config_value);
+        .for_each(|(k, config_value)| {
             let c = Configuration {
                 _runner: get_string(config_value, String::from("_runner")),
                 database: get_string(config_value, String::from("database")),
