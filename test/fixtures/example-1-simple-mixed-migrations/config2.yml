@@ -1,0 +1,39 @@
+---
+# Each entry here is a "runner" configuration. If a 
+# migration is named like ???_foo_bar.es-docker.curl
+# then there must be an entry `runner: curl` with the
+# name `es-docker` to host it.
+es-mariadb: &es-mariadb
+  _runner: mysql
+  database: mitre
+  ip_or_hostname: 127.0.0.1
+  logLevel: debug
+  password: example
+  port: 3306
+  username: root
+
+es-docker:
+  _runner: curl
+  ip_or_hostname: es
+  protocol: http
+  logLevel: debug
+
+# # Please manage your own configs above this line for consistency # #
+
+# One must provide a "mitre" configuration, this is
+# where migrations are cached in a data store.
+#
+# Here we use the YAML "anchors" [1] feature
+# to conveniently reuse the es-mariadb configuration
+# properties to store our migration information
+# in our principle mariadb instance.
+#
+# [1]: https://yaml.org/spec/1.2/spec.html#id2765878
+mitre:
+  _runner: mysql
+  database: mitre
+  ip_or_hostname: 127.0.0.1
+  logLevel: debug
+  password: example
+  port: 3306
+  username: root

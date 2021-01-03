@@ -88,7 +88,6 @@ pub struct Configuration {
 }
 
 fn get_string(yaml: &yaml_rust::Yaml, search_key: String) -> Option<String> {
-    println!("\n\n\n yaml: {:?} \n\t search_key: {:?}", yaml, search_key);
     let mut result: Option<String> = None;
 
     match yaml {
@@ -126,43 +125,45 @@ pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError
     let yaml_docs = YamlLoader::load_from_str(&s)?;
 
     let mut hm: HashMap<String, Configuration> = HashMap::new();
-    for yaml in yaml_docs {
-        match yaml {
-            Yaml::Hash(ref map) => {
-                for (k, v) in map {
-                    match v {
-                        Yaml::Hash(ref value) => {
-                            let strange_element = value.iter().next(); // shows up as <<
-                            let config_value = strange_element.unwrap().1;
-                            println!("k: {:?} === v: {:?}", k, config_value);
-                            let c = Configuration {
-                                _runner: get_string(config_value, String::from("_runner")),
-                                database: get_string(config_value, String::from("database")),
-                                index: get_string(config_value, String::from("index")),
-                                database_number: Some(1),
-                                ip_or_hostname: get_string(
-                                    config_value,
-                                    String::from("ip_or_hostname"),
-                                ),
-                                port: Some(1234),
-                                username: get_string(config_value, String::from("username")),
-                                password: get_string(config_value, String::from("password")),
-                            };
-                            hm.insert(as_string(k), c);
-                        }
-                        _ => (),
-                    }
+
+    yaml_docs
+        .iter()
+        .filter_map(|yaml| {
+            if let Yaml::Hash(ref map) = yaml {
+                Some(map)
+            } else {
+                None
+            }
+        })
+        .flat_map(|map| map.iter())
+        .filter_map(|(k, v)| {
+            if let Yaml::Hash(value) = v {
+                let is_anchor = value.keys().find(|key| as_string(key).eq("<<"));
+                if is_anchor == None {
+                    Some((k, v))
+                } else {
+                    let anchor_element = value.iter().next(); // shows up as <<
+                    let referenced_value = anchor_element.unwrap().1;
+                    Some((k, referenced_value))
                 }
+            } else {
+                None
             }
-            _ => {
-                warn!("unexpected type at top level of YAML");
-                return Err(ConfigError::NoYamlHash {});
-            }
-        }
-    }
-    // let hm: HashMap<String, Configuration> = serde_yaml::from_reader(f)?;
-    // println!("Read YAML string: {:?}", hm);
-    Ok(hm) // Ok(serde_yaml::from_reader(f))
+        })
+        .for_each(|(k, config_value)| {
+            let c = Configuration {
+                _runner: get_string(config_value, String::from("_runner")),
+                database: get_string(config_value, String::from("database")),
+                index: get_string(config_value, String::from("index")),
+                database_number: Some(1),
+                ip_or_hostname: get_string(config_value, String::from("ip_or_hostname")),
+                port: Some(1234),
+                username: get_string(config_value, String::from("username")),
+                password: get_string(config_value, String::from("password")),
+            };
+            hm.insert(as_string(k), c);
+        });
+    Ok(hm)
 }
 
 #[cfg(test)]
