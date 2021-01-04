@@ -180,6 +180,7 @@ mod tests {
         }
     }
 
+    #[test]
     fn test_paths_with_no_runner_reserved_word_extension() {
         match parse(std::path::Path::new("./foo/20160708091011_bar.curl")) {
             Ok(_) => assert!(true),

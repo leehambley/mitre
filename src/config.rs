@@ -11,8 +11,8 @@ pub enum ConfigError {
     Io(io::Error),
     Yaml(yaml_rust::ScanError),
     NoYamlHash(),
-    ValueForKeyIsNotString(String),
-    ValueForKeyIsNotInteger(String),
+    // ValueForKeyIsNotString(String),
+    // ValueForKeyIsNotInteger(String),
     GetStringError(),
     IntegerOutOfRange { value: u64, max: u64 }, // value, max value
 }
@@ -28,14 +28,14 @@ impl fmt::Display for ConfigError {
                 f,
                 "MITRE: YAML error: the top level doc in the yaml wasn't a hash"
             ),
-            ConfigError::ValueForKeyIsNotString(ref s) => {
-                write!(f, "Mitre: YAML error: value at key '{}' is not a string", s)
-            }
-            ConfigError::ValueForKeyIsNotInteger(ref s) => write!(
-                f,
-                "Mitre: YAML error: value at key '{}' is not an integer",
-                s
-            ),
+            // ConfigError::ValueForKeyIsNotString(ref s) => {
+            //     write!(f, "Mitre: YAML error: value at key '{}' is not a string", s)
+            // }
+            // ConfigError::ValueForKeyIsNotInteger(ref s) => write!(
+            //     f,
+            //     "Mitre: YAML error: value at key '{}' is not an integer",
+            //     s
+            // ),
             ConfigError::IntegerOutOfRange { value, max } => write!(
                 f,
                 "Mitre: YAML error: value '{}' is out of range, max is '{}'",
@@ -59,8 +59,8 @@ impl error::Error for ConfigError {
             ConfigError::Io(ref err) => Some(err),
             ConfigError::Yaml(ref err) => Some(err),
             ConfigError::NoYamlHash() => None {},
-            ConfigError::ValueForKeyIsNotString(_) => None {},
-            ConfigError::ValueForKeyIsNotInteger(_) => None {},
+            // ConfigError::ValueForKeyIsNotString(_) => None {},
+            // ConfigError::ValueForKeyIsNotInteger(_) => None {},
             ConfigError::GetStringError() => None {},
             ConfigError::IntegerOutOfRange { value: _, max: _ } => None {},
         }
@@ -88,7 +88,7 @@ impl From<yaml_rust::ScanError> for ConfigError {
 //
 // Load YAML using serde-yaml,
 //
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 pub struct Configuration {
     // Runner is not optional, but we need to option it here to maintain
     // serde::Deserialize compatibility
@@ -128,8 +128,8 @@ fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &String) -> Result<yaml_rust::Yam
 
 fn dig_string(yaml: &yaml_rust::Yaml, key: &String) -> Result<Option<String>, ConfigError> {
     match dig_yaml_value(yaml, key) {
-        Ok(Yaml::String(value)) => return Ok(Some(value.to_string())),
-        _ => return Err(ConfigError::ValueForKeyIsNotString(key.to_string())),
+        Ok(Yaml::String(value)) => Ok(Some(value.to_string())),
+        _ => Ok(None {}),
     }
 }
 
@@ -142,9 +142,9 @@ fn dig_u8(yaml: &yaml_rust::Yaml, key: &String) -> Result<Option<u8>, ConfigErro
                     max: u8::MAX as u64,
                 });
             }
-            return Ok(Some(value as u8));
+            Ok(Some(value as u8))
         }
-        _ => return Err(ConfigError::ValueForKeyIsNotInteger(key.to_string())),
+        _ => Ok(None {}),
     }
 }
 
@@ -157,9 +157,9 @@ fn dig_u16(yaml: &yaml_rust::Yaml, key: &String) -> Result<Option<u16>, ConfigEr
                     max: u16::MAX as u64,
                 });
             }
-            return Ok(Some(value as u16));
+            Ok(Some(value as u16))
         }
-        _ => return Err(ConfigError::ValueForKeyIsNotInteger(key.to_string())),
+        _ => Ok(None {}),
     }
 }
 
@@ -170,19 +170,16 @@ fn as_string(yaml: &yaml_rust::Yaml) -> String {
     }
 }
 
-// TODO: validate at least one `mitre` config with a compatible runner in the HashMap<String,...>
-
 pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError> {
-    // TODO: File doesn't exist
-    // TODO: File isn't a file
-    // TODO: File isn't readable
-    // TODO: File isn't YAML
-    // TODO: File isn't _valid_ YAML
     let s = std::fs::read_to_string(p)?;
     let yaml_docs = YamlLoader::load_from_str(&s)?;
+    from_yaml(yaml_docs)
+}
 
+fn from_yaml(
+    yaml_docs: Vec<yaml_rust::Yaml>,
+) -> Result<HashMap<String, Configuration>, ConfigError> {
     let mut hm: HashMap<String, Configuration> = HashMap::new();
-
     match yaml_docs
         .iter()
         .filter_map(|yaml| {
@@ -221,7 +218,7 @@ pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError
                     Ok(res) => res,
                     Err(e) => return Err(e),
                 },
-                database_number: match dig_u8(config_value, &String::from("port")) {
+                database_number: match dig_u8(config_value, &String::from("database_number")) {
                     Ok(res) => res,
                     Err(e) => return Err(e),
                 },
@@ -255,6 +252,7 @@ mod tests {
     use super::*;
     use yaml_rust::YamlLoader;
 
+    // -> fn validate_on_config_structs
     // unsupportted runner
     // use of reserved word out of place
     // dot separated parts not at end of filename
@@ -267,7 +265,7 @@ mod tests {
 key: bestValue
       "#,
         ) {
-            Ok(doc) => doc,
+            Ok(docs) => docs,
             _ => return Err("doc didn't parse"),
         };
         let v = match yaml_docs.first() {
@@ -289,7 +287,7 @@ key: bestValue
 key: 255
       "#,
         ) {
-            Ok(doc) => doc,
+            Ok(docs) => docs,
             _ => return Err("doc didn't parse"),
         };
         let v = match yaml_docs.first() {
@@ -311,7 +309,7 @@ key: 255
 key: 2550000
       "#,
         ) {
-            Ok(doc) => doc,
+            Ok(docs) => docs,
             _ => return Err("doc didn't parse"),
         };
         match yaml_docs.first() {
@@ -332,6 +330,43 @@ key: 2550000
 
     #[test]
     fn loads_a_complete_config() -> Result<(), &'static str> {
-        return Ok(());
+        let yaml_docs = match YamlLoader::load_from_str(
+            r#"
+---
+a: 
+  _runner: mysql
+  database: mitre
+  ip_or_hostname: 127.0.0.1
+  logLevel: debug
+  password: example
+  port: 3306
+  username: root
+"#,
+        ) {
+            Ok(docs) => docs,
+            _ => return Err("doc didn't parse"),
+        };
+
+        let configs = match from_yaml(yaml_docs) {
+            Err(_) => return Err("failed to load doc"),
+            Ok(configs) => configs,
+        };
+
+        let c = Configuration {
+          _runner: Some(String::from("mysql")),
+          database: Some(String::from("mitre")),
+          ip_or_hostname: Some(String::from("127.0.0.1")),
+          // log_level: Some(String::from("debug")),
+          password: Some(String::from("example")),
+          port: Some(3306),
+          username: Some(String::from("root")),
+          database_number: None{},
+          index: None{}
+        };
+
+        assert_eq!(1, configs.keys().len());
+        assert_eq!(c, configs["a"]);
+
+        Ok(())
     }
 }
