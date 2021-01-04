@@ -282,6 +282,7 @@ key: bestValue
         Ok(())
     }
 
+    #[test]
     fn dig_u8_gets_u8() -> Result<(), &'static str> {
         let yaml_docs = match YamlLoader::load_from_str(
             r#"
@@ -303,24 +304,30 @@ key: 255
         Ok(())
     }
 
-    fn dig_u8_gets_truncates_to_u8() -> Result<(), &'static str> {
+    #[test]
+    fn dig_u8_gets_returns_integer_error_on_overflow() -> Result<(), &'static str> {
         let yaml_docs = match YamlLoader::load_from_str(
             r#"
 ---
-key: 255000
+key: 2550000
       "#,
         ) {
             Ok(doc) => doc,
             _ => return Err("doc didn't parse"),
         };
-        let v = match yaml_docs.first() {
+        match yaml_docs.first() {
             Some(document) => match dig_u8(document, &String::from("key")) {
-                Ok(value) => value,
-                _ => return Err("result didn't match"),
+                Ok(_) => return Err("expected an error"),
+                Err(e) => match e {
+                    ConfigError::IntegerOutOfRange(ref i, ref max) => {
+                        assert_eq!(*i, 2550000 as u64);
+                        assert_eq!(*max, u8::MAX as u64);
+                        return Ok(());
+                    }
+                    _ => return Err("wrong class of error returned"),
+                },
             },
             _ => return Err("dig_u8 returned nothing"),
         };
-        assert_eq!(v, Some(255));
-        Ok(())
     }
 }
