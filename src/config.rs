@@ -14,7 +14,7 @@ pub enum ConfigError {
     ValueForKeyIsNotString(String),
     ValueForKeyIsNotInteger(String),
     GetStringError(),
-    IntegerOutOfRange(u64, u64), // value, max value
+    IntegerOutOfRange { value: u64, max: u64 }, // value, max value
 }
 
 impl fmt::Display for ConfigError {
@@ -31,20 +31,16 @@ impl fmt::Display for ConfigError {
             ConfigError::ValueForKeyIsNotString(ref s) => {
                 write!(f, "Mitre: YAML error: value at key '{}' is not a string", s)
             }
-            ConfigError::ValueForKeyIsNotInteger(ref s) => {
-                write!(
-                    f,
-                    "Mitre: YAML error: value at key '{}' is not an integer",
-                    s
-                )
-            }
-            ConfigError::IntegerOutOfRange(ref v, ref max) => {
-                write!(
-                    f,
-                    "Mitre: YAML error: value '{}' is out of range, max is '{}'",
-                    v, max
-                )
-            }
+            ConfigError::ValueForKeyIsNotInteger(ref s) => write!(
+                f,
+                "Mitre: YAML error: value at key '{}' is not an integer",
+                s
+            ),
+            ConfigError::IntegerOutOfRange { value, max } => write!(
+                f,
+                "Mitre: YAML error: value '{}' is out of range, max is '{}'",
+                value, max
+            ),
             ConfigError::GetStringError() => write!(
                 f,
                 "Mitre: YAML error: get_string() passed-thru without match"
@@ -66,7 +62,7 @@ impl error::Error for ConfigError {
             ConfigError::ValueForKeyIsNotString(_) => None {},
             ConfigError::ValueForKeyIsNotInteger(_) => None {},
             ConfigError::GetStringError() => None {},
-            ConfigError::IntegerOutOfRange(_, _) => None {},
+            ConfigError::IntegerOutOfRange { value: _, max: _ } => None {},
         }
     }
 }
@@ -141,7 +137,10 @@ fn dig_u8(yaml: &yaml_rust::Yaml, key: &String) -> Result<Option<u8>, ConfigErro
     match dig_yaml_value(yaml, key) {
         Ok(Yaml::Integer(value)) => {
             if value > u8::MAX as i64 {
-                return Err(ConfigError::IntegerOutOfRange(value as u64, u8::MAX as u64));
+                return Err(ConfigError::IntegerOutOfRange {
+                    value: value as u64,
+                    max: u8::MAX as u64,
+                });
             }
             return Ok(Some(value as u8));
         }
@@ -153,10 +152,10 @@ fn dig_u16(yaml: &yaml_rust::Yaml, key: &String) -> Result<Option<u16>, ConfigEr
     match dig_yaml_value(yaml, key) {
         Ok(Yaml::Integer(value)) => {
             if value > u16::MAX as i64 {
-                return Err(ConfigError::IntegerOutOfRange(
-                    value as u64,
-                    u16::MAX as u64,
-                ));
+                return Err(ConfigError::IntegerOutOfRange {
+                    value: value as u64,
+                    max: u16::MAX as u64,
+                });
             }
             return Ok(Some(value as u16));
         }
@@ -319,9 +318,9 @@ key: 2550000
             Some(document) => match dig_u8(document, &String::from("key")) {
                 Ok(_) => return Err("expected an error"),
                 Err(e) => match e {
-                    ConfigError::IntegerOutOfRange(ref i, ref max) => {
-                        assert_eq!(*i, 2550000 as u64);
-                        assert_eq!(*max, u8::MAX as u64);
+                    ConfigError::IntegerOutOfRange { value, max } => {
+                        assert_eq!(value, 2550000 as u64);
+                        assert_eq!(max, u8::MAX as u64);
                         return Ok(());
                     }
                     _ => return Err("wrong class of error returned"),
@@ -329,5 +328,10 @@ key: 2550000
             },
             _ => return Err("dig_u8 returned nothing"),
         };
+    }
+
+    #[test]
+    fn loads_a_complete_config() -> Result<(), &'static str> {
+        return Ok(());
     }
 }
