@@ -47,7 +47,7 @@ impl fmt::Display for ConfigError {
             }
             ConfigError::GetStringError() => write!(
                 f,
-                "MITRE: YAML error: get_string() passed-thru without match"
+                "Mitre: YAML error: get_string() passed-thru without match"
             ),
         }
     }
