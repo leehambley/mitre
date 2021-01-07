@@ -98,9 +98,7 @@ fn main() {
                             }
                         };
                     }
-                    Err(e) => {
-                        println!("error loading config: {:?}", e)
-                    }
+                    Err(e) => println!("error loading config: {:?}", e),
                 };
                 println!("using {:?}", path);
             }
