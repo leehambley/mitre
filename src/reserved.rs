@@ -48,6 +48,11 @@ pub fn words() -> Vec<Word> {
             kind: Kind::Runner,
         },
         Word {
+          word: "mysql",
+          reason: "Runs mysql migrations (SQL in a .sql file)",
+          kind: Kind::Runner,
+      },
+        Word {
             word: "sh",
             reason: "Used as an extension to activate the POSIX sh runner.",
             kind: Kind::Runner,
@@ -72,6 +77,11 @@ pub fn words() -> Vec<Word> {
             reason: "Indicates this is risky migration (advisory only, e.g renaming a column)",
             kind: Kind::Flag,
         },
+        Word {
+          word: "redis",
+          reason: "Indicates this is a Redis runner, files should be formatted in the way you could pipe them to redis-cli",
+          kind: Kind::Runner,
+      },
         Word {
             word: "up",
             reason: "Used to indicate upward (forward) migrations",

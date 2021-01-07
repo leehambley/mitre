@@ -1,4 +1,6 @@
 extern crate yaml_rust;
+
+use crate::reserved;
 use std::collections::HashMap;
 use std::error;
 use std::fmt;
@@ -85,10 +87,19 @@ impl From<yaml_rust::ScanError> for ConfigError {
     }
 }
 
-//
-// Load YAML using serde-yaml,
-//
-#[derive(Debug,PartialEq)]
+// Inexhaustive list for now
+#[derive(Debug, PartialEq)]
+pub enum ConfigProblem {
+    NoRunnerSpecified,
+    UnsupportedRunnerSpecified,
+    NoIndexSpecified,
+    NoDatabaseNumberSpecified,
+    NoIpOrHostnameSpecified,
+    NoUsernameSpecified,
+    NoPasswordSpecified,
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Configuration {
     // Runner is not optional, but we need to option it here to maintain
     // serde::Deserialize compatibility
@@ -110,6 +121,47 @@ pub struct Configuration {
 
     pub username: Option<String>,
     pub password: Option<String>,
+}
+
+impl Configuration {
+    fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
+        let mut vec = Vec::new();
+
+        if self._runner.is_none() {
+            vec.push(ConfigProblem::NoRunnerSpecified);
+            return Err(vec);
+        }
+
+        if !reserved::words()
+            .iter()
+            .filter(|w| w.kind == reserved::Kind::Runner)
+            .any(|rw| match &self._runner {
+                Some(runner) => runner == rw.word,
+                None => false,
+            })
+        {
+            vec.push(ConfigProblem::UnsupportedRunnerSpecified);
+        }
+
+        // Redis specific checks
+        if self._runner.as_ref().unwrap()
+            == reserved::words()
+                .iter()
+                .find(|rw| rw.word == "redis" && rw.kind == reserved::Kind::Runner)
+                .unwrap()
+                .word
+        {
+            if self.database_number.is_none() {
+                vec.push(ConfigProblem::NoDatabaseNumberSpecified)
+            }
+        }
+
+        if vec.len() > 0 {
+            Err(vec)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &String) -> Result<yaml_rust::Yaml, ConfigError> {
@@ -353,15 +405,15 @@ a:
         };
 
         let c = Configuration {
-          _runner: Some(String::from("mysql")),
-          database: Some(String::from("mitre")),
-          ip_or_hostname: Some(String::from("127.0.0.1")),
-          // log_level: Some(String::from("debug")),
-          password: Some(String::from("example")),
-          port: Some(3306),
-          username: Some(String::from("root")),
-          database_number: None{},
-          index: None{}
+            _runner: Some(String::from("mysql")),
+            database: Some(String::from("mitre")),
+            ip_or_hostname: Some(String::from("127.0.0.1")),
+            // log_level: Some(String::from("debug")),
+            password: Some(String::from("example")),
+            port: Some(3306),
+            username: Some(String::from("root")),
+            database_number: None {},
+            index: None {},
         };
 
         assert_eq!(1, configs.keys().len());
@@ -369,4 +421,49 @@ a:
 
         Ok(())
     }
+
+    #[test]
+    fn validates_presense_of_a_supported_runner() -> Result<(), &'static str> {
+        let yaml_docs = match YamlLoader::load_from_str(
+            r#"
+---
+a: 
+  _runner: foobarbaz
+"#,
+        ) {
+            Ok(docs) => docs,
+            _ => return Err("doc didn't parse"),
+        };
+
+        let configs = match from_yaml(yaml_docs) {
+            Err(_) => return Err("failed to load doc"),
+            Ok(configs) => configs,
+        };
+
+        let c = Configuration {
+            _runner: Some(String::from("foobarbaz")),
+            database: None{},
+            ip_or_hostname: None{},
+            password: None{},
+            port: None{},
+            username: None{},
+            database_number: None {},
+            index: None {},
+        };
+
+        assert_eq!(1, configs.keys().len());
+        assert_eq!(c, configs["a"]);
+
+        match c.validate() {
+          Ok(_) => return Err("expected not-ok from validate"),
+          Err(problems) => {
+            if problems.iter().any(|p| *p == ConfigProblem::UnsupportedRunnerSpecified) {
+              return Ok(());
+            } else {
+              return Err("didn't find expected UnsupportedRunnerSpecified problem");
+            }
+          }
+        }
+    }
+
 }
