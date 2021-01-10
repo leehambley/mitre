@@ -10,6 +10,7 @@ use std::path::Path;
 
 mod config;
 mod filename;
+mod migration_state_store;
 mod migrations;
 mod reserved;
 mod runner;
@@ -85,7 +86,7 @@ fn main() {
                 let path = Path::new(matches.value_of("config_file").unwrap());
                 match config::from_file(path) {
                     Ok(c) => {
-                        println!("loading config succeeded {:?}", c);
+                        // println!("loading config succeeded {:?}", c);
                         let mitre_config = c.get("mitre").expect("must provide mitre config");
                         let mdb = MariaDB::new(mitre_config);
                         match mdb {
@@ -102,7 +103,6 @@ fn main() {
                 };
                 println!("using {:?}", path);
             }
-            println!("wat, no config");
         }
 
         Some("show-migrations") => {

@@ -442,11 +442,11 @@ a:
 
         let c = Configuration {
             _runner: Some(String::from("foobarbaz")),
-            database: None{},
-            ip_or_hostname: None{},
-            password: None{},
-            port: None{},
-            username: None{},
+            database: None {},
+            ip_or_hostname: None {},
+            password: None {},
+            port: None {},
+            username: None {},
             database_number: None {},
             index: None {},
         };
@@ -455,15 +455,17 @@ a:
         assert_eq!(c, configs["a"]);
 
         match c.validate() {
-          Ok(_) => return Err("expected not-ok from validate"),
-          Err(problems) => {
-            if problems.iter().any(|p| *p == ConfigProblem::UnsupportedRunnerSpecified) {
-              return Ok(());
-            } else {
-              return Err("didn't find expected UnsupportedRunnerSpecified problem");
+            Ok(_) => return Err("expected not-ok from validate"),
+            Err(problems) => {
+                if problems
+                    .iter()
+                    .any(|p| *p == ConfigProblem::UnsupportedRunnerSpecified)
+                {
+                    return Ok(());
+                } else {
+                    return Err("didn't find expected UnsupportedRunnerSpecified problem");
+                }
             }
-          }
         }
     }
-
 }

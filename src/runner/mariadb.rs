@@ -7,27 +7,40 @@ pub struct MariaDB {
 }
 
 #[derive(Debug)]
-pub enum MariaDBError {
+pub enum MariaDBRunnerError {
     MySQL(mysql::Error),
     PingFailed(),
 }
 
-impl From<mysql::Error> for MariaDBError {
-    fn from(err: mysql::Error) -> MariaDBError {
-        MariaDBError::MySQL(err)
+impl From<mysql::Error> for MariaDBRunnerError {
+    fn from(err: mysql::Error) -> MariaDBRunnerError {
+        MariaDBRunnerError::MySQL(err)
     }
 }
 
-fn ensure_connectivity(db: &mut MariaDB) -> Result<(), MariaDBError> {
+#[derive(Debug)]
+pub enum MariaDBMigrationStateStoreError {
+    MySQL(mysql::Error),
+    AnyError, // todo remove me, just placeholding
+}
+
+impl From<mysql::Error> for MariaDBMigrationStateStoreError {
+    fn from(err: mysql::Error) -> MariaDBMigrationStateStoreError {
+        MariaDBMigrationStateStoreError::MySQL(err)
+    }
+}
+
+// non-public helper method
+fn ensure_connectivity(db: &mut MariaDB) -> Result<(), MariaDBRunnerError> {
     return match db.conn.ping() {
         true => Ok(()),
-        false => Err(MariaDBError::PingFailed()),
+        false => Err(MariaDBRunnerError::PingFailed()),
     };
 }
 
-impl super::Runner for MariaDB {
-    type Error = MariaDBError;
-    fn new(config: &Configuration) -> Result<MariaDB, MariaDBError> {
+impl crate::runner::Runner for MariaDB {
+    type Error = MariaDBRunnerError;
+    fn new(config: &Configuration) -> Result<MariaDB, MariaDBRunnerError> {
         println!("using config {:?}", config);
         let opts = OptsBuilder::new()
             .ip_or_hostname(config.ip_or_hostname.clone())
@@ -40,7 +53,19 @@ impl super::Runner for MariaDB {
     }
 
     // https://docs.rs/mysql/20.1.0/mysql/struct.Conn.html
-    fn bootstrap(&mut self) -> Result<(), MariaDBError> {
+    fn bootstrap(&mut self) -> Result<(), MariaDBRunnerError> {
         ensure_connectivity(self)
+    }
+}
+
+impl crate::migration_state_store::MigrationStateStore for MariaDB {
+    type Error = MariaDBMigrationStateStoreError;
+    type Migration = crate::migrations::Migration;
+    type MigrationState = (bool, crate::migrations::Migration);
+    fn filter(
+        &mut self,
+        _migrations: Vec<crate::migrations::Migration>,
+    ) -> Result<Vec<(bool, crate::migrations::Migration)>, MariaDBMigrationStateStoreError> {
+        return Err(MariaDBMigrationStateStoreError::AnyError {});
     }
 }
