@@ -3,7 +3,8 @@ pub trait MigrationStateStore {
     type Migration;
     type MigrationState;
 
-    fn filter(&mut self, migrations: Vec<Self::Migration>) -> Result<Vec<Self::MigrationState>, Self::Error>;
-    // where
-    //     Self: Sized;
+    fn filter(
+        &mut self,
+        migrations: Vec<Self::Migration>,
+    ) -> Result<Vec<Self::MigrationState>, Self::Error>;
 }
