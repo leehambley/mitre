@@ -15,8 +15,9 @@ mod migrations;
 mod reserved;
 mod runner;
 
-use runner::mariadb::MariaDB;
+use runner::mariadb::{MariaDB};
 use runner::Runner;
+use migration_state_store::MigrationStateStore;
 
 fn main() {
     env_logger::init();
@@ -25,51 +26,36 @@ fn main() {
         .version("0.1")
         .author("Lee Hambley <lee.hambley@gmail.com>")
         .about("CLI runner for migrations")
+        .arg(
+            Arg::with_name("config_file")
+                .long("config")
+                .short('c')
+                .takes_value(true)
+                .value_name("CONFIG FILE")
+                .about("The configuration file to use"),
+        )
+        .arg(
+            Arg::with_name("directory")
+                .long("directory")
+                .short('d')
+                .takes_value(true)
+                .value_name("MIGRATION DIR")
+                .about("The directory to use"),
+        )
         .subcommand(
             App::new("reserved-words")
                 .about("utilties for reserved words")
                 .subcommand(App::new("ls").about("list reserved words")),
         )
-        .subcommand(
-            App::new("show-config")
-                .about("for showing config file")
-                .arg(
-                    Arg::with_name("config_file")
-                        .long("config")
-                        .short('c')
-                        .takes_value(true)
-                        .value_name("CONFIG FILE")
-                        .about("The configuration file to use, no default"),
-                ),
-        )
-        .subcommand(
-            App::new("show-migrations")
-                .about("for migrations")
-                .arg(
-                    Arg::with_name("config_file")
-                        .long("config")
-                        .short('c')
-                        .takes_value(true)
-                        .value_name("CONFIG FILE")
-                        .about("The configuration file to use"),
-                )
-                .arg(
-                    Arg::with_name("directory")
-                        .long("directory")
-                        .short('d')
-                        .takes_value(true)
-                        .value_name("MIGRATION DIR")
-                        .about("The directory to use"),
-                ),
-        )
+        .subcommand(App::new("ls").about("list all migrations and their status"))
+        .subcommand(App::new("show-config").about("for showing config file"))
+        .subcommand(App::new("show-migrations").about("for migrations"))
         .get_matches();
 
     match m.subcommand_name() {
         Some("reserved-words") => {
             let mut table = Table::new();
-
             table.add_row(row!["Word", "Kind", "Reason"]);
-
             reserved::words().iter().for_each(|word| {
                 table.add_row(Row::new(vec![
                     Cell::new(word.word).style_spec("bFy"),
@@ -81,12 +67,10 @@ fn main() {
         }
 
         Some("show-config") => {
-            if let Some(ref matches) = m.subcommand_matches("show-config") {
-                assert!(matches.is_present("config_file"));
-                let path = Path::new(matches.value_of("config_file").unwrap());
+            if let Some(ref config_file) = m.value_of("config_file") {
+                let path = Path::new(config_file);
                 match config::from_file(path) {
                     Ok(c) => {
-                        // println!("loading config succeeded {:?}", c);
                         let mitre_config = c.get("mitre").expect("must provide mitre config");
                         let mdb = MariaDB::new(mitre_config);
                         match mdb {
@@ -102,6 +86,45 @@ fn main() {
                     Err(e) => println!("error loading config: {:?}", e),
                 };
                 println!("using {:?}", path);
+            }
+        }
+
+        Some("ls") => {
+            if let Some(ref config_file) = m.value_of("config_file") {
+                let path = Path::new(config_file);
+                match config::from_file(path) {
+                    Ok(c) => {
+                        let mitre_config = c.get("mitre").expect("must provide mitre config");
+                        let mdb = MariaDB::new(mitre_config);
+                        // let runner: &dyn runner::Runner<Error = mariadb::Error> = mdb.clone();
+                        // let store: &dyn migration_state_store::MigrationStateStore = mdb;
+                        match mdb {
+                            Ok(mut mdb) => {
+                                println!("bootstrap {:?}", mdb.bootstrap());
+
+                                // get list of migrations
+                                // let migrations = match migrations::migrations(path) {
+                                //   Ok(m) => m,
+                                //   Err(_) => panic!("something happen"),
+                                // };
+
+                                let migrations: Vec<migrations::Migration> = Vec::new();
+
+                                // let mss: &dyn migration_state_store::MigrationStateStore = mdb;
+                                match mdb.diff(migrations) {
+                                  Ok(_) => println!("migrations diff'ed ok"),
+                                  Err(e) => println!("migrations not diffed ok: {:?}", e)
+                                }
+
+                            }
+                            Err(e) => {
+                                println!("error connecting/reading config for mariadb {:?}", e);
+                                std::process::exit(123);
+                            }
+                        }
+                    }
+                    Err(e) => println!("error loading config: {:?}", e),
+                };
             }
         }
 
