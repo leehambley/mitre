@@ -100,7 +100,13 @@ rails/
   ...
 ```
 
-The
+## Templating
+
+Migration files are passed once through the Handlebars library which grants access
+to the configuration and some handful of useful variables. This can be useful for
+doing runtime reflection.  Handlebars was selected rather than liquid, or similar 
+because it is so limited, and is essentially interpolation without too much magic, 
+migrations probably shouldn't be Turing-complete.
 
 ## Submodule friendliness
 

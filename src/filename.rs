@@ -15,7 +15,7 @@ use std::path::PathBuf;
 // See https://docs.rs/chrono/0.3.1/chrono/format/strftime/index.html
 pub static FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Parsed {
     pub path: std::path::PathBuf,
     pub date_time: NaiveDateTime,

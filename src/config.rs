@@ -124,7 +124,7 @@ pub struct Configuration {
 }
 
 impl Configuration {
-    fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
+    pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         let mut vec = Vec::new();
 
         if self._runner.is_none() {

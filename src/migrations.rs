@@ -21,14 +21,14 @@ impl From<io::Error> for MigrationListingError {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Direction {
     Up,
     Down,
     Change,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Migration {
     pub parsed: filename::Parsed,
     pub direction: Direction,
@@ -43,10 +43,8 @@ pub struct Migration {
 // TODO: anything to document here about max depth, and or/whether we
 // traverse filesystems, or whether there is a timeout (e.g slow network share)
 pub fn migrations(dir: &Path) -> Result<Vec<Migration>, MigrationListingError> {
-    eprintln!("listing stuff in {:?}", dir);
     let mut migrations: Vec<Migration> = Vec::new();
     for entry in fs::read_dir(dir)? {
-        eprintln!("fof fo f {:?}", entry);
         match filename::parse(&entry?.path()) {
             Ok(file_name) => migrations.push(Migration {
                 parsed: file_name,

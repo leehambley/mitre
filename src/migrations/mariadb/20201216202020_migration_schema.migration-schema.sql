@@ -1,4 +1,5 @@
-CREATE TABLE mitre_migrations (
+-- Table name must agree with the constant in the mariadb.rs 
+CREATE TABLE {{MARIADB_MIGRATION_STATE_TABLE_NAME}} (
 
   -- TIMESTMAP is YYYYMMDDHHMMSS just like migration filenames
   `version` TIMESTAMP NOT NULL PRIMARY KEY,

@@ -1,10 +1,10 @@
+use crate::built_in_migrations;
 use crate::config::Configuration;
-use crate::runner;
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};
 use std::convert::From;
 
-const MIGRATION_TABLE_NAME: &'static str = "mitre_migration_state";
+const MARIADB_MIGRATION_STATE_TABLE_NAME: &'static str = "mitre_migration_state";
 
 #[derive(Debug)]
 pub struct MariaDB {
@@ -39,8 +39,7 @@ impl From<mysql::Error> for MariaDBMigrationStateStoreError {
     fn from(err: mysql::Error) -> MariaDBMigrationStateStoreError {
         MariaDBMigrationStateStoreError::MariaDB(err)
     }
-  }
-
+}
 
 // non-public helper method
 fn ensure_connectivity(db: &mut MariaDB) -> Result<(), RunnerError> {
@@ -58,7 +57,7 @@ impl crate::runner::Runner for MariaDB {
                 .ip_or_hostname(config.ip_or_hostname.clone())
                 .user(config.username.clone())
                 // NOTE: Do not specify database name here, otherwise we cannot
-                // connect until the database exists. Makes it difficult to 
+                // connect until the database exists. Makes it difficult to
                 // bootstrap.
                 // .db_name(config.database.clone())
                 .pass(config.password.clone()),
@@ -80,14 +79,11 @@ impl crate::migration_state_store::MigrationStateStore for MariaDB {
     type Migration = crate::migrations::Migration;
     type MigrationState = (bool, crate::migrations::Migration);
 
-    // fn from(r: &dyn runner::Runner<Error = RunnerError>) -> Self {
-    //   return r as &crate::migration_state_store::MigrationStateStore;
-    // }
-
     fn diff(
         &mut self,
         _migrations: Vec<crate::migrations::Migration>,
     ) -> Result<Vec<(bool, crate::migrations::Migration)>, MariaDBMigrationStateStoreError> {
+        let _v = built_in_migrations::built_in_migrations();
 
         // Database doesn't exist, then obviously nothing ran... (or we have no permission)
         let schema_exists = self.conn.exec_first::<bool, _, _>(
@@ -96,11 +92,15 @@ impl crate::migration_state_store::MigrationStateStore for MariaDB {
         )?;
         match schema_exists {
             Some(schema_exists) => {
-              println!("schema exists?: {}", schema_exists);
-              match schema_exists {
-                true => println!("nothing to do"),
-                false => { return Err(MariaDBMigrationStateStoreError::MigrationStateSchemaDoesNotExist); } // db doesn't exist in schema.
-              }
+                println!("schema exists?: {}", schema_exists);
+                match schema_exists {
+                    true => println!("nothing to do"),
+                    false => {
+                        return Err(
+                            MariaDBMigrationStateStoreError::MigrationStateSchemaDoesNotExist,
+                        );
+                    } // db doesn't exist in schema.
+                }
             }
             None => {
                 return Err(MariaDBMigrationStateStoreError::ErrorRunningQuery);
@@ -110,21 +110,25 @@ impl crate::migration_state_store::MigrationStateStore for MariaDB {
         // Same story for the table
         let table_exists = self.conn.exec_first::<bool, _, _>(
           "SELECT EXISTS( SELECT * FROM information_schema.tables WHERE table_schema = ? AND table_name = ? );",
-          (self.db_name.as_ref(), MIGRATION_TABLE_NAME), //trailing comma makes this a tuple
+          (self.db_name.as_ref(), MARIADB_MIGRATION_STATE_TABLE_NAME), //trailing comma makes this a tuple
         )?;
 
         match table_exists {
-          Some(table_exists) => {
-            println!("table exists? {}", table_exists);
-            match table_exists {
-              true => println!("nothing to do"),
-              false => { return Err(MariaDBMigrationStateStoreError::MigrationStateTableDoesNotExist); } // db doesn't exist in schema.
+            Some(table_exists) => {
+                println!("table exists? {}", table_exists);
+                match table_exists {
+                    true => println!("nothing to do"),
+                    false => {
+                        return Err(
+                            MariaDBMigrationStateStoreError::MigrationStateTableDoesNotExist,
+                        );
+                    } // db doesn't exist in schema.
+                }
             }
-          }
-          None => {
-              return Err(MariaDBMigrationStateStoreError::ErrorRunningQuery); // table doesn't exist in schema.
-          }
-      }
+            None => {
+                return Err(MariaDBMigrationStateStoreError::ErrorRunningQuery); // table doesn't exist in schema.
+            }
+        }
 
         return Err(MariaDBMigrationStateStoreError::AnyError {});
     }

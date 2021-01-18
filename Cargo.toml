@@ -14,12 +14,13 @@ log = "0.4"
 mysql = "20.1.0"
 phf = { version = "0.8.0", features = ["macros"] }
 prettytable-rs = "^0.8"
-rust-embed="5.7.0"
+rust-embed = {version ="5.7.0", features = ["debug-embed"] }
 # serde = { version = "1.0", features = ["derive"] }
 serde = { version = "1.0" }
 serde_yaml = "0.8"
 simple_logger = "1.6.0"
 yaml-rust = "0.4"
+handlebars = "3.5.2"
 
 [lib]
 crate-type = ["dylib"]
