@@ -11,6 +11,7 @@ use std::path::Path;
 mod built_in_migrations;
 mod config;
 mod filename;
+mod migration_files;
 mod migration_state_store;
 mod migrations;
 mod reserved;
