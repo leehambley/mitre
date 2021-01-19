@@ -1,35 +1,48 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use crate::migrations::Direction;
+use std::collections::HashMap;
+use walkdir::WalkDir;
+use regex;
 
 pub const FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
+#[derive(Debug)]
 pub struct MigrationCandidate {
   date_time: chrono::NaiveDateTime,
-  path: PathBuf,
+  paths: HashMap<Direction, PathBuf>
 }
 
-pub fn migrations_in(p: &Path) -> Result<bool, std::io::Error> {
+// https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
+pub fn migrations_in(p: &Path) -> Result<Vec<MigrationCandidate>, std::io::Error> {
 
-    // Find any files, or directories with a name complying
-    // with <timestamp>_anything_here...
-    let mut dirs: Vec<PathBuf> = Vec::new();
-    let mut files: Vec<PathBuf> = Vec::new();
+    let mut candiates: Vec<MigrationCandidate> = Vec::new();
 
-    for entry in fs::read_dir(p)? {
-        if let Ok(entry) = entry {
-            if let Ok(file_type) = entry.file_type() {
-                match extract_timestamp(entry.path()) {
-                    Ok(_timestamp) => {
-                        if file_type.is_dir() {
-                            dirs.push(entry.path())
+    let mut dirs: Vec<(PathBuf,chrono::NaiveDateTime)> = Vec::new();
+    let mut files: Vec<(PathBuf,chrono::NaiveDateTime)> = Vec::new();
+
+    for entry in WalkDir::new(p)
+            .into_iter()
+            .filter_map(Result::ok) {
+                match extract_timestamp(entry.path().to_path_buf()) {
+                    Ok(timestamp) => {
+                        println!("{:?}", entry.path());
+                        if entry.file_type().is_dir() {
+                            dirs.push((entry.path().to_path_buf(), timestamp))
                         } else {
-                            files.push(entry.path())
+                            files.push((entry.path().to_path_buf(), timestamp))
                         }
                     }
-                    Err(_) => continue,
-                }
+                    Err(_) => continue, // err contains a string reason why from timestamp parser, ignore it
             }
-        }
+    }
+
+    println!("files is {:?} (len {})", files, files.len());
+
+    for (path, timestamp) in files.iter() {
+      let mut paths = HashMap::<Direction, PathBuf>::new();
+      paths.insert(Direction::Up, path.to_path_buf());
+      candiates.push(MigrationCandidate{date_time: *timestamp, paths});
     }
 
     // For files we check if they also contain a valid runner
@@ -44,33 +57,96 @@ pub fn migrations_in(p: &Path) -> Result<bool, std::io::Error> {
     //                 \- down.sql
 
     // TODO: Finish me
-    return Ok(true);
+println!("{:?}", candiates);
+
+    return Ok(candiates);
 }
 
-fn extract_timestamp(p: PathBuf) -> Result<chrono::NaiveDateTime, &'static str> {
-    // TODO this should operate on each part, actually, I forgot
-    // that ./we/accept/deep/nested/TIMESTAMP_fooo_files/
-    match p
-        .to_str()
-        .ok_or_else(|| "could not call to_str")?
-        .split(|x| x == std::path::MAIN_SEPARATOR || x == '_' || x == '.')
-        .collect::<Vec<&str>>()
-        .first() // TODO: see note above
-    {
-        Some(first_part) => match chrono::NaiveDateTime::parse_from_str(first_part, FORMAT_STR) {
-            Ok(ndt) => Ok(ndt),
-            Err(_) => Err("timestamp did not parse"),
-        },
-        None => Err("could not get first part"),
+ // https://codereview.stackexchange.com/a/98547
+  fn basename<'a>(path: &'a str) -> std::borrow::Cow<'a, str> {
+    let mut pieces = path.rsplit(std::path::MAIN_SEPARATOR);
+    match pieces.next() {
+        Some(p) => p.into(),
+        None => path.into(),
     }
+  }
+
+
+fn extract_timestamp(p: PathBuf) -> Result<chrono::NaiveDateTime, &'static str> {
+  // Search for "SEPARATOR\d{14}_" (dir separator, 14 digits, underscore)
+  // Note: cannot use FORMAT_STR.len() here because %Y is 2 chars, but wants 4
+  let re = regex::Regex::new(format!(r#"{}(\d{{14}})_"#, regex::escape(format!("{}", std::path::MAIN_SEPARATOR).as_str())).as_str()).unwrap();
+  println!("re: {:?} path: {:?}", re, p);
+  match re.captures(p.to_str().expect("path to_str failed")) {
+    None => Err("pattern did not match"),
+    Some(c) => {
+      match c.get(1) {
+        Some(m) => match chrono::NaiveDateTime::parse_from_str(m.as_str(), FORMAT_STR) {
+          Ok(ndt) => Ok(ndt),
+          Err(_) => Err("timestamp did not parse"),
+        },
+        None => Err("no capture group")
+      }
+    }
+  }
+
+  // // https://codereview.stackexchange.com/a/98547
+  // fn basename<'a>(path: &'a str) -> std::borrow::Cow<'a, str> {
+  //   let mut pieces = path.rsplit(std::path::MAIN_SEPARATOR);
+  //   match pieces.next() {
+  //       Some(p) => p.into(),
+  //       None => path.into(),
+  //   }
+  // }
+
+  //   // Whether a file, or a directory (with migration files) the `basename`
+  //   // that ./we/accept/deep/nested/TIMESTAMP_fooo_files/
+  //   match basename(p
+  //       .to_str()
+  //       .ok_or_else(|| "could not call to_str")?
+  //   )
+  //       .split(|x| x == std::path::MAIN_SEPARATOR || x == '_' || x == '.')
+  //       .collect::<Vec<&str>>()
+  //       .first() 
+  //   {
+  //       Some(first_part) => match chrono::NaiveDateTime::parse_from_str(first_part, FORMAT_STR) {
+  //           Ok(ndt) => Ok(ndt),
+  //           Err(_) => Err("timestamp did not parse"),
+  //       },
+  //       None => Err("could not get first part"),
+  //   }
 }
 
 #[cfg(test)]
 mod tests {
 
-    // use super::*;
+    use super::*;
 
-    // unsupportted runner
-    // use of reserved word out of place
-    // dot separated parts not at end of filename
+    #[test]
+    fn test_basename() -> Result<(),()> {
+      let filename = "test/fixtures/example-1-simple-mixed-migrations/migrations/20200904205000_get_es_health.es-docker.curl";
+      assert_eq!(basename(filename), "20200904205000_get_es_health.es-docker.curl");
+      Ok(())
+    }
+
+    #[test]
+    fn text_extract_timestamp() -> Result<(), &'static str> {
+      let p = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20200904205000_get_es_health.es-docker.curl");
+      extract_timestamp(p)?;
+
+      let p = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/fucker.curl");
+      match extract_timestamp(p) {
+        Ok(_) => Err("should not have extracted anything"),
+        _ => Ok(())
+      }
+
+    }
+
+    #[test]
+    fn test_the_fixture_returns_correct_results() -> Result<(), &'static str> {
+      println!("current dir is {:?}", std::env::current_dir().expect("blah"));
+      let result = migrations_in(Path::new("test/fixtures")).expect("migrations_in failed");
+      assert_eq!(result.len(), 3);
+      Ok(())
+    }
 }

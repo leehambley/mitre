@@ -21,7 +21,7 @@ impl From<io::Error> for MigrationListingError {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Direction {
     Up,
     Down,
