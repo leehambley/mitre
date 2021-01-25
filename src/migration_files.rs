@@ -1,16 +1,26 @@
-use std::fs;
-use std::path::{Path, PathBuf};
+extern crate mustache;
 use crate::migrations::Direction;
-use std::collections::HashMap;
-use walkdir::WalkDir;
+use crate::reserved::{Word, words};
 use regex;
+use std::collections::HashMap;
+use std::fs;
+use std::ffi::OsStr;
+use std::io;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 pub const FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
 #[derive(Debug)]
+pub struct MigrationStep {
+  path: PathBuf,
+  content: mustache::Template,
+}
+
+#[derive(Debug)]
 pub struct MigrationCandidate {
   date_time: chrono::NaiveDateTime,
-  paths: HashMap<Direction, PathBuf>
+  steps: HashMap<Direction, MigrationStep>
 }
 
 // https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
@@ -42,7 +52,10 @@ pub fn migrations_in(p: &Path) -> Result<Vec<MigrationCandidate>, std::io::Error
     for (path, timestamp) in files.iter() {
       let mut paths = HashMap::<Direction, PathBuf>::new();
       paths.insert(Direction::Up, path.to_path_buf());
-      candiates.push(MigrationCandidate{date_time: *timestamp, paths});
+      let steps = HashMap::new();
+      candiates.push(
+        MigrationCandidate{date_time: *timestamp, steps }
+      );
     }
 
     // For files we check if they also contain a valid runner
@@ -71,6 +84,36 @@ println!("{:?}", candiates);
     }
   }
 
+// Returns tuples [(path, direction, runner)] 
+// matching against OsStr is a bit awkward, but no big deal
+type MigrationPartInDir = (PathBuf, Direction, Word);
+fn parts_in_migration_dir(p: PathBuf) -> Result<(), io::Error> {
+  fn has_proper_name(p: PathBuf) -> Option<MigrationPartInDir> {
+    let (up, down, change) = (OsStr::new("up"), OsStr::new("down"), OsStr::new("change"));
+    let direction = match p.file_stem().unwrap_or(OsStr::new("")) {
+      up => Some(Direction::Up),
+      down => Some(Direction::Down),
+      change => Some(Direction::Change),
+      _ => None{},
+    };
+    let mut runner_reserved_words = crate::reserved::words()
+        .iter()
+        .filter(|word| word.kind == crate::reserved::Kind::Runner);
+    let runner = runner_reserved_words.find(|word| match p.extension() {
+          Some(ext) => ext == word.word,
+          None => false,
+        });
+    match (direction, runner) {
+      (Some(d), Some(r)) => Some((p, d, *r)),
+      _ => None {},
+    }
+  }
+  let mut entries = fs::read_dir(".")?
+  .map(|res| res.map(|e| e.path() ).unwrap() )
+  .map(|p| has_proper_name(p) ).collect();
+
+  Ok(entries);
+}
 
 fn extract_timestamp(p: PathBuf) -> Result<chrono::NaiveDateTime, &'static str> {
   // Search for "SEPARATOR\d{14}_" (dir separator, 14 digits, underscore)
@@ -134,7 +177,7 @@ mod tests {
       let p = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20200904205000_get_es_health.es-docker.curl");
       extract_timestamp(p)?;
 
-      let p = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/fucker.curl");
+      let p = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/example.curl");
       match extract_timestamp(p) {
         Ok(_) => Err("should not have extracted anything"),
         _ => Ok(())
