@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Kind {
     Runner,
     Flag,
@@ -13,7 +13,7 @@ impl fmt::Display for Kind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Word {
     pub word: &'static str,
     pub reason: &'static str,
