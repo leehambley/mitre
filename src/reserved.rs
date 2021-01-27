@@ -20,6 +20,76 @@ pub struct Word {
     pub kind: Kind,
 }
 
+#[derive(Debug, Clone)]
+pub struct Runner {
+    pub name: &'static str,
+    pub desc: &'static str,
+    pub exts: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Flag {
+    name: &'static str,
+    meaning: &'static str,
+}
+
+pub enum ReservedWord {
+    Runner(Runner),
+    Flag(Flag),
+}
+
+pub fn reserved_words() -> Vec<ReservedWord> {
+    vec![
+    ReservedWord::Runner(Runner{
+      name: "MariaDB",
+      desc: "MariaDB by the MariaDB Foundation",
+      exts: vec!["sql"]
+    }),
+    ReservedWord::Runner(Runner{
+      name: "cURL",
+      desc: "cURL",
+      exts: vec!["curl"]
+    }),
+    ReservedWord::Runner(Runner{
+      name: "bash3",
+      desc: "GNU Bash 3",
+      exts: vec![".sh", ".bash3"]
+    }),
+    ReservedWord::Runner(Runner{
+      name: "bash4",
+      desc: "GNU Bash 4",
+      exts: vec![".sh", ".bash4"]
+    }),
+    ReservedWord::Runner(Runner{
+      name: "python3",
+      desc: "Python 3",
+      exts: vec!["sh", "bash4"]
+    }),
+    ReservedWord::Runner(Runner{
+      name: "rails",
+      desc: "Ruby on Rails (5.x or above)",
+      exts: vec!["rb"]
+    }),
+    ReservedWord::Runner(Runner{
+      name: "kafka",
+      desc: "Kafka (11.x or above)",
+      exts: vec![".kafka"]
+    }),
+    ReservedWord::Flag(Flag{
+      name: "data",
+      meaning: "This is a data migration affecting data only, not structure." 
+    }),
+    ReservedWord::Flag(Flag{
+      name: "long",
+      meaning: "This is a long-running migration, apps may want to boot without those, and run them out-of-hours." 
+    }),
+    ReservedWord::Flag(Flag{
+      name: "risky",
+      meaning: "This is a risky migration, maybe should be run outside peak times with more human observation" 
+    })
+  ]
+}
+
 pub fn words() -> Vec<Word> {
     return vec![
         Word {
@@ -51,7 +121,7 @@ pub fn words() -> Vec<Word> {
           word: "mysql",
           reason: "Runs mysql migrations (SQL in a .sql file)",
           kind: Kind::Runner,
-      },
+        },
         Word {
             word: "sh",
             reason: "Used as an extension to activate the POSIX sh runner.",

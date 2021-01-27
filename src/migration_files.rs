@@ -5,19 +5,43 @@ use regex;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
+use std::fs::File;
 use std::io;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 pub const FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
-type MigrationPart = (PathBuf, Direction, Word);
+#[derive(Debug)]
+pub enum MigrationsError {
+    IO(std::io::Error),
+    Mustache(mustache::Error), // None(std::option::NoneError) // comes from the mustache parsing string function
+}
+
+impl From<io::Error> for MigrationsError {
+    fn from(err: io::Error) -> MigrationsError {
+        MigrationsError::IO(err)
+    }
+}
+
+impl From<mustache::Error> for MigrationsError {
+    fn from(err: mustache::Error) -> MigrationsError {
+        MigrationsError::Mustache(err)
+    }
+}
+
+// impl From<std::option::NoneError> for MigrationsError {
+//   fn from(err: std::option::NoneError) -> MigrationsError {
+//       MigrationsError::None(err)
+//   }
+// }
 
 #[derive(Debug)]
 pub struct MigrationStep {
-    content: mustache::Template,
     path: PathBuf,
-    runner: crate::reserved::Word,
+    content: mustache::Template,
+    runner: crate::reserved::Runner,
 }
 
 #[derive(Debug)]
@@ -27,117 +51,157 @@ pub struct MigrationCandidate {
 }
 
 // https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
-pub fn migrations_in(p: &Path) -> Result<Vec<MigrationCandidate>, std::io::Error> {
-    let mut found = Vec::new();
-    let mut migrations = Vec::new();
-
-    for entry in WalkDir::new(p).into_iter().filter_map(Result::ok) {
-        match extract_timestamp(entry.path().to_path_buf()) {
-            Ok(timestamp) => {
-                let path_buf = entry.path().to_path_buf();
-                if entry.file_type().is_dir() {
-                    let parts = parts_in_migration_dir(path_buf.clone())?;
-                    found.push((timestamp, path_buf, parts))
-                } else {
-                    match part_from_migration_file(path_buf.clone()) {
-                        Some(parts) => found.push((timestamp, path_buf, parts)),
-                        _ => {}
+// This should take an *absolute* path
+pub fn migrations_in(
+    p: &Path,
+) -> Result<impl Iterator<Item = MigrationCandidate>, MigrationsError> {
+    Ok(WalkDir::new(p)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            match extract_timestamp(entry.path().to_path_buf()) {
+                Ok(timestamp) => {
+                    let path_buf = entry.path().to_path_buf();
+                    if entry.file_type().is_dir() {
+                        match parts_in_migration_dir(path_buf.clone()).ok()? {
+                            Some(parts) => Some(MigrationCandidate {
+                                date_time: timestamp,
+                                steps: parts,
+                            }),
+                            _ => None {},
+                        }
+                    } else {
+                        match part_from_migration_file(path_buf.clone()).ok()? {
+                            Some(parts) => Some(MigrationCandidate {
+                                date_time: timestamp,
+                                steps: parts,
+                            }),
+                            _ => None {},
+                        }
                     }
                 }
+                Err(_) => None {}, // err contains a string reason why from timestamp parser, ignore it
             }
-            Err(_) => continue, // err contains a string reason why from timestamp parser, ignore it
-        }
-    }
-
-    for (timestamp, _, parts) in found.iter() {
-        let ms: HashMap<Direction, MigrationStep> = parts
-            .iter()
-            .map(|part| {
-                let direction = part.1.clone();
-                let path = part.0.clone();
-                let runner = part.2.clone();
-                let template = mustache::compile_path(path.clone());
-                (
-                    direction,
-                    MigrationStep {
-                        path,
-                        content: template.unwrap(),
-                        runner,
-                    },
-                )
-            })
-            .into_iter()
-            .collect();
-
-        migrations.push(MigrationCandidate {
-            date_time: *timestamp,
-            steps: ms,
-        });
-    }
-    Ok(migrations)
+        }))
 }
 
-fn part_from_migration_file(p: PathBuf) -> Option<Vec<MigrationPart>> {
-    let parts: Vec<&str> = p
-        .to_str()
-        .expect("fofofofof")
-        .split(|x| x == std::path::MAIN_SEPARATOR || x == '_' || x == '.')
-        .collect();
+fn mustache_template_from(p: PathBuf) -> Result<mustache::Template, MigrationsError> {
+    let mut f = File::open(p)?;
+    let mut buffer = String::new();
+    f.read_to_string(&mut buffer)?;
+    Ok(mustache::compile_str(&buffer)?)
+}
 
-    match crate::reserved::words().into_iter()
-        .filter(|word| word.kind == crate::reserved::Kind::Runner)
-        .find(|word| parts.contains(&word.word) ) {
-          Some(runner) => Some(vec![(p, Direction::Change, runner)]),
-          None => None {}
-        }
+fn part_from_migration_file(
+    p: PathBuf,
+) -> Result<Option<HashMap<Direction, MigrationStep>>, MigrationsError> {
+    let parts = p
+        .to_str()
+        .unwrap()
+        .split(|x| x == std::path::MAIN_SEPARATOR || x == '_' || x == '.');
+
+    // TODO: warn if more than one runner found?
+    let runner: Option<crate::reserved::Runner> = parts
+        .filter_map(|p| runner_reserved_word_from_str(&p))
+        .take(1)
+        .next();
+
+    let t = mustache_template_from(p.clone())?;
+
+    match runner {
+        Some(r) => Ok(Some(
+            vec![(
+                Direction::Change,
+                MigrationStep {
+                    content: t,
+                    path: p,
+                    runner: r,
+                },
+            )]
+            .into_iter()
+            .collect(),
+        )),
+        None => Ok(None {}),
+    }
+}
+
+fn runner_reserved_word_from_str(s: &&str) -> Option<crate::reserved::Runner> {
+    let reserved_words = crate::reserved::reserved_words();
+    let mut runner_reserved_words = reserved_words
+        .iter()
+        .filter(|word| match word {
+            crate::reserved::ReservedWord::Runner(_) => true,
+            _ => false,
+        })
+        .filter_map(|word| match word {
+            crate::reserved::ReservedWord::Runner(r) => Some(r.clone()),
+            _ => None {},
+        });
+
+    runner_reserved_words.find(|word| word.exts.contains(s))
 }
 
 // Returns tuples [(path, direction, runner)]
 // matching against OsStr is a bit awkward, but no big deal
-fn parts_in_migration_dir(p: PathBuf) -> Result<Vec<MigrationPart>, io::Error> {
-    fn has_proper_name(p: PathBuf) -> Option<MigrationPart> {
+fn parts_in_migration_dir(
+    p: PathBuf,
+) -> Result<Option<HashMap<Direction, MigrationStep>>, MigrationsError> {
+    fn has_proper_name(p: PathBuf) -> Option<(Direction, MigrationStep)> {
         let (up, down) = (OsStr::new("up"), OsStr::new("down"));
+        // TODO: warn on `change` direction in a directory
         let direction = match p.file_stem().unwrap_or(OsStr::new("")) {
             up => Some(Direction::Up),
             down => Some(Direction::Down),
-            // change => Some(Direction::Change), # "change" in a dir doesn't really make sense, but maybe
             _ => None {},
         };
-        let reserved_words = crate::reserved::words();
-        let mut runner_reserved_words = reserved_words
-            .iter()
-            .filter(|word| word.kind == crate::reserved::Kind::Runner);
-        let runner = runner_reserved_words.find(|word| match p.extension() {
-            Some(ext) => ext == word.word,
-            None => false,
-        });
+        let runner = match p.extension() {
+            Some(e) => runner_reserved_word_from_str(&e.to_str().unwrap()),
+            None => None {},
+        };
+        let template = mustache_template_from(p.clone()).ok()?;
         match (direction, runner) {
-            (Some(d), Some(r)) => Some((p, d, r.clone())),
+            (Some(d), Some(r)) => Some((
+                d,
+                MigrationStep {
+                    content: template,
+                    path: p,
+                    runner: r,
+                },
+            )),
             _ => None {},
         }
     }
-    let entries = fs::read_dir(".")?
+    let entries = fs::read_dir(p)?
         .filter_map(|res| res.map(|e| e.path()).ok())
-        .filter_map(|p| has_proper_name(p))
+        .filter_map(|p| {
+            println!("looking into {:?}", p);
+            has_proper_name(p)
+        })
         .collect();
-    Ok(entries)
+    println!("entries is {:#?}", entries);
+    Ok(Some(entries))
 }
 
 fn extract_timestamp(p: PathBuf) -> Result<chrono::NaiveDateTime, &'static str> {
-    // Search for "SEPARATOR\d{14}_" (dir separator, 14 digits, underscore)
+    // Search for "SEPARATOR\d{14}_[a-Z0-9\.]" (dir separator, 14 digits, underscore)
     // Note: cannot use FORMAT_STR.len() here because %Y is 2 chars, but wants 4
     let re = regex::Regex::new(
         format!(
-            r#"{}(\d{{14}})_"#,
+            r#"{}(\d{{14}})_[^{}]+$"#,
+            regex::escape(format!("{}", std::path::MAIN_SEPARATOR).as_str()),
             regex::escape(format!("{}", std::path::MAIN_SEPARATOR).as_str())
         )
         .as_str(),
-    ).unwrap();
+    )
+    .unwrap();
     match re.captures(p.to_str().expect("path to_str failed")) {
         None => Err("pattern did not match"),
         Some(c) => match c.get(1) {
             Some(m) => match chrono::NaiveDateTime::parse_from_str(m.as_str(), FORMAT_STR) {
-                Ok(ndt) => Ok(ndt),
+                Ok(ndt) => {
+                    println!("..found {:?}", ndt);
+                    Ok(ndt)
+                }
                 Err(_) => Err("timestamp did not parse"),
             },
             None => Err("no capture group"),
@@ -165,22 +229,93 @@ mod tests {
     }
 
     #[test]
-    fn test_part_from_migration_file() -> Result<(), &'static str> {
-      match part_from_migration_file(PathBuf::from("/foo/bar/baz.mysql")) {
-        Some(p) => {
-          assert_eq!(p.len(), 1);
-          assert_eq!(p.first().unwrap().2.word, "mysql");
-          Ok(())
-        },
-        None => Err("didn't match mysql runner properly")
-      }    
+    fn test_extract_timestamp_no_match_files_in_migration_dirs() -> Result<(), String> {
+        // With a walkdir (as we use) it's possible to pass through
+        // a path such as p1 twice, at the dir level, and at the file level
+        // the walkdir is _not_ recursing, so we can't traverse, we walk.
+        //
+        // For that reason it is important not to detect a timstamp in
+        // the files in a timestamped dir
+        let p1 =
+            PathBuf::from("migrations/20210119200000_new_year_new_migration.es-postgres/up.sql");
+        match extract_timestamp(p1) {
+            Ok(_) => Err(format!("should not have matched").to_string()),
+            Err(e) => match e {
+                "pattern did not match" => Ok(()),
+                _ => Err(format!("Unexpected err from timestamp extractor: {:?}", e)),
+            },
+        }
     }
 
     #[test]
-    fn test_the_fixture_returns_correct_results() -> Result<(), &'static str> {
-        let result = migrations_in(Path::new("test/fixtures")).expect("migrations_in failed");
-        assert_eq!(result.len(), 3);
-        println!("{:?}", result);
-        Ok(())
+    fn test_extract_timestamp_match_migration_dirs() -> Result<(), String> {
+        // With a walkdir (as we use) it's possible to pass through
+        // a path such as p1 twice, at the dir level, and at the file level
+        // the walkdir is _not_ recursing, so we can't traverse, we walk.
+        //
+        // For that reason it is important not to detect a timstamp in
+        // the files in a timestamped dir
+        let p1 = PathBuf::from("migrations/20210119200000_new_year_new_migration.es-postgres");
+        match extract_timestamp(p1) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Error: {:?}", e)),
+        }
+    }
+
+    #[test]
+    fn test_part_from_migration_file() -> Result<(), String> {
+        // requires a real file or directory, will try to
+        // build the template after reading the file
+        let path = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20200904205000_get_es_health.es-docker.curl");
+        match part_from_migration_file(path.clone()) {
+            Err(e) => Err(format!("Error: {:?}", e)),
+            Ok(part) => match part {
+                None => Err("no matches".to_string()),
+                Some(p) => match p.get(&Direction::Change) {
+                    None => Err("steps doesn't have a Change direction step".to_string()),
+                    Some(change) => {
+                        assert_eq!(change.runner.name, "cURL");
+                        assert_eq!(change.path, path);
+                        // TODO: no test here for the Mustache contents, probably OK
+                        Ok(())
+                    }
+                },
+            },
+        }
+    }
+
+    #[test]
+    fn test_parts_in_migration_dir() -> Result<(), String> {
+        let path = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20210119200000_new_year_new_migration.es-postgres");
+        match parts_in_migration_dir(path.clone()) {
+            Err(e) => Err(format!("Error: {:?}", e)),
+            Ok(part) => match part {
+                None => Err("no matches".to_string()),
+                Some(p) => {
+                    match p.get(&Direction::Up) {
+                        None => Err("steps doesn't have an Up direction step".to_string()),
+                        Some(up) => {
+                            assert_eq!(up.runner.name, "MariaDB");
+                            assert_eq!(up.path, path.join("up.sql"));
+                            // TODO: no test here for the Mustache contents, probably OK
+                            Ok(())
+                        }
+                    }
+                }
+            },
+        }
+    }
+
+    #[test]
+    fn test_the_fixture_returns_correct_results() -> Result<(), String> {
+        let path = Path::new("./test/fixtures/example-1-simple-mixed-migrations");
+        match migrations_in(path.clone()) {
+            Err(e) => Err(format!("Error: {:?}", e)),
+            Ok(migrations) => {
+                let m: Vec<MigrationCandidate> = migrations.collect();
+                assert_eq!(m.len(), 3);
+                Ok(())
+            }
+        }
     }
 }
