@@ -1,6 +1,6 @@
 extern crate mustache;
 use crate::migrations::Direction;
-use crate::reserved::{words, Word};
+use crate::reserved::{reserved_words, ReservedWord, Runner};
 use regex;
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -15,8 +15,8 @@ pub const FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
 #[derive(Debug)]
 pub enum MigrationsError {
-    IO(std::io::Error),
-    Mustache(mustache::Error), // None(std::option::NoneError) // comes from the mustache parsing string function
+    IO(io::Error),
+    Mustache(mustache::Error),
 }
 
 impl From<io::Error> for MigrationsError {
@@ -31,17 +31,11 @@ impl From<mustache::Error> for MigrationsError {
     }
 }
 
-// impl From<std::option::NoneError> for MigrationsError {
-//   fn from(err: std::option::NoneError) -> MigrationsError {
-//       MigrationsError::None(err)
-//   }
-// }
-
 #[derive(Debug)]
 pub struct MigrationStep {
     path: PathBuf,
     content: mustache::Template,
-    runner: crate::reserved::Runner,
+    runner: Runner,
 }
 
 #[derive(Debug)]
@@ -85,11 +79,30 @@ pub fn migrations_in(
         }))
 }
 
+// Use this method because if mustache::compile_file is used
+// the extension on the mustache::Template is filled from
+// the file's actual extension, which isn't relevant for us
 fn mustache_template_from(p: PathBuf) -> Result<mustache::Template, MigrationsError> {
     let mut f = File::open(p)?;
     let mut buffer = String::new();
     f.read_to_string(&mut buffer)?;
     Ok(mustache::compile_str(&buffer)?)
+}
+
+fn runner_reserved_word_from_str(s: &&str) -> Option<Runner> {
+    let reserved_words = reserved_words();
+    let mut runner_reserved_words = reserved_words
+        .iter()
+        .filter(|word| match word {
+            ReservedWord::Runner(_) => true,
+            _ => false,
+        })
+        .filter_map(|word| match word {
+            ReservedWord::Runner(r) => Some(r.clone()),
+            _ => None {},
+        });
+
+    runner_reserved_words.find(|word| word.exts.contains(s))
 }
 
 fn part_from_migration_file(
@@ -101,7 +114,7 @@ fn part_from_migration_file(
         .split(|x| x == std::path::MAIN_SEPARATOR || x == '_' || x == '.');
 
     // TODO: warn if more than one runner found?
-    let runner: Option<crate::reserved::Runner> = parts
+    let runner: Option<Runner> = parts
         .filter_map(|p| runner_reserved_word_from_str(&p))
         .take(1)
         .next();
@@ -125,24 +138,6 @@ fn part_from_migration_file(
     }
 }
 
-fn runner_reserved_word_from_str(s: &&str) -> Option<crate::reserved::Runner> {
-    let reserved_words = crate::reserved::reserved_words();
-    let mut runner_reserved_words = reserved_words
-        .iter()
-        .filter(|word| match word {
-            crate::reserved::ReservedWord::Runner(_) => true,
-            _ => false,
-        })
-        .filter_map(|word| match word {
-            crate::reserved::ReservedWord::Runner(r) => Some(r.clone()),
-            _ => None {},
-        });
-
-    runner_reserved_words.find(|word| word.exts.contains(s))
-}
-
-// Returns tuples [(path, direction, runner)]
-// matching against OsStr is a bit awkward, but no big deal
 fn parts_in_migration_dir(
     p: PathBuf,
 ) -> Result<Option<HashMap<Direction, MigrationStep>>, MigrationsError> {
@@ -152,7 +147,6 @@ fn parts_in_migration_dir(
         let direction = match p.file_stem().unwrap_or(OsStr::new("")) {
             up => Some(Direction::Up),
             down => Some(Direction::Down),
-            _ => None {},
         };
         let runner = match p.extension() {
             Some(e) => runner_reserved_word_from_str(&e.to_str().unwrap()),
@@ -171,20 +165,20 @@ fn parts_in_migration_dir(
             _ => None {},
         }
     }
-    let entries = fs::read_dir(p)?
-        .filter_map(|res| res.map(|e| e.path()).ok())
-        .filter_map(|p| {
-            println!("looking into {:?}", p);
-            has_proper_name(p)
-        })
-        .collect();
-    println!("entries is {:#?}", entries);
-    Ok(Some(entries))
+    Ok(Some(
+        fs::read_dir(p)?
+            .filter_map(|res| res.map(|e| e.path()).ok())
+            .filter_map(|p| {
+                println!("looking into {:?}", p);
+                has_proper_name(p)
+            })
+            .collect(),
+    ))
 }
 
 fn extract_timestamp(p: PathBuf) -> Result<chrono::NaiveDateTime, &'static str> {
-    // Search for "SEPARATOR\d{14}_[a-Z0-9\.]" (dir separator, 14 digits, underscore)
-    // Note: cannot use FORMAT_STR.len() here because %Y is 2 chars, but wants 4
+    // Search for "SEPARATOR\d{14}_[^SEPARATOR]+$" (dir separator, 14 digits, underscore, no separator until the end)
+    // Note: cannot use FORMAT_STR.len() here because %Y is 2 chars, but wants 4 for example.
     let re = regex::Regex::new(
         format!(
             r#"{}(\d{{14}})_[^{}]+$"#,
