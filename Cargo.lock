@@ -660,6 +660,7 @@ dependencies = [
  "serde",
  "serde_yaml",
  "tempdir",
+ "tempfile",
  "walkdir",
  "yaml-rust",
 ]
