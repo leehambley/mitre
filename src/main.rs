@@ -66,6 +66,7 @@ fn main() {
                 .value_name("MIGRATION DIR")
                 .about("The directory to use"),
         )
+        .subcommand(App::new("init").about("creates configuration and migrations directory"))
         .subcommand(
             App::new("reserved-words")
                 .about("utilties for reserved words")
@@ -77,6 +78,69 @@ fn main() {
         .get_matches();
 
     match m.subcommand_name() {
+        Some("init") => {
+            let config_path = m.value_of("config_file").unwrap_or(DEFAULT_CONFIG_FILE);
+            let migrations_dir = m.value_of("directory").unwrap_or("./migrations");
+
+            if !Path::new(config_path).is_file() {
+                match config::default_config_to_file(Path::new(config_path)) {
+                    Ok(_) => {
+                        println!("Created Mitre config at {}", config_path);
+                    }
+                    Err(e) => {
+                        let err = format!("Could not create Mitre config at {}: {}", config_path, e);
+                        panic!(err)
+                    }
+                }
+            } else {
+                println!("The config file already exists.")
+            }
+            
+
+            if !Path::new(migrations_dir).is_dir() {
+                match std::fs::create_dir_all(Path::new(migrations_dir)) {
+                    Ok(_) => {
+                        println!("Created Mitre migrations directory at {}", migrations_dir);
+                    }
+                    Err(e) => {
+                        let err = format!("Could not create Mitre migrations directory at {}: {}", migrations_dir, e);
+                        panic!(err)
+                    }
+                }
+    
+                let migrations_readme = format!("# Mitre Migrations
+
+This directory contains migrations to be used with [Mitre](https://github.com/leehambley/mitre).
+
+## Getting Started
+
+To run the migrations in this folder run
+
+```sh
+# Getting the current state
+mitre -c {} -d {} ls
+
+# See all commands
+mitre --help
+```
+", config_path, migrations_dir);
+    
+                let readme_path = Path::new(migrations_dir).join(Path::new("README.md"));
+    
+                match std::fs::write(readme_path, migrations_readme) {
+                    Ok(_) => {
+                        println!("For next steps see our getting started section in {}/README.md", migrations_dir);
+                    }
+                    Err(e) => {
+                        let err = format!("Could not create README in Mitres migrations directory at {}/README.md: {}", migrations_dir, e);
+                        panic!(err)
+                    }
+                }
+            } else {
+                println!("Migrations directory already exists")
+            }
+        }
+
         Some("reserved-words") => {
             let mut table = Table::new();
             table.add_row(row!["Word", "Kind", "Reason"]);

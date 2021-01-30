@@ -1,5 +1,6 @@
 extern crate yaml_rust;
 
+
 use crate::reserved;
 use std::collections::HashMap;
 use std::error;
@@ -7,6 +8,7 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 use yaml_rust::{Yaml, YamlLoader};
+
 
 #[derive(Debug)]
 pub enum ConfigError {
@@ -228,6 +230,39 @@ pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError
     from_yaml(yaml_docs)
 }
 
+pub fn default_config_to_file(p: &Path) -> Result<(), ConfigError> {
+    let default_config = "
+# Mitre Config
+# This document describes the data stores that mitre runs migrations against
+# as well as the data store that stores the migration table for mitre.
+# Below you can find example configurations for the supported data stores:
+
+
+my-mysql-db: &my-mysql-db
+  _runner: mysql
+  database: mitre
+  ip_or_hostname: 127.0.0.1
+  logLevel: debug
+  password: example
+  port: 3306
+  username: root
+
+# Curl Runner Data Stores can not be used as mitre config
+my-elasticsearch:
+  _runner: curl
+  ip_or_hostname: es
+  protocol: http
+  logLevel: debug
+
+# The key mitre signals that this data store is going to be used for mitres migration table
+# It does not necessary need to be a data store you want to run migrations against, but it can be
+mitre:
+  <<: *my-mysql-db # using YAML anchors is optional but encouraged so no duplication is necessary
+";
+
+    std::fs::write(p, default_config).map_err(|err| ConfigError::Io(err))
+}
+
 fn from_yaml(
     yaml_docs: Vec<yaml_rust::Yaml>,
 ) -> Result<HashMap<String, Configuration>, ConfigError> {
@@ -303,6 +338,7 @@ fn from_yaml(
 mod tests {
     use super::*;
     use yaml_rust::YamlLoader;
+    use tempfile::tempdir;
 
     // -> fn validate_on_config_structs
     // unsupportted runner
@@ -467,5 +503,23 @@ a:
                 }
             }
         }
+    }
+
+    #[test]
+    fn default_config_is_valid() -> Result<(), String> {
+        // Create test directory
+        let tmp_dir = tempdir().map_err(|e| format!("Could not create a tmp dir: {}", e))?;
+        let file_path = tmp_dir.path().join("config.yaml");
+        let p  =file_path.to_str().ok_or("Could not get file path of tmp config.yaml")?;
+
+        // Create default config in test dir
+        default_config_to_file(Path::new(p)).map_err(|err| format!("Could not create default config: {}", err))?;
+
+        // Load default config from test dir
+        from_file(Path::new(p)).map_err(|err| format!("Could not load default config: {}", err))?;
+
+        // Delete test directory
+        tmp_dir.close().map_err(|e| format!("Could not close tmp dir: {}", e))?;
+        Ok(())
     }
 }
