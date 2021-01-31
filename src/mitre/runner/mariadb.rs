@@ -83,7 +83,6 @@ impl crate::mitre::state_store::MigrationStateStore for MariaDB {
         &mut self,
         _migrations: Vec<Migration>,
     ) -> Result<Vec<(bool, Migration)>, MariaDBMigrationStateStoreError> {
-
         // Database doesn't exist, then obviously nothing ran... (or we have no permission)
         let schema_exists = self.conn.exec_first::<bool, _, _>(
             "SELECT EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?)",

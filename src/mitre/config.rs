@@ -132,24 +132,15 @@ impl Configuration {
             return Err(vec);
         }
 
-        if !reserved::words()
-            .iter()
-            .filter(|w| w.kind == reserved::Kind::Runner)
-            .any(|rw| match &self._runner {
-                Some(runner) => runner == rw.word,
-                None => false,
-            })
-        {
+        if !reserved::runner_by_name(self._runner.as_ref()).is_some() {
             vec.push(ConfigProblem::UnsupportedRunnerSpecified);
         }
 
-        // Redis specific checks
-        if self._runner.as_ref().unwrap()
-            == reserved::words()
-                .iter()
-                .find(|rw| rw.word == "redis" && rw.kind == reserved::Kind::Runner)
-                .unwrap()
-                .word
+        if self
+            ._runner
+            .clone()
+            .map(|r| r.to_lowercase() == reserved::REDIS.to_lowercase())
+            .is_some()
         {
             if self.database_number.is_none() {
                 vec.push(ConfigProblem::NoDatabaseNumberSpecified)

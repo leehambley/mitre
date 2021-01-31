@@ -1,5 +1,5 @@
 // Codes 126 & 127 are traditionally reserved for shells
-// so we'll use higher codes. Windows and POSIX both support 
+// so we'll use higher codes. Windows and POSIX both support
 // exit statuses i32. (unix must use waitid() not wait())
 //
 // - https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_08_02

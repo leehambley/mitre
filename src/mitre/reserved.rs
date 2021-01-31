@@ -29,8 +29,8 @@ pub struct Runner {
 
 #[derive(Debug, Clone)]
 pub struct Flag {
-    name: &'static str,
-    meaning: &'static str,
+    pub name: &'static str,
+    pub meaning: &'static str,
 }
 
 pub enum ReservedWord {
@@ -38,42 +38,59 @@ pub enum ReservedWord {
     Flag(Flag),
 }
 
-pub fn reserved_words() -> Vec<ReservedWord> {
+/// Static constantts for runner names. Be mindful to perform
+/// case insensitive comparisons, the configuration file for example
+/// is not required to be capitalized any particular way.
+pub static BASH_3: &'static str = "Bash3";
+pub static BASH_4: &'static str = "Bash4";
+pub static CURL: &'static str = "cURL";
+pub static KAFKA: &'static str = "Kafka";
+pub static MARIA_DB: &'static str = "MariaDB";
+pub static PYTHON_3: &'static str = "Python3";
+pub static RAILS: &'static str = "Rails";
+pub static REDIS: &'static str = "Redis";
+
+pub fn words() -> Vec<ReservedWord> {
     vec![
-    ReservedWord::Runner(Runner{
-      name: "MariaDB",
+    ReservedWord::Runner(Runner {
+      name: MARIA_DB,
       desc: "MariaDB by the MariaDB Foundation",
-      exts: vec!["sql"]
-    }),
-    ReservedWord::Runner(Runner{
-      name: "cURL",
+      exts: vec!["sql"],
+  }),
+    ReservedWord::Runner(Runner {
+      name: REDIS,
+      desc: "The screaming fast in-memory object store",
+      exts: vec!["redis"],
+  }),
+    ReservedWord::Runner(Runner {
+      name: CURL,
       desc: "cURL",
-      exts: vec!["curl"]
-    }),
-    ReservedWord::Runner(Runner{
-      name: "bash3",
+      exts: vec!["curl"],
+  }),
+    ReservedWord::Runner(Runner {
+      name: BASH_3,
       desc: "GNU Bash 3",
-      exts: vec!["sh", "bash3"]
-    }),
-    ReservedWord::Runner(Runner{
-      name: "bash4",
+      exts: vec!["sh", "bash3"],
+  }),
+    ReservedWord::Runner(Runner {
+      name: BASH_4,
       desc: "GNU Bash 4",
-      exts: vec!["sh", "bash4"]
-    }),
-    ReservedWord::Runner(Runner{
-      name: "python3",
-      desc: "Python 3",
-      exts: vec!["py", "py3"]
-    }),
-    ReservedWord::Runner(Runner{
-      name: "rails",
+      exts: vec!["sh", "bash4"],
+  }),
+    ReservedWord::Runner(Runner {
+      name: RAILS,
       desc: "Ruby on Rails (5.x or above)",
-      exts: vec!["rb"]
-    }),
-    ReservedWord::Runner(Runner{
-      name: "kafka",
-      desc: "Kafka (11.x or above)",
-      exts: vec!["kafka"]
+      exts: vec!["rb"],
+  }),
+    ReservedWord::Runner(Runner {
+      name: PYTHON_3,
+      desc: "Python 3",
+      exts: vec!["py", "py3"],
+  }),
+    ReservedWord::Runner(Runner {
+      name: KAFKA,
+      desc: "Kafka",
+      exts: vec!["kafka"],
     }),
     ReservedWord::Flag(Flag{
       name: "data",
@@ -90,84 +107,19 @@ pub fn reserved_words() -> Vec<ReservedWord> {
   ]
 }
 
-pub fn words() -> Vec<Word> {
-    return vec![
-        Word {
-            word: "bash3",
-            reason: "Used as an extension to activate the Bash (v3) runner.",
-            kind: Kind::Runner,
-        },
-        Word {
-            word: "bash4",
-            reason: "Used as an extension to activate the Bash (v4) runner.",
-            kind: Kind::Runner,
-        },
-        Word {
-            word: "python3",
-            reason: "Used an extension to activate the Python (v3) runner.",
-            kind: Kind::Runner,
-        },
-        Word {
-            word: "curl",
-            reason: "Used as an extension to activate the cURL runner.",
-            kind: Kind::Runner,
-        },
-        Word {
-            word: "rails",
-            reason: "Used as an extension to activate the (Ruby on) Rails runner.",
-            kind: Kind::Runner,
-        },
-        Word {
-          word: "mysql",
-          reason: "Runs mysql migrations (SQL in a .sql file)",
-          kind: Kind::Runner,
-        },
-        Word {
-            word: "sh",
-            reason: "Used as an extension to activate the POSIX sh runner.",
-            kind: Kind::Runner,
-        },
-        Word {
-            word: "kafka",
-            reason: "Used as an extension to activate the Kafka runner.",
-            kind: Kind::Runner,
-        },
-        Word {
-            word: "data",
-            reason: "Indicates this is a data migration (advisory only)",
-            kind: Kind::Flag,
-        },
-        Word {
-            word: "long",
-            reason: "Indicates this may be long running (advisory only, e.g changing an index)",
-            kind: Kind::Flag,
-        },
-        Word {
-            word: "risky",
-            reason: "Indicates this is risky migration (advisory only, e.g renaming a column)",
-            kind: Kind::Flag,
-        },
-        Word {
-          word: "redis",
-          reason: "Indicates this is a Redis runner, files should be formatted in the way you could pipe them to redis-cli",
-          kind: Kind::Runner,
-      },
-        Word {
-            word: "up",
-            reason: "Used to indicate upward (forward) migrations",
-            kind: Kind::Direction,
-        },
-        Word {
-            word: "change",
-            reason: "Used to indicate change migrations (no implied direction)",
-            kind: Kind::Direction,
-        },
-        Word {
-            word: "down",
-            reason: "Used to indicate down (backwards) migrations",
-            kind: Kind::Direction,
-        },
-    ];
+pub fn runners() -> impl Iterator<Item = Runner> {
+    words().into_iter().filter_map(|word| match word {
+        ReservedWord::Runner(r) => Some(r),
+        _ => None {},
+    })
+}
+
+/// Strictly matching including case sensitivity
+pub fn runner_by_name(s: Option<&String>) -> Option<Runner> {
+    match s {
+        Some(ss) => runners().find(|r| r.name == ss),
+        None => None {},
+    }
 }
 
 #[cfg(test)]
@@ -177,6 +129,6 @@ mod tests {
 
     #[test]
     fn test_words() {
-        assert!(words().iter().any(|v| v.word == "curl"));
+        assert!(runners().any(|v| v.name == "cURL"));
     }
 }

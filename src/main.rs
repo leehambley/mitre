@@ -1,22 +1,21 @@
-mod mitre;
-
 extern crate env_logger;
+
 #[macro_use]
 extern crate log;
 
 #[macro_use]
 extern crate prettytable;
-use prettytable::{Cell, Row, Table};
+
 use clap::{App, Arg};
-use crate::mitre::state_store::MigrationStateStore;
+use prettytable::{Cell, Row, Table};
+use std::path::{Path, PathBuf};
+
+mod mitre;
+use crate::mitre::config;
+use crate::mitre::migrations;
+use crate::mitre::reserved;
 use crate::mitre::runner::mariadb::MariaDB;
 use crate::mitre::runner::Runner;
-use crate::mitre::reserved;
-use crate::mitre::exit_code;
-use std::process::exit;
-
-pub const DEFAULT_CONFIG_FILE: &'static str = "mitre.yml";
-pub const DEFAULT_MIGRATIONS_DIR: &'static str = ".";
 
 fn main() {
     env_logger::init();
@@ -51,45 +50,82 @@ fn main() {
         .subcommand(App::new("show-migrations").about("for migrations"))
         .get_matches();
 
-    let directory = m.value_of("directory").unwrap_or(DEFAULT_MIGRATIONS_DIR);
-    let config_file = m.value_of("config_file").unwrap_or(DEFAULT_CONFIG_FILE);
+    let migrations_directory = m
+        .value_of("directory")
+        .unwrap_or(mitre::DEFAULT_MIGRATIONS_DIR);
+    let config_file = m
+        .value_of("config_file")
+        .unwrap_or(mitre::DEFAULT_CONFIG_FILE);
 
     match m.subcommand_name() {
         Some("reserved-words") => {
             let mut table = Table::new();
-            table.add_row(row!["Word", "Kind", "Reason"]);
+            table.add_row(row!["Word", "Kind", "Reason", "(extensions)"]);
             reserved::words().iter().for_each(|word| {
-                table.add_row(Row::new(vec![
-                    Cell::new(word.word).style_spec("bFy"),
-                    Cell::new(&word.kind.to_string()).style_spec("Fb"),
-                    Cell::new(word.reason),
-                ]));
+                match word {
+                    reserved::ReservedWord::Runner(r) => table.add_row(Row::new(vec![
+                        Cell::new(r.name).style_spec("bFy"),
+                        Cell::new("runner").style_spec("Fb"),
+                        Cell::new(r.desc),
+                        Cell::new(&r.exts.join(", ")),
+                    ])),
+                    reserved::ReservedWord::Flag(f) => table.add_row(Row::new(vec![
+                        Cell::new(f.name).style_spec("bFy"),
+                        Cell::new("flag").style_spec("Fb"),
+                        Cell::new(f.meaning),
+                        Cell::new("-"),
+                    ])),
+                };
             });
             table.printstd();
         }
 
-        // Some("show-config") => {
-        //     if let Some(ref config_file) = m.value_of("config_file") {
-        //         let path = Path::new(config_file);
-        //         match config::from_file(path) {
-        //             Ok(c) => {
-        //                 let mitre_config = c.get("mitre").expect("must provide mitre config");
-        //                 let mdb = MariaDB::new(mitre_config);
-        //                 match mdb {
-        //                     Ok(mut mmmdb) => {
-        //                         println!("bootstrap {:?}", mmmdb.bootstrap());
-        //                     }
-        //                     Err(e) => {
-        //                         println!("error connecting/reading config for mariadb {:?}", e);
-        //                         std::process::exit(123);
-        //                     }
-        //                 };
-        //             }
-        //             Err(e) => println!("error loading config: {:?}", e),
-        //         };
-        //         println!("using {:?}", path);
-        //     }
-        // }
+        Some("show-config") => {
+            if let Some(ref config_file) = m.value_of("config_file") {
+                let path = Path::new(config_file);
+                match config::from_file(path) {
+                    Ok(c) => {
+                        let mitre_config = c.get("mitre").expect("must provide mitre config");
+                        let mdb = MariaDB::new(mitre_config);
+                        match mdb {
+                            Ok(mut mmmdb) => {
+                                println!("bootstrap {:?}", mmmdb.bootstrap());
+                            }
+                            Err(e) => {
+                                println!("error connecting/reading config for mariadb {:?}", e);
+                                std::process::exit(123);
+                            }
+                        };
+                    }
+                    Err(e) => println!("error loading config: {:?}", e),
+                };
+                println!("using {:?}", path);
+            }
+        }
+
+        Some("ls") => {
+            let dir = Path::new(migrations_directory);
+            let mut table = Table::new();
+            table.add_row(row!["Timestamp", "Path", "Runner", "Directions"]);
+
+            // TODO: return something from error_code module in this crate
+            // TODO: sort the migrations list somehow
+            match migrations::migrations(Path::new(migrations_directory)) {
+                Err(e) => panic!("Error: {:?}", e),
+                Ok(migration_iter) => migration_iter.for_each(|m| {
+                    m.clone().steps.into_iter().for_each(|(direction, s)| {
+                        table.add_row(Row::new(vec![
+                            Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
+                            Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
+                            Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
+                            Cell::new(s.runner.name).style_spec("fB"),
+                        ]));
+                    });
+                }),
+            };
+            table.printstd();
+        }
+
         // Some("ls") => {
         //   let migrations = match migrations::migrations(Path::new(
         //     m.value_of("directory").unwrap_or(DEFAULT_MIGRATIONS_DIR),

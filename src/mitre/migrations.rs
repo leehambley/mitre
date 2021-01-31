@@ -1,13 +1,14 @@
 extern crate mustache;
-use super::reserved::{reserved_words, ReservedWord, Runner};
+
+use super::reserved::{runners, Runner};
 use regex;
 use rust_embed::RustEmbed;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
-use std::fs::{File};
+use std::fs::File;
 use std::io;
-use std::io::{Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -27,7 +28,6 @@ pub enum Direction {
 //   Direction::Down => "⬇",
 //   Direction::Change => "⭬",
 // };
-
 
 pub const FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
@@ -49,49 +49,50 @@ impl From<mustache::Error> for MigrationsError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MigrationStep {
-    path: PathBuf,
-    content: mustache::Template,
-    runner: Runner,
+    pub path: PathBuf,
+    pub content: mustache::Template,
+    pub runner: Runner, // runners are compiled-in
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Migration {
-    date_time: chrono::NaiveDateTime,
-    steps: HashMap<Direction, MigrationStep>,
+    pub date_time: chrono::NaiveDateTime,
+    pub steps: HashMap<Direction, MigrationStep>,
 }
 
 impl Migration {
-  fn new(date_time: chrono::NaiveDateTime, steps: HashMap<Direction, MigrationStep>) -> Migration {
-    Migration{date_time, steps}
-  }
+    fn new(
+        date_time: chrono::NaiveDateTime,
+        steps: HashMap<Direction, MigrationStep>,
+    ) -> Migration {
+        Migration { date_time, steps }
+    }
 }
 
 /// List all migrations known in the given context.
-/// 
+///
 /// Returns a lazy iterator, or some wrapped error from std::io
 /// or the template library (Mustache).
-/// 
-/// Order of the returned migrations is not guaranteed as the filesytem 
-/// walk cannot be guaranteed to run a specific way, also depending on 
+///
+/// Order of the returned migrations is not guaranteed as the filesytem
+/// walk cannot be guaranteed to run a specific way, also depending on
 /// system locale the built-in migrations (Mitre's own migration management migrations)
 /// may be interspersed.
-/// 
+///
 /// Runners must *run* these in chronological order to maintain the library
-/// guarantees, so the lazy iterator is used more for it's neat interface 
+/// guarantees, so the lazy iterator is used more for it's neat interface
 /// and composability than any specific optimization reason.
-/// 
+///
 /// Ideally provide an absolute path.
 pub fn migrations(p: &Path) -> Result<impl Iterator<Item = Migration>, MigrationsError> {
-  Ok(built_in_migrations().chain(migrations_in(p)?))
+    Ok(built_in_migrations().chain(migrations_in(p)?))
 }
 
 // https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
 // This should take an *absolute* path
-pub fn migrations_in(
-    p: &Path,
-) -> Result<impl Iterator<Item = Migration>, MigrationsError> {
+pub fn migrations_in(p: &Path) -> Result<impl Iterator<Item = Migration>, MigrationsError> {
     Ok(WalkDir::new(p)
         .into_iter()
         .filter_map(Result::ok)
@@ -125,21 +126,20 @@ pub fn migrations_in(
 // WARNING: Built-in migrations do not support the up/down director
 //          style of migration yet. Please stick to change only files
 fn built_in_migrations() -> impl Iterator<Item = Migration> {
-  BuiltInMigrations::iter().filter_map(|file| {
-    let p = PathBuf::from(file.into_owned());
-    match extract_timestamp(p.clone()){
-      Ok(timestamp) => match part_from_migration_file(p).ok()? {  
-            Some(parts) => Some(Migration {
-            date_time: timestamp,
-            steps: parts,
-        }),
-        _ => None {},
-      },
-      Err(_) => panic!("built-in migration has bogus filename")
-    }
-  })
+    BuiltInMigrations::iter().filter_map(|file| {
+        let p = PathBuf::from(file.into_owned());
+        match extract_timestamp(p.clone()) {
+            Ok(timestamp) => match part_from_migration_file(p).ok()? {
+                Some(parts) => Some(Migration {
+                    date_time: timestamp,
+                    steps: parts,
+                }),
+                _ => None {},
+            },
+            Err(_) => panic!("built-in migration has bogus filename"),
+        }
+    })
 }
-
 
 // Use this method because if mustache::compile_file is used
 // the extension on the mustache::Template is filled from
@@ -152,19 +152,7 @@ fn mustache_template_from(p: PathBuf) -> Result<mustache::Template, MigrationsEr
 }
 
 fn runner_reserved_word_from_str(s: &&str) -> Option<Runner> {
-    let reserved_words = reserved_words();
-    let mut runner_reserved_words = reserved_words
-        .iter()
-        .filter(|word| match word {
-            ReservedWord::Runner(_) => true,
-            _ => false,
-        })
-        .filter_map(|word| match word {
-            ReservedWord::Runner(r) => Some(r.clone()),
-            _ => None {},
-        });
-
-    runner_reserved_words.find(|word| word.exts.contains(s))
+    runners().find(|word| word.exts.contains(s))
 }
 
 pub fn part_from_migration_file(
@@ -229,7 +217,7 @@ fn parts_in_migration_dir(
     }
     Ok(Some(
         fs::read_dir(p)?
-            .filter_map(|res| res.map(|e| e.path()).ok() )
+            .filter_map(|res| res.map(|e| e.path()).ok())
             .filter_map(has_proper_name)
             .collect(),
     ))
@@ -251,10 +239,7 @@ fn extract_timestamp(p: PathBuf) -> Result<chrono::NaiveDateTime, &'static str> 
         None => Err("pattern did not match"),
         Some(c) => match c.get(1) {
             Some(m) => match chrono::NaiveDateTime::parse_from_str(m.as_str(), FORMAT_STR) {
-                Ok(ndt) => {
-                    println!("..found {:?}", ndt);
-                    Ok(ndt)
-                }
+                Ok(ndt) => Ok(ndt),
                 Err(_) => Err("timestamp did not parse"),
             },
             None => Err("no capture group"),
