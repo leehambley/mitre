@@ -53,17 +53,17 @@ pub fn reserved_words() -> Vec<ReservedWord> {
     ReservedWord::Runner(Runner{
       name: "bash3",
       desc: "GNU Bash 3",
-      exts: vec![".sh", ".bash3"]
+      exts: vec!["sh", "bash3"]
     }),
     ReservedWord::Runner(Runner{
       name: "bash4",
       desc: "GNU Bash 4",
-      exts: vec![".sh", ".bash4"]
+      exts: vec!["sh", "bash4"]
     }),
     ReservedWord::Runner(Runner{
       name: "python3",
       desc: "Python 3",
-      exts: vec!["sh", "bash4"]
+      exts: vec!["py", "py3"]
     }),
     ReservedWord::Runner(Runner{
       name: "rails",
@@ -73,7 +73,7 @@ pub fn reserved_words() -> Vec<ReservedWord> {
     ReservedWord::Runner(Runner{
       name: "kafka",
       desc: "Kafka (11.x or above)",
-      exts: vec![".kafka"]
+      exts: vec!["kafka"]
     }),
     ReservedWord::Flag(Flag{
       name: "data",

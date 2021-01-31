@@ -1,15 +1,33 @@
 extern crate mustache;
-use crate::migrations::Direction;
-use crate::reserved::{reserved_words, ReservedWord, Runner};
+use super::reserved::{reserved_words, ReservedWord, Runner};
 use regex;
+use rust_embed::RustEmbed;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
-use std::fs::File;
+use std::fs::{File};
 use std::io;
-use std::io::Read;
+use std::io::{Read};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+
+#[derive(RustEmbed)]
+#[folder = "src/migrations/"]
+struct BuiltInMigrations;
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub enum Direction {
+    Up,
+    Down,
+    Change,
+}
+
+// static ICONS: Map<Direction, &'static str> = phf_map! {
+//   Direction::Up => "⬆",
+//   Direction::Down => "⬇",
+//   Direction::Change => "⭬",
+// };
+
 
 pub const FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
@@ -39,16 +57,41 @@ pub struct MigrationStep {
 }
 
 #[derive(Debug)]
-pub struct MigrationCandidate {
+pub struct Migration {
     date_time: chrono::NaiveDateTime,
     steps: HashMap<Direction, MigrationStep>,
+}
+
+impl Migration {
+  fn new(date_time: chrono::NaiveDateTime, steps: HashMap<Direction, MigrationStep>) -> Migration {
+    Migration{date_time, steps}
+  }
+}
+
+/// List all migrations known in the given context.
+/// 
+/// Returns a lazy iterator, or some wrapped error from std::io
+/// or the template library (Mustache).
+/// 
+/// Order of the returned migrations is not guaranteed as the filesytem 
+/// walk cannot be guaranteed to run a specific way, also depending on 
+/// system locale the built-in migrations (Mitre's own migration management migrations)
+/// may be interspersed.
+/// 
+/// Runners must *run* these in chronological order to maintain the library
+/// guarantees, so the lazy iterator is used more for it's neat interface 
+/// and composability than any specific optimization reason.
+/// 
+/// Ideally provide an absolute path.
+pub fn migrations(p: &Path) -> Result<impl Iterator<Item = Migration>, MigrationsError> {
+  Ok(built_in_migrations().chain(migrations_in(p)?))
 }
 
 // https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
 // This should take an *absolute* path
 pub fn migrations_in(
     p: &Path,
-) -> Result<impl Iterator<Item = MigrationCandidate>, MigrationsError> {
+) -> Result<impl Iterator<Item = Migration>, MigrationsError> {
     Ok(WalkDir::new(p)
         .into_iter()
         .filter_map(Result::ok)
@@ -58,7 +101,7 @@ pub fn migrations_in(
                     let path_buf = entry.path().to_path_buf();
                     if entry.file_type().is_dir() {
                         match parts_in_migration_dir(path_buf.clone()).ok()? {
-                            Some(parts) => Some(MigrationCandidate {
+                            Some(parts) => Some(Migration {
                                 date_time: timestamp,
                                 steps: parts,
                             }),
@@ -66,7 +109,7 @@ pub fn migrations_in(
                         }
                     } else {
                         match part_from_migration_file(path_buf.clone()).ok()? {
-                            Some(parts) => Some(MigrationCandidate {
+                            Some(parts) => Some(Migration {
                                 date_time: timestamp,
                                 steps: parts,
                             }),
@@ -78,6 +121,25 @@ pub fn migrations_in(
             }
         }))
 }
+
+// WARNING: Built-in migrations do not support the up/down director
+//          style of migration yet. Please stick to change only files
+fn built_in_migrations() -> impl Iterator<Item = Migration> {
+  BuiltInMigrations::iter().filter_map(|file| {
+    let p = PathBuf::from(file.into_owned());
+    match extract_timestamp(p.clone()){
+      Ok(timestamp) => match part_from_migration_file(p).ok()? {  
+            Some(parts) => Some(Migration {
+            date_time: timestamp,
+            steps: parts,
+        }),
+        _ => None {},
+      },
+      Err(_) => panic!("built-in migration has bogus filename")
+    }
+  })
+}
+
 
 // Use this method because if mustache::compile_file is used
 // the extension on the mustache::Template is filled from
@@ -105,7 +167,7 @@ fn runner_reserved_word_from_str(s: &&str) -> Option<Runner> {
     runner_reserved_words.find(|word| word.exts.contains(s))
 }
 
-fn part_from_migration_file(
+pub fn part_from_migration_file(
     p: PathBuf,
 ) -> Result<Option<HashMap<Direction, MigrationStep>>, MigrationsError> {
     let parts = p
@@ -167,11 +229,8 @@ fn parts_in_migration_dir(
     }
     Ok(Some(
         fs::read_dir(p)?
-            .filter_map(|res| res.map(|e| e.path()).ok())
-            .filter_map(|p| {
-                println!("looking into {:?}", p);
-                has_proper_name(p)
-            })
+            .filter_map(|res| res.map(|e| e.path()).ok() )
+            .filter_map(has_proper_name)
             .collect(),
     ))
 }
@@ -248,7 +307,7 @@ mod tests {
         // the walkdir is _not_ recursing, so we can't traverse, we walk.
         //
         // For that reason it is important not to detect a timstamp in
-        // the files in a timestamped dir
+        // the files in a timestamped dirs
         let p1 = PathBuf::from("migrations/20210119200000_new_year_new_migration.es-postgres");
         match extract_timestamp(p1) {
             Ok(_) => Ok(()),
@@ -257,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn test_part_from_migration_file() -> Result<(), String> {
+    fn test_step_from_migration_file() -> Result<(), String> {
         // requires a real file or directory, will try to
         // build the template after reading the file
         let path = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20200904205000_get_es_health.es-docker.curl");
@@ -279,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parts_in_migration_dir() -> Result<(), String> {
+    fn test_steps_in_migration_dir() -> Result<(), String> {
         let path = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20210119200000_new_year_new_migration.es-postgres");
         match parts_in_migration_dir(path.clone()) {
             Err(e) => Err(format!("Error: {:?}", e)),
@@ -306,7 +365,7 @@ mod tests {
         match migrations_in(path.clone()) {
             Err(e) => Err(format!("Error: {:?}", e)),
             Ok(migrations) => {
-                let m: Vec<MigrationCandidate> = migrations.collect();
+                let m: Vec<Migration> = migrations.collect();
                 assert_eq!(m.len(), 3);
                 Ok(())
             }

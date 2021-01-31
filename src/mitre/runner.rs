@@ -1,5 +1,5 @@
 pub mod mariadb;
-use crate::config::Configuration;
+use crate::mitre::config::Configuration;
 
 pub trait Runner {
     type Error;

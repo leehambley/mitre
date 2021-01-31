@@ -1,6 +1,6 @@
 extern crate yaml_rust;
 
-use crate::reserved;
+use super::reserved;
 use std::collections::HashMap;
 use std::error;
 use std::fmt;
