@@ -201,3 +201,7 @@ and autoscaling.
 - Err on on runner with no config.
 - Warn on runner with no config when already run.
 - https://github.com/rails/rails/blob/161fc87fbf8d0efee2cadc11199fbb4d183ce712/railties/lib/rails/tasks/engine.rake make Rails compatible Gem drop-in
+
+## Contributing
+
+Please install [pre-commit](https://pre-commit.com/#install) and run `pre-commit install` in this repo to install the commit checks.
