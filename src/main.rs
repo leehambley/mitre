@@ -104,7 +104,6 @@ fn main() {
         }
 
         Some("ls") => {
-            let dir = Path::new(migrations_directory);
             let mut table = Table::new();
             table.add_row(row!["Timestamp", "Path", "Runner", "Directions"]);
 

@@ -2,7 +2,6 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 extern crate libc;
 mod mitre;
-use crate::mitre::reserved;
 
 #[repr(C)]
 pub struct ReservedWords {

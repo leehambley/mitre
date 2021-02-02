@@ -1,4 +1,4 @@
-use crate::mitre::config::Configuration;
+use crate::mitre::config::RunnerConfiguration;
 use crate::mitre::migrations::Migration;
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};
@@ -51,7 +51,7 @@ fn ensure_connectivity(db: &mut MariaDB) -> Result<(), RunnerError> {
 
 impl crate::mitre::runner::Runner for MariaDB {
     type Error = RunnerError;
-    fn new(config: &Configuration) -> Result<MariaDB, RunnerError> {
+    fn new(config: &RunnerConfiguration) -> Result<MariaDB, RunnerError> {
         let opts = mysql::Opts::from(
             OptsBuilder::new()
                 .ip_or_hostname(config.ip_or_hostname.clone())

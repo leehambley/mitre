@@ -1,10 +1,10 @@
 pub mod mariadb;
-use crate::mitre::config::Configuration;
+use crate::mitre::config::RunnerConfiguration;
 
 pub trait Runner {
     type Error;
 
-    fn new(config: &Configuration) -> Result<Self, Self::Error>
+    fn new(config: &RunnerConfiguration) -> Result<Self, Self::Error>
     where
         Self: Sized;
 

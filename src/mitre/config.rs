@@ -100,7 +100,7 @@ pub enum ConfigProblem {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Configuration {
+pub struct RunnerConfiguration {
     // Runner is not optional, but we need to option it here to maintain
     // serde::Deserialize compatibility
     pub _runner: Option<String>,
@@ -123,7 +123,7 @@ pub struct Configuration {
     pub password: Option<String>,
 }
 
-impl Configuration {
+impl RunnerConfiguration {
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         let mut vec = Vec::new();
 
@@ -213,7 +213,7 @@ fn as_string(yaml: &yaml_rust::Yaml) -> String {
     }
 }
 
-pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError> {
+pub fn from_file(p: &Path) -> Result<HashMap<String, RunnerConfiguration>, ConfigError> {
     let s = std::fs::read_to_string(p)?;
     let yaml_docs = YamlLoader::load_from_str(&s)?;
     from_yaml(yaml_docs)
@@ -221,8 +221,8 @@ pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError
 
 fn from_yaml(
     yaml_docs: Vec<yaml_rust::Yaml>,
-) -> Result<HashMap<String, Configuration>, ConfigError> {
-    let mut hm: HashMap<String, Configuration> = HashMap::new();
+) -> Result<HashMap<String, RunnerConfiguration>, ConfigError> {
+    let mut hm: HashMap<String, RunnerConfiguration> = HashMap::new();
     match yaml_docs
         .iter()
         .filter_map(|yaml| {
@@ -248,7 +248,7 @@ fn from_yaml(
             }
         })
         .try_for_each(|(k, config_value)| {
-            let c = Configuration {
+            let c = RunnerConfiguration {
                 _runner: match dig_string(config_value, &String::from("_runner")) {
                     Ok(res) => res,
                     Err(e) => return Err(e),
@@ -395,7 +395,7 @@ a:
             Ok(configs) => configs,
         };
 
-        let c = Configuration {
+        let c = RunnerConfiguration {
             _runner: Some(String::from("mysql")),
             database: Some(String::from("mitre")),
             ip_or_hostname: Some(String::from("127.0.0.1")),
@@ -431,7 +431,7 @@ a:
             Ok(configs) => configs,
         };
 
-        let c = Configuration {
+        let c = RunnerConfiguration {
             _runner: Some(String::from("foobarbaz")),
             database: None {},
             ip_or_hostname: None {},
