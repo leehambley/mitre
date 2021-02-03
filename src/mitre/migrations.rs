@@ -61,6 +61,7 @@ pub struct MigrationStep {
 pub struct Migration {
     pub date_time: chrono::NaiveDateTime,
     pub steps: HashMap<Direction, MigrationStep>,
+    pub built_in: bool,
 }
 
 impl Migration {
@@ -68,7 +69,7 @@ impl Migration {
         date_time: chrono::NaiveDateTime,
         steps: HashMap<Direction, MigrationStep>,
     ) -> Migration {
-        Migration { date_time, steps }
+        Migration { date_time, steps, built_in: false }
     }
 }
 
@@ -106,6 +107,7 @@ fn migrations_in(p: &Path) -> Result<impl Iterator<Item = Migration>, Migrations
                             Some(parts) => Some(Migration {
                                 date_time: timestamp,
                                 steps: parts,
+                                built_in: false,
                             }),
                             _ => None {},
                         }
@@ -117,6 +119,7 @@ fn migrations_in(p: &Path) -> Result<impl Iterator<Item = Migration>, Migrations
                             Some(parts) => Some(Migration {
                                 date_time: timestamp,
                                 steps: parts,
+                                built_in: false,
                             }),
                             _ => None {},
                         }
@@ -140,6 +143,7 @@ fn built_in_migrations() -> impl Iterator<Item = Migration> {
                 Some(parts) => Some(Migration {
                     date_time: timestamp,
                     steps: parts,
+                    built_in: true,
                 }),
                 _ => None {},
             },

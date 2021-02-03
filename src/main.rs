@@ -105,7 +105,7 @@ fn main() {
 
         Some("ls") => {
             let mut table = Table::new();
-            table.add_row(row!["Timestamp", "Path", "Runner", "Directions"]);
+            table.add_row(row!["Built-In", "Timestamp", "Path", "Runner", "Directions"]);
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations list somehow
@@ -114,10 +114,11 @@ fn main() {
                 Ok(migration_iter) => migration_iter.for_each(|m| {
                     m.clone().steps.into_iter().for_each(|(direction, s)| {
                         table.add_row(Row::new(vec![
+                            Cell::new(format!("{:?}", m.built_in).as_str()).style_spec("bFy"),
                             Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
-                            Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
                             Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
                             Cell::new(s.runner.name).style_spec("fB"),
+                            Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
                         ]));
                     });
                 }),
