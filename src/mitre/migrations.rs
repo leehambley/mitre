@@ -93,7 +93,7 @@ pub fn migrations(p: &Path) -> Result<impl Iterator<Item = Migration>, Migration
 
 // https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
 // This should take an *absolute* path
-pub fn migrations_in(p: &Path) -> Result<impl Iterator<Item = Migration>, MigrationsError> {
+fn migrations_in(p: &Path) -> Result<impl Iterator<Item = Migration>, MigrationsError> {
     Ok(WalkDir::new(p)
         .into_iter()
         .filter_map(Result::ok)
@@ -110,7 +110,10 @@ pub fn migrations_in(p: &Path) -> Result<impl Iterator<Item = Migration>, Migrat
                             _ => None {},
                         }
                     } else {
-                        match part_from_migration_file(path_buf.clone()).ok()? {
+                        let mut f = File::open(path_buf.clone()).ok()?;
+                        let mut buffer = String::new();
+                        f.read_to_string(&mut buffer).ok()?;
+                        match part_from_migration_file(path_buf.clone(), &buffer).ok()? {
                             Some(parts) => Some(Migration {
                                 date_time: timestamp,
                                 steps: parts,
@@ -128,9 +131,12 @@ pub fn migrations_in(p: &Path) -> Result<impl Iterator<Item = Migration>, Migrat
 //          style of migration yet. Please stick to change only files
 fn built_in_migrations() -> impl Iterator<Item = Migration> {
     BuiltInMigrations::iter().filter_map(|file| {
-        let p = PathBuf::from(file.into_owned());
+        let p = PathBuf::from(file.as_ref());
+        let bytes = BuiltInMigrations::get(file.as_ref()).unwrap();
+        let contents = std::str::from_utf8(&bytes).ok().unwrap();
+
         match extract_timestamp(p.clone()) {
-            Ok(timestamp) => match part_from_migration_file(p).ok()? {
+            Ok(timestamp) => match part_from_migration_file(p, contents).ok()? {
                 Some(parts) => Some(Migration {
                     date_time: timestamp,
                     steps: parts,
@@ -142,15 +148,6 @@ fn built_in_migrations() -> impl Iterator<Item = Migration> {
     })
 }
 
-// Use this method because if mustache::compile_file is used
-// the extension on the mustache::Template is filled from
-// the file's actual extension, which isn't relevant for us
-fn mustache_template_from(p: PathBuf) -> Result<mustache::Template, MigrationsError> {
-    let mut f = File::open(p)?;
-    let mut buffer = String::new();
-    f.read_to_string(&mut buffer)?;
-    Ok(mustache::compile_str(&buffer)?)
-}
 
 fn runner_reserved_word_from_str(s: &&str) -> Option<Runner> {
     runners().find(|word| word.exts.contains(s))
@@ -158,6 +155,7 @@ fn runner_reserved_word_from_str(s: &&str) -> Option<Runner> {
 
 pub fn part_from_migration_file(
     p: PathBuf,
+    c: &str,
 ) -> Result<Option<HashMap<Direction, MigrationStep>>, MigrationsError> {
     let parts = p
         .to_str()
@@ -170,7 +168,7 @@ pub fn part_from_migration_file(
         .take(1)
         .next();
 
-    let t = mustache_template_from(p.clone())?;
+    let t = mustache::compile_str(c)?;
 
     match runner {
         Some(r) => Ok(Some(
@@ -203,7 +201,14 @@ fn parts_in_migration_dir(
             Some(e) => runner_reserved_word_from_str(&e.to_str().unwrap()),
             None => None {},
         };
-        let template = mustache_template_from(p.clone()).ok()?;
+
+        // TODO: bubble errors and do more with pattern matching
+        // here to avoid .ok()? ok.
+        let mut f = File::open(&p).ok()?;
+        let mut buffer = String::new();
+        f.read_to_string(&mut buffer).ok()?;
+        
+        let template = mustache::compile_str(&buffer).ok()?;
         match (direction, runner) {
             (Some(d), Some(r)) => Some((
                 d,
@@ -306,7 +311,11 @@ mod tests {
         // requires a real file or directory, will try to
         // build the template after reading the file
         let path = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20200904205000_get_es_health.es-docker.curl");
-        match part_from_migration_file(path.clone()) {
+        let mut f = File::open(&path).map_err(|e| "Could not open path")?;
+        let mut buffer = String::new();
+        f.read_to_string(&mut buffer).map_err(|e| "Could not read path")?;
+        
+        match part_from_migration_file(path.clone(), &buffer) {
             Err(e) => Err(format!("Error: {:?}", e)),
             Ok(part) => match part {
                 None => Err("no matches".to_string()),
@@ -348,11 +357,11 @@ mod tests {
     #[test]
     fn test_the_fixture_returns_correct_results() -> Result<(), String> {
         let path = Path::new("./test/fixtures/example-1-simple-mixed-migrations");
-        match migrations_in(path.clone()) {
+        match migrations(path.clone()) {
             Err(e) => Err(format!("Error: {:?}", e)),
             Ok(migrations) => {
                 let m: Vec<Migration> = migrations.collect();
-                assert_eq!(m.len(), 3);
+                assert_eq!(m.len(), 4);
                 Ok(())
             }
         }
@@ -362,7 +371,7 @@ mod tests {
     fn test_build_in_migrations() -> Result<(), String> {
         let migrations: Vec<Migration> = built_in_migrations().collect();
 
-        assert_ne!(migrations.len(), 0);
+        assert_eq!(migrations.len(), 1);
 
         Ok(())
     }
