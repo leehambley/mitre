@@ -1,11 +1,12 @@
 extern crate yaml_rust;
 
-use super::reserved;
 use std::collections::HashMap;
 use std::error;
 use std::fmt;
 use std::io;
 use std::path::Path;
+use std::process::Command;
+use super::reserved;
 use yaml_rust::{Yaml, YamlLoader};
 
 #[derive(Debug)]
@@ -153,6 +154,28 @@ impl RunnerConfiguration {
             Ok(())
         }
     }
+}
+
+
+/// Reads patterns to exclude from the .gitignore file, an excludesfile
+/// if configured locally or globally. Requires `git` to be on the Path
+/// which is a safe bet.
+///
+/// https://docs.github.com/en/github/using-git/ignoring-files
+// 
+// TODO Ensure this works on Windows?
+// TODO extract in a library?
+pub fn ignore_patterns() -> Result<Vec<String>, io::Error> {
+    let unshared_excludesfile = String::from(".git/info/exclude");
+    let default_excludesfile = String::from(".gitignore");
+    let local_excludesfile = Command::new("git").arg("config").arg("core.excludesfile").output().expect("failed to execute process");
+    let global_excludesfile = Command::new("git").arg("config").arg("core.excludesfile").output().expect("failed to execute process");
+
+    let global_excludes = String::from_utf8(global_excludesfile.stdout).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let local_excludes = String::from_utf8(local_excludesfile.stdout).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+    //.filter_map( |s| s.map(|s| Path::from(s) )).collect()
+    Ok(vec![global_excludes, default_excludesfile, local_excludes, unshared_excludesfile])
 }
 
 fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &String) -> Result<yaml_rust::Yaml, ConfigError> {
@@ -376,7 +399,7 @@ key: 2550000
         let yaml_docs = match YamlLoader::load_from_str(
             r#"
 ---
-a: 
+a:
   _runner: mysql
   database: mitre
   ip_or_hostname: 127.0.0.1
@@ -418,7 +441,7 @@ a:
         let yaml_docs = match YamlLoader::load_from_str(
             r#"
 ---
-a: 
+a:
   _runner: foobarbaz
 "#,
         ) {
