@@ -14,6 +14,7 @@ use walkdir::WalkDir;
 
 #[derive(RustEmbed)]
 #[folder = "src/migrations/"]
+#[prefix = "src/migrations/"]
 struct BuiltInMigrations;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
@@ -356,4 +357,14 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_build_in_migrations() -> Result<(), String> {
+        let migrations: Vec<Migration> = built_in_migrations().collect();
+
+        assert_ne!(migrations.len(), 0);
+
+        Ok(())
+    }
+
 }
