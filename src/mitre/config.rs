@@ -1,11 +1,12 @@
 extern crate yaml_rust;
 
-use crate::reserved;
 use std::collections::HashMap;
 use std::error;
 use std::fmt;
 use std::io;
 use std::path::Path;
+use std::process::Command;
+use super::reserved;
 use yaml_rust::{Yaml, YamlLoader};
 
 #[derive(Debug)]
@@ -100,7 +101,7 @@ pub enum ConfigProblem {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Configuration {
+pub struct RunnerConfiguration {
     // Runner is not optional, but we need to option it here to maintain
     // serde::Deserialize compatibility
     pub _runner: Option<String>,
@@ -123,7 +124,7 @@ pub struct Configuration {
     pub password: Option<String>,
 }
 
-impl Configuration {
+impl RunnerConfiguration {
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         let mut vec = Vec::new();
 
@@ -132,24 +133,15 @@ impl Configuration {
             return Err(vec);
         }
 
-        if !reserved::words()
-            .iter()
-            .filter(|w| w.kind == reserved::Kind::Runner)
-            .any(|rw| match &self._runner {
-                Some(runner) => runner == rw.word,
-                None => false,
-            })
-        {
+        if !reserved::runner_by_name(self._runner.as_ref()).is_some() {
             vec.push(ConfigProblem::UnsupportedRunnerSpecified);
         }
 
-        // Redis specific checks
-        if self._runner.as_ref().unwrap()
-            == reserved::words()
-                .iter()
-                .find(|rw| rw.word == "redis" && rw.kind == reserved::Kind::Runner)
-                .unwrap()
-                .word
+        if self
+            ._runner
+            .clone()
+            .map(|r| r.to_lowercase() == reserved::REDIS.to_lowercase())
+            .is_some()
         {
             if self.database_number.is_none() {
                 vec.push(ConfigProblem::NoDatabaseNumberSpecified)
@@ -162,6 +154,28 @@ impl Configuration {
             Ok(())
         }
     }
+}
+
+
+/// Reads patterns to exclude from the .gitignore file, an excludesfile
+/// if configured locally or globally. Requires `git` to be on the Path
+/// which is a safe bet.
+///
+/// https://docs.github.com/en/github/using-git/ignoring-files
+// 
+// TODO Ensure this works on Windows?
+// TODO extract in a library?
+pub fn ignore_patterns() -> Result<Vec<String>, io::Error> {
+    let unshared_excludesfile = String::from(".git/info/exclude");
+    let default_excludesfile = String::from(".gitignore");
+    let local_excludesfile = Command::new("git").arg("config").arg("core.excludesfile").output().expect("failed to execute process");
+    let global_excludesfile = Command::new("git").arg("config").arg("core.excludesfile").output().expect("failed to execute process");
+
+    let global_excludes = String::from_utf8(global_excludesfile.stdout).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let local_excludes = String::from_utf8(local_excludesfile.stdout).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+    //.filter_map( |s| s.map(|s| Path::from(s) )).collect()
+    Ok(vec![global_excludes, default_excludesfile, local_excludes, unshared_excludesfile])
 }
 
 fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &String) -> Result<yaml_rust::Yaml, ConfigError> {
@@ -222,7 +236,7 @@ fn as_string(yaml: &yaml_rust::Yaml) -> String {
     }
 }
 
-pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError> {
+pub fn from_file(p: &Path) -> Result<HashMap<String, RunnerConfiguration>, ConfigError> {
     let s = std::fs::read_to_string(p)?;
     let yaml_docs = YamlLoader::load_from_str(&s)?;
     from_yaml(yaml_docs)
@@ -230,8 +244,8 @@ pub fn from_file(p: &Path) -> Result<HashMap<String, Configuration>, ConfigError
 
 fn from_yaml(
     yaml_docs: Vec<yaml_rust::Yaml>,
-) -> Result<HashMap<String, Configuration>, ConfigError> {
-    let mut hm: HashMap<String, Configuration> = HashMap::new();
+) -> Result<HashMap<String, RunnerConfiguration>, ConfigError> {
+    let mut hm: HashMap<String, RunnerConfiguration> = HashMap::new();
     match yaml_docs
         .iter()
         .filter_map(|yaml| {
@@ -257,7 +271,7 @@ fn from_yaml(
             }
         })
         .try_for_each(|(k, config_value)| {
-            let c = Configuration {
+            let c = RunnerConfiguration {
                 _runner: match dig_string(config_value, &String::from("_runner")) {
                     Ok(res) => res,
                     Err(e) => return Err(e),
@@ -385,7 +399,7 @@ key: 2550000
         let yaml_docs = match YamlLoader::load_from_str(
             r#"
 ---
-a: 
+a:
   _runner: mysql
   database: mitre
   ip_or_hostname: 127.0.0.1
@@ -404,7 +418,7 @@ a:
             Ok(configs) => configs,
         };
 
-        let c = Configuration {
+        let c = RunnerConfiguration {
             _runner: Some(String::from("mysql")),
             database: Some(String::from("mitre")),
             ip_or_hostname: Some(String::from("127.0.0.1")),
@@ -427,7 +441,7 @@ a:
         let yaml_docs = match YamlLoader::load_from_str(
             r#"
 ---
-a: 
+a:
   _runner: foobarbaz
 "#,
         ) {
@@ -440,7 +454,7 @@ a:
             Ok(configs) => configs,
         };
 
-        let c = Configuration {
+        let c = RunnerConfiguration {
             _runner: Some(String::from("foobarbaz")),
             database: None {},
             ip_or_hostname: None {},

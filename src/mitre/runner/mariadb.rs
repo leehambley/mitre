@@ -1,5 +1,5 @@
-use crate::built_in_migrations;
-use crate::config::Configuration;
+use crate::mitre::config::RunnerConfiguration;
+use crate::mitre::migrations::Migration;
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};
 use std::convert::From;
@@ -49,9 +49,9 @@ fn ensure_connectivity(db: &mut MariaDB) -> Result<(), RunnerError> {
     };
 }
 
-impl crate::runner::Runner for MariaDB {
+impl crate::mitre::runner::Runner for MariaDB {
     type Error = RunnerError;
-    fn new(config: &Configuration) -> Result<MariaDB, RunnerError> {
+    fn new(config: &RunnerConfiguration) -> Result<MariaDB, RunnerError> {
         let opts = mysql::Opts::from(
             OptsBuilder::new()
                 .ip_or_hostname(config.ip_or_hostname.clone())
@@ -74,17 +74,15 @@ impl crate::runner::Runner for MariaDB {
     }
 }
 
-impl crate::migration_state_store::MigrationStateStore for MariaDB {
+impl crate::mitre::state_store::MigrationStateStore for MariaDB {
     type Error = MariaDBMigrationStateStoreError;
-    type Migration = crate::migrations::Migration;
-    type MigrationState = (bool, crate::migrations::Migration);
+    type Migration = Migration;
+    type MigrationState = (bool, Migration);
 
     fn diff(
         &mut self,
-        _migrations: Vec<crate::migrations::Migration>,
-    ) -> Result<Vec<(bool, crate::migrations::Migration)>, MariaDBMigrationStateStoreError> {
-        let _v = built_in_migrations::built_in_migrations();
-
+        _migrations: Vec<Migration>,
+    ) -> Result<Vec<(bool, Migration)>, MariaDBMigrationStateStoreError> {
         // Database doesn't exist, then obviously nothing ran... (or we have no permission)
         let schema_exists = self.conn.exec_first::<bool, _, _>(
             "SELECT EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?)",

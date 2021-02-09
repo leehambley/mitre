@@ -61,8 +61,8 @@ elasticsearch/
 postgres/
   202030303033_create_some_table.sql
   202020202020_modify_some_data/
-    up.sql
-    down.curl
+    up.sql.postgres
+    down.curl.postgres
 my-project/
   202030303033_do_some_migration_with_our_data_models.rails
   ...
