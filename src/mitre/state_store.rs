@@ -1,7 +1,10 @@
+use super::migrations::Migration;
+
 pub trait MigrationStateStore {
     type Error;
-    type Migration;
-    type MigrationState;
 
-    fn diff(&mut self, _: Vec<Self::Migration>) -> Result<Vec<Self::MigrationState>, Self::Error>;
+    fn diff(
+        &mut self,
+        _: impl Iterator<Item = Migration>,
+    ) -> Result<&dyn Iterator<Item = Migration>, Self::Error>;
 }

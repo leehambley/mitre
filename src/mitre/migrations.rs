@@ -69,7 +69,11 @@ impl Migration {
         date_time: chrono::NaiveDateTime,
         steps: HashMap<Direction, MigrationStep>,
     ) -> Migration {
-        Migration { date_time, steps, built_in: false }
+        Migration {
+            date_time,
+            steps,
+            built_in: false,
+        }
     }
 }
 
@@ -152,7 +156,6 @@ fn built_in_migrations() -> impl Iterator<Item = Migration> {
     })
 }
 
-
 fn runner_reserved_word_from_str(s: &&str) -> Option<Runner> {
     runners().find(|word| word.exts.contains(s))
 }
@@ -211,7 +214,7 @@ fn parts_in_migration_dir(
         let mut f = File::open(&p).ok()?;
         let mut buffer = String::new();
         f.read_to_string(&mut buffer).ok()?;
-        
+
         let template = mustache::compile_str(&buffer).ok()?;
         match (direction, runner) {
             (Some(d), Some(r)) => Some((
@@ -317,8 +320,9 @@ mod tests {
         let path = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20200904205000_get_es_health.es-docker.curl");
         let mut f = File::open(&path).map_err(|e| "Could not open path")?;
         let mut buffer = String::new();
-        f.read_to_string(&mut buffer).map_err(|e| "Could not read path")?;
-        
+        f.read_to_string(&mut buffer)
+            .map_err(|e| "Could not read path")?;
+
         match part_from_migration_file(path.clone(), &buffer) {
             Err(e) => Err(format!("Error: {:?}", e)),
             Ok(part) => match part {
@@ -379,5 +383,4 @@ mod tests {
 
         Ok(())
     }
-
 }

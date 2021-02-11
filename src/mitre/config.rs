@@ -1,12 +1,12 @@
 extern crate yaml_rust;
 
+use super::reserved;
 use std::collections::HashMap;
 use std::error;
 use std::fmt;
 use std::io;
 use std::path::Path;
 use std::process::Command;
-use super::reserved;
 use yaml_rust::{Yaml, YamlLoader};
 
 #[derive(Debug)]
@@ -91,6 +91,7 @@ impl From<yaml_rust::ScanError> for ConfigError {
 // Inexhaustive list for now
 #[derive(Debug, PartialEq)]
 pub enum ConfigProblem {
+    NoMitreConfiguration,
     NoRunnerSpecified,
     UnsupportedRunnerSpecified,
     NoIndexSpecified,
@@ -101,6 +102,12 @@ pub enum ConfigProblem {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct Configuration {
+    // no fields yet
+    configuredRunners: HashMap<String, RunnerConfiguration>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct RunnerConfiguration {
     // Runner is not optional, but we need to option it here to maintain
     // serde::Deserialize compatibility
@@ -122,6 +129,26 @@ pub struct RunnerConfiguration {
 
     pub username: Option<String>,
     pub password: Option<String>,
+}
+
+impl Configuration {
+    pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
+        // TODO: write tests
+        let mut problems = vec![];
+        if self.configuredRunners.get("mitre").is_none() {
+            problems.push(ConfigProblem::NoMitreConfiguration)
+        }
+
+        if problems.len() == 0 {
+            Ok(())
+        } else {
+            Err(problems)
+        }
+    }
+
+    pub fn get(&self, k: &str) -> Option<&RunnerConfiguration> {
+        self.configuredRunners.get(k)
+    }
 }
 
 impl RunnerConfiguration {
@@ -156,26 +183,40 @@ impl RunnerConfiguration {
     }
 }
 
-
 /// Reads patterns to exclude from the .gitignore file, an excludesfile
 /// if configured locally or globally. Requires `git` to be on the Path
 /// which is a safe bet.
 ///
 /// https://docs.github.com/en/github/using-git/ignoring-files
-// 
+//
 // TODO Ensure this works on Windows?
 // TODO extract in a library?
 pub fn ignore_patterns() -> Result<Vec<String>, io::Error> {
     let unshared_excludesfile = String::from(".git/info/exclude");
     let default_excludesfile = String::from(".gitignore");
-    let local_excludesfile = Command::new("git").arg("config").arg("core.excludesfile").output().expect("failed to execute process");
-    let global_excludesfile = Command::new("git").arg("config").arg("core.excludesfile").output().expect("failed to execute process");
+    let local_excludesfile = Command::new("git")
+        .arg("config")
+        .arg("core.excludesfile")
+        .output()
+        .expect("failed to execute process");
+    let global_excludesfile = Command::new("git")
+        .arg("config")
+        .arg("core.excludesfile")
+        .output()
+        .expect("failed to execute process");
 
-    let global_excludes = String::from_utf8(global_excludesfile.stdout).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-    let local_excludes = String::from_utf8(local_excludesfile.stdout).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let global_excludes = String::from_utf8(global_excludesfile.stdout)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let local_excludes = String::from_utf8(local_excludesfile.stdout)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
     //.filter_map( |s| s.map(|s| Path::from(s) )).collect()
-    Ok(vec![global_excludes, default_excludesfile, local_excludes, unshared_excludesfile])
+    Ok(vec![
+        global_excludes,
+        default_excludesfile,
+        local_excludes,
+        unshared_excludesfile,
+    ])
 }
 
 fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &String) -> Result<yaml_rust::Yaml, ConfigError> {
@@ -236,10 +277,12 @@ fn as_string(yaml: &yaml_rust::Yaml) -> String {
     }
 }
 
-pub fn from_file(p: &Path) -> Result<HashMap<String, RunnerConfiguration>, ConfigError> {
+pub fn from_file(p: &Path) -> Result<Configuration, ConfigError> {
     let s = std::fs::read_to_string(p)?;
     let yaml_docs = YamlLoader::load_from_str(&s)?;
-    from_yaml(yaml_docs)
+    Ok(Configuration {
+        configuredRunners: from_yaml(yaml_docs)?,
+    })
 }
 
 fn from_yaml(

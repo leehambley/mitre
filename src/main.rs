@@ -46,6 +46,7 @@ fn main() {
                 .subcommand(App::new("ls").about("list reserved words")),
         )
         .subcommand(App::new("ls").about("list all migrations and their status"))
+        .subcommand(App::new("up").about("run migrations up to the current timestamp"))
         .subcommand(App::new("show-config").about("for showing config file"))
         .subcommand(App::new("show-migrations").about("for migrations"))
         .get_matches();
@@ -56,6 +57,8 @@ fn main() {
     let config_file = m
         .value_of("config_file")
         .unwrap_or(mitre::DEFAULT_CONFIG_FILE);
+
+    // Validate config contains a mitre runner
 
     match m.subcommand_name() {
         Some("reserved-words") => {
@@ -105,7 +108,13 @@ fn main() {
 
         Some("ls") => {
             let mut table = Table::new();
-            table.add_row(row!["Built-In", "Timestamp", "Path", "Runner", "Directions"]);
+            table.add_row(row![
+                "Built-In",
+                "Timestamp",
+                "Path",
+                "Runner",
+                "Directions"
+            ]);
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations list somehow
@@ -125,6 +134,8 @@ fn main() {
             };
             table.printstd();
         }
+
+        Some("up") => {}
 
         // Some("ls") => {
         //   let migrations = match migrations::migrations(Path::new(
@@ -229,7 +240,6 @@ fn main() {
             //     table.printstd();
             // }
         }
-        Some("up") => {}   // up was used
         Some("down") => {} // down was used
         Some("redo") => {} // redo was used
         _ => {}            // Either no subcommand or one not tested for...
