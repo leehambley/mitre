@@ -6,6 +6,7 @@ pub trait Runner {
     type Migration;
 
     type MigrationStateTuple;
+    // type Iter = Iterator<Item = Self::MigrationStateTuple>;
 
     fn new(config: &RunnerConfiguration) -> Result<Self, Self::Error>
     where
@@ -18,7 +19,7 @@ pub trait Runner {
     fn diff(
         &mut self,
         _: impl Iterator<Item = Self::Migration>,
-    ) -> Result<&dyn Iterator<Item = Self::MigrationStateTuple>, Self::Error>
+    ) -> Result<Vec<Self::MigrationStateTuple>, Self::Error>
     where
         Self: Sized;
 }
