@@ -15,8 +15,8 @@ pub trait Runner {
     where
         Self: Sized;
 
-    fn diff<'a>(
+    fn diff(
         &mut self,
-        _: impl Iterator<Item = Self::Migration> + 'a,
+        _: impl Iterator<Item = Self::Migration>,
     ) -> Result<Box<dyn Iterator<Item = Self::MigrationStateTuple>>, Self::Error>;
 }
