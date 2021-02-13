@@ -66,10 +66,10 @@ impl crate::mitre::runner::Runner for MariaDB {
         ensure_connectivity(self)
     }
 
-    fn diff(
+    fn diff<'a>(
         &mut self,
-        migrations: impl Iterator<Item = Migration>,
-    ) -> Result<Vec<Self::MigrationStateTuple>, Error> {
+        migrations: impl Iterator<Item = Migration> + 'a,
+    ) -> Result<Box<dyn Iterator<Item = Self::MigrationStateTuple>>, Error> {
         // Database doesn't exist, then obviously nothing ran... (or we have no permission)
         let schema_exists = self.conn.exec_first::<bool, _, _>(
           "SELECT EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?)",
@@ -110,7 +110,7 @@ impl crate::mitre::runner::Runner for MariaDB {
                 return Err(Error::ErrorRunningQuery); // table doesn't exist in schema.
             }
         }
-        Ok(migrations.map(|m| (false, m)).collect())
+        Ok(Box::new(::std::iter::empty()))
     }
 }
 

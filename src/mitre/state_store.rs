@@ -1,10 +1,10 @@
-use super::migrations::Migration;
+// use super::migrations::Migration;
 
-pub trait MigrationStateStore {
-    type Error;
+// pub trait MigrationStateStore {
+//     type Error;
 
-    fn diff(
-        &mut self,
-        _: impl Iterator<Item = Migration>,
-    ) -> Result<&dyn Iterator<Item = Migration>, Self::Error>;
-}
+//     fn diff(
+//         &mut self,
+//         _: impl Iterator<Item = Migration>,
+//     ) -> Result<&dyn Iterator<Item = Migration>, Self::Error>;
+// }
