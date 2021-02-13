@@ -137,7 +137,7 @@ fn migrations_in(p: &Path) -> Result<Box<impl Iterator<Item = Migration>>, Migra
 }
 
 // WARNING: Built-in migrations do not support the up/down director
-//          style of migration yet. Please stick to change only files
+//          style of migration yet. Please stick to "change" only files
 fn built_in_migrations() -> impl Iterator<Item = Migration> {
     BuiltInMigrations::iter().filter_map(|file| {
         let p = PathBuf::from(file.as_ref());
