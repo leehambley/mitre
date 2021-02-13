@@ -98,40 +98,42 @@ pub fn migrations(p: &Path) -> Result<impl Iterator<Item = Migration>, Migration
 
 // https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
 // This should take an *absolute* path
-fn migrations_in(p: &Path) -> Result<impl Iterator<Item = Migration>, MigrationsError> {
-    Ok(WalkDir::new(p)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            match extract_timestamp(entry.path().to_path_buf()) {
-                Ok(timestamp) => {
-                    let path_buf = entry.path().to_path_buf();
-                    if entry.file_type().is_dir() {
-                        match parts_in_migration_dir(path_buf.clone()).ok()? {
-                            Some(parts) => Some(Migration {
-                                date_time: timestamp,
-                                steps: parts,
-                                built_in: false,
-                            }),
-                            _ => None {},
-                        }
-                    } else {
-                        let mut f = File::open(path_buf.clone()).ok()?;
-                        let mut buffer = String::new();
-                        f.read_to_string(&mut buffer).ok()?;
-                        match part_from_migration_file(path_buf.clone(), &buffer).ok()? {
-                            Some(parts) => Some(Migration {
-                                date_time: timestamp,
-                                steps: parts,
-                                built_in: false,
-                            }),
-                            _ => None {},
+fn migrations_in(p: &Path) -> Result<Box<impl Iterator<Item = Migration>>, MigrationsError> {
+    Ok(Box::new(
+        WalkDir::new(p)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                match extract_timestamp(entry.path().to_path_buf()) {
+                    Ok(timestamp) => {
+                        let path_buf = entry.path().to_path_buf();
+                        if entry.file_type().is_dir() {
+                            match parts_in_migration_dir(path_buf.clone()).ok()? {
+                                Some(parts) => Some(Migration {
+                                    date_time: timestamp,
+                                    steps: parts,
+                                    built_in: false,
+                                }),
+                                _ => None {},
+                            }
+                        } else {
+                            let mut f = File::open(path_buf.clone()).ok()?;
+                            let mut buffer = String::new();
+                            f.read_to_string(&mut buffer).ok()?;
+                            match part_from_migration_file(path_buf.clone(), &buffer).ok()? {
+                                Some(parts) => Some(Migration {
+                                    date_time: timestamp,
+                                    steps: parts,
+                                    built_in: false,
+                                }),
+                                _ => None {},
+                            }
                         }
                     }
+                    Err(_) => None {}, // err contains a string reason why from timestamp parser, ignore it
                 }
-                Err(_) => None {}, // err contains a string reason why from timestamp parser, ignore it
-            }
-        }))
+            }),
+    ))
 }
 
 // WARNING: Built-in migrations do not support the up/down director
