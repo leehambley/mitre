@@ -4,8 +4,10 @@ use crate::mitre::config::RunnerConfiguration;
 pub trait Runner {
     type Error;
     type Migration;
+    type MigrationStep;
 
     type MigrationStateTuple;
+    type MigrationResultTuple;
 
     fn new(config: &RunnerConfiguration) -> Result<Self, Self::Error>
     where
@@ -14,6 +16,13 @@ pub trait Runner {
     fn bootstrap(&mut self) -> Result<(), Self::Error>
     where
         Self: Sized;
+
+    fn apply(&mut self, _: &Self::MigrationStep) -> Result<(), Self::Error>;
+
+    fn up<'a>(
+        &mut self,
+        _: impl Iterator<Item = Self::Migration> + 'a,
+    ) -> Result<Box<dyn Iterator<Item = Self::MigrationResultTuple> + 'a>, Self::Error>;
 
     fn diff<'a>(
         &mut self,

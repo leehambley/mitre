@@ -1,8 +1,11 @@
 use crate::mitre::config::RunnerConfiguration;
-use crate::mitre::migrations::Migration;
+use crate::mitre::migrations::{Direction, Migration, MigrationStep};
+use mustache::MapBuilder;
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};
 use std::convert::From;
+use std::io::prelude::*;
+use std::io::Write;
 
 const MARIADB_MIGRATION_STATE_TABLE_NAME: &'static str = "mitre_migration_state";
 
@@ -10,6 +13,18 @@ const MARIADB_MIGRATION_STATE_TABLE_NAME: &'static str = "mitre_migration_state"
 pub struct MariaDB {
     conn: Conn,
     config: RunnerConfiguration,
+}
+
+#[derive(PartialEq, Debug)]
+pub enum MigrationState {
+    Pending,
+    Applied,
+}
+
+#[derive(PartialEq, Debug)]
+pub enum MigrationResult {
+    Success,
+    Failure,
 }
 
 #[derive(Debug)]
@@ -22,6 +37,9 @@ pub enum Error {
     MigrationStateTableDoesNotExist,
 
     NoStateStoreDatabaseNameProvided,
+
+    // (reason, the template)
+    TemplateError(String, mustache::Template),
 
     AnyError, // placeholder remove me
 }
@@ -43,8 +61,10 @@ fn ensure_connectivity(db: &mut MariaDB) -> Result<(), Error> {
 impl crate::mitre::runner::Runner for MariaDB {
     type Error = Error;
     type Migration = Migration;
+    type MigrationStep = MigrationStep;
 
-    type MigrationStateTuple = (bool, Migration);
+    type MigrationStateTuple = (MigrationState, Migration);
+    type MigrationResultTuple = (MigrationResult, Migration);
 
     fn new(config: &RunnerConfiguration) -> Result<MariaDB, Error> {
         let opts = mysql::Opts::from(
@@ -64,13 +84,59 @@ impl crate::mitre::runner::Runner for MariaDB {
     }
 
     // https://docs.rs/mysql/20.1.0/mysql/struct.Conn.html
+    //
+    // TODO: bootstrap can probably go away, diff() handles missing stuff
+    // gracefully, and "up" will err right away I guess.
     fn bootstrap(&mut self) -> Result<(), Error> {
         ensure_connectivity(self)
     }
 
+    // Applies a single migration (each runner needs something like this)
+    fn apply<'a>(&mut self, ms: &Self::MigrationStep) -> Result<(), Error> {
+        let template_ctx = MapBuilder::new()
+            .insert_str(
+                "mariadb_migration_state_table_name",
+                MARIADB_MIGRATION_STATE_TABLE_NAME,
+            )
+            .build();
+        println!("Template CTX is {:?}", template_ctx);
+
+        let parsed = match ms.content.render_data_to_string(&template_ctx) {
+            Ok(str) => Ok(str),
+            Err(e) => Err(Error::TemplateError(e.to_string(), ms.content.clone())),
+        }?;
+
+        self.conn.exec_first::<bool, _, _>(
+          "SELECT EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?)",
+          () //trailing comma makes this a tuple
+        )?;
+    }
+
+    fn up<'a>(
+        &mut self,
+        migrations: impl Iterator<Item = Self::Migration> + 'a,
+    ) -> Result<Box<dyn Iterator<Item = Self::MigrationResultTuple> + 'a>, Error> {
+        let results = std::iter::empty::<(MigrationResult, Migration)>();
+        for migration in migrations {
+            println!("hello world");
+            match migration.steps.get(&Direction::Change) {
+                // TODO: also Up.
+                Some(up_step) => {
+                    // have an up migration, let's run it ...
+                    self.apply(up_step)?;
+                }
+                None => {} // TODO: warn if a migration has no up-step?
+            }
+        }
+
+        // panic!();
+
+        Err(Error::AnyError)
+    }
+
     fn diff<'a>(
         &mut self,
-        migrations: impl Iterator<Item = Migration> + 'a,
+        migrations: impl Iterator<Item = Self::Migration> + 'a,
     ) -> Result<Box<dyn Iterator<Item = Self::MigrationStateTuple> + 'a>, Error> {
         let database = match &self.config.database {
             Some(database) => Ok(database),
@@ -86,9 +152,12 @@ impl crate::mitre::runner::Runner for MariaDB {
             Some(schema_exists) => {
                 println!("schema exists?: {}", schema_exists);
                 if !schema_exists {
-                    println!("about to create {}", database);
-                    let stmt_create_db = self.conn.prep(format!("CREATE DATABASE {}", database))?;
-                    self.conn.exec::<bool, _, _>(stmt_create_db, ())?;
+                    // println!("about to create {}", database);
+                    // let stmt_create_db = self.conn.prep(format!("CREATE DATABASE {}", database))?;
+                    // self.conn.exec::<bool, _, _>(stmt_create_db, ())?;
+                    return Ok(Box::new(
+                        migrations.map(|m| (MigrationState::Pending, m)).into_iter(),
+                    ));
                 }
             }
             None => {
@@ -107,7 +176,7 @@ impl crate::mitre::runner::Runner for MariaDB {
             if !table_exists {
             // let iter = migrations.map(|m| (false, m)).collect::<Vec<Self::MigrationStateTuple>>().into_iter();
             // let iter = migrations.map(|m| (false, m)).into_iter();
-            return Ok(Box::new(migrations.map(|m| (false, m)).into_iter()));
+            return Ok(Box::new(migrations.map(|m| (MigrationState::Pending, m)).into_iter()));
             } else {
 
               // TODO check what migrations did run, and 
@@ -121,7 +190,6 @@ impl crate::mitre::runner::Runner for MariaDB {
           },
           None => return Err(Error::ErrorRunningQuery)
         }
-        Ok(Box::new(std::iter::empty()))
     }
 }
 
@@ -193,26 +261,28 @@ mod tests {
         config: &RunnerConfiguration,
     ) -> Result<(), &'static str> {
         let stmt_create_db = conn
-            .prep(format!("DELETE DATABASE {:?}", config.database))
-            .expect("boom");
+            .prep(format!(
+                "DROP DATABASE {}",
+                config.database.as_ref().unwrap()
+            ))
+            .expect("could not prepare statement");
         match conn.exec::<bool, _, _>(stmt_create_db, ()) {
             Err(e) => panic!(e),
-            _ => {
-                println!("remmoved test db")
-            }
+            _ => {}
         }
         Ok(())
     }
 
     #[test]
-    fn fails_if_selected_db_does_not_exists() -> Result<(), String> {
+    fn it_requires_a_config_with_a_table_name() -> Result<(), String> {
         let mut config = helper_create_runner_config();
         config.database = None {};
-        let mut runner = MariaDB::new(&config).map_err(|e| "Could not create runner")?;
+        let mut runner =
+            MariaDB::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
         let migrations = std::iter::empty::<Migration>();
 
         match runner.diff(migrations) {
-            Ok(_) => Err(String::from("Expected an error to occur")),
+            Ok(_) => Err(String::from("expected an error about missing dbname")),
             Err(e) => match e {
                 Error::NoStateStoreDatabaseNameProvided => Ok(()),
                 _ => Err(format!("did not expect error {:?}", e)),
@@ -220,29 +290,78 @@ mod tests {
         }
     }
 
-    // Mitre does not *require* the configured database to exist, but we must
-    // be able to create it. This allows us to init the connection to the server
-    // specifying no database, and proceed with better errors than hitting a
-    // wall attempting server and database connection in the same call.
-    //
-    // Note at the diff stage, we don't want to create the *table* because
-    // that would mean running the first of the built-in migrations, and we
-    // don't want to _quite_ do that yet.
     #[test]
-    fn creates_db_if_it_does_not_exists() -> Result<(), &'static str> {
+    fn it_returns_all_migrations_pending_if_db_does_not_exist() -> Result<(), String> {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let config = helper_create_runner_config();
-        let mut runner = MariaDB::new(&config).map_err(|e| "Could not create runner")?;
+        let mut runner =
+            MariaDB::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
         let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
         match runner.diff(migrations) {
-            Ok(_) => {}
-            Err(e) => panic!("diff erred: {:?}", e),
+            Ok(mut pending_migrations) => {
+                match pending_migrations.all(|pm| pm.0 == MigrationState::Pending) {
+                    true => Ok(()),
+                    false => Err(String::from("expected all migrations to be pending")),
+                }
+            }
+            Err(e) => Err(format!("did not expect error {:?}", e)),
         }
+    }
 
-        // helper_delete_test_db(helper_db_conn(), &config)
-        Ok(())
+    #[test]
+    fn it_returns_all_migrations_pending_if_migrations_table_does_not_exist() -> Result<(), String>
+    {
+        let tmp_dir = TempDir::new("example").expect("gen tmpdir");
+        let mut res: Result<(), String> = Ok(());
+        match helper_create_test_db() {
+            Ok((conn, config)) => {
+                let mut runner = MariaDB::new(&config).map_err(|e| "Could not create runner")?;
+                let migrations =
+                    migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
+
+                res = match runner.diff(migrations) {
+                    Ok(mut pending_migrations) => {
+                        match pending_migrations.all(|pm| pm.0 == MigrationState::Pending) {
+                            true => Ok(()),
+                            false => Err(String::from("expected all migrations to be pending")),
+                        }
+                    }
+                    Err(e) => Err(format!("did not expect error {:?}", e)),
+                };
+                helper_delete_test_db(conn, &config)?;
+            }
+            Err(e) => return Err(format!("test set-up err {:?}", e)),
+        };
+        res
+    }
+
+    #[test]
+    fn migrating_up_just_the_built_in_migrations() -> Result<(), String> {
+        let tmp_dir = TempDir::new("example").expect("gen tmpdir");
+        let mut res: Result<(), String> = Ok(());
+        match helper_create_test_db() {
+            Ok((conn, config)) => {
+                let mut runner = MariaDB::new(&config).map_err(|e| "Could not create runner")?;
+                let migrations =
+                    migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
+
+                res = match runner.up(migrations) {
+                    Ok(mut migration_results) => {
+                        match migration_results.all(|pm| pm.0 == MigrationResult::Success) {
+                            true => Ok(()),
+                            false => Err(String::from("expected all migrations to be pending")),
+                        }
+                    }
+                    Err(e) => Err(format!("did not expect error {:?}", e)),
+                };
+
+                helper_delete_test_db(conn, &config)?;
+            }
+            Err(e) => return Err(format!("test set-up err {:?}", e)),
+        };
+        res
     }
 
     #[test]

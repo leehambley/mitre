@@ -1,5 +1,5 @@
 -- Table name must agree with the constant in the mariadb.rs 
-CREATE TABLE {{MARIADB_MIGRATION_STATE_TABLE_NAME}} (
+CREATE TABLE {{mariadb_migration_state_table_name}} (
 
   -- TIMESTMAP is YYYYMMDDHHMMSS just like migration filenames
   `version` TIMESTAMP NOT NULL PRIMARY KEY,
