@@ -41,6 +41,8 @@ pub enum Error {
     // (reason, the template)
     TemplateError(String, mustache::Template),
 
+    ErrorRunningMigration(String),
+
     AnyError, // placeholder remove me
 }
 
@@ -56,6 +58,38 @@ fn ensure_connectivity(db: &mut MariaDB) -> Result<(), Error> {
         true => Ok(()),
         false => Err(Error::PingFailed()),
     };
+}
+
+/// Helper methods for MariaDB (non-public) used in the context
+/// of fulfilling the implementation of the runner::Runner trait.
+impl MariaDB {
+    /// We do not record failures,
+    fn record_success(
+        &mut self,
+        m: &Migration,
+        ms: &MigrationStep,
+        d: std::time::Duration,
+    ) -> Result<(), Error> {
+        match self.conn.prep(format!("INSERT INTO {} (`version`, `up`, `down`, `change`, `applied_at_utc`, `apply_time_sec`, `built_in`, `environment`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);", MARIADB_MIGRATION_STATE_TABLE_NAME)) {
+          Ok(stmt) => match self.conn.exec_first::<String, _, _>(stmt, (
+              m.date_time,
+              m.steps.get(&Direction::Up).map(|ms| format!("{:?}", ms.content )),
+              m.steps.get(&Direction::Down).map(|ms| format!("{:?}", ms.content )),
+              m.steps.get(&Direction::Change).map(|ms| format!("{:?}", ms.content )),
+              chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+              d.as_secs(),
+              m.built_in,
+              "NOT IMPLEMENTED"
+            )) {
+            Ok(reply) => match reply {
+              Some(r) => {println!("db says: {}", r); Ok(())},
+              None => panic!("affected no rows"), 
+            },
+            Err(e) => panic!("error recording success {:?}", e),
+          },
+          Err(e) => panic!("coult not prepare statement {:?}", e)
+        }
+    }
 }
 
 impl crate::mitre::runner::Runner for MariaDB {
@@ -98,7 +132,12 @@ impl crate::mitre::runner::Runner for MariaDB {
                 "mariadb_migration_state_table_name",
                 MARIADB_MIGRATION_STATE_TABLE_NAME,
             )
+            .insert_str(
+                "mariadb_migration_state_databaes_name",
+                self.config.database.as_ref().unwrap(),
+            )
             .build();
+
         println!("Template CTX is {:?}", template_ctx);
 
         let parsed = match ms.content.render_data_to_string(&template_ctx) {
@@ -106,32 +145,56 @@ impl crate::mitre::runner::Runner for MariaDB {
             Err(e) => Err(Error::TemplateError(e.to_string(), ms.content.clone())),
         }?;
 
-        self.conn.exec_first::<bool, _, _>(
-          "SELECT EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?)",
-          () //trailing comma makes this a tuple
-        )?;
+        match self.conn.query::<String, _>(parsed) {
+            Ok(res) => {
+                println!("Result Is: {:#?}", res);
+                Ok(())
+            }
+            Err(e) => Err(Error::ErrorRunningMigration(e.to_string())),
+        }
     }
 
     fn up<'a>(
         &mut self,
         migrations: impl Iterator<Item = Self::Migration> + 'a,
     ) -> Result<Box<dyn Iterator<Item = Self::MigrationResultTuple> + 'a>, Error> {
-        let results = std::iter::empty::<(MigrationResult, Migration)>();
+        let mut results = vec![];
+
+        // let mut tx = self.conn.start_transaction(TxOpts::default())?;
+        // tx.query_drop("CREATE TEMPORARY TABLE tmp (TEXT a)")?;
+        // tx.exec_drop("INSERT INTO tmp (a) VALUES (?)", ("foo",))?;
+        // let val: Option<String> = tx.query_first("SELECT a from tmp")?;
+        // assert_eq!(val.unwrap(), "foo");
+        // // Note, that transaction will be rolled back implicitly on Drop, if not committed.
+        // tx.rollback();
+
         for migration in migrations {
-            println!("hello world");
+            // TODO: blow-up (mayne not here?) if we have up+change, only up+down makes sense.migration
             match migration.steps.get(&Direction::Change) {
                 // TODO: also Up.
                 Some(up_step) => {
+                    let start = std::time::Instant::now();
                     // have an up migration, let's run it ...
-                    self.apply(up_step)?;
+                    match self.apply(up_step) {
+                        Ok(res) => {
+                            match self.record_success(&migration, up_step, start.elapsed()) {
+                                Ok(_) => results.push((MigrationResult::Success, migration)),
+                                Err(e) => {
+                                    println!("There was an error recording success, but the migration ran, probably {:?}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            println!("There was an error {:?}", e);
+                            break;
+                        }
+                    };
                 }
                 None => {} // TODO: warn if a migration has no up-step?
             }
         }
-
-        // panic!();
-
-        Err(Error::AnyError)
+        Ok(Box::new(results.into_iter()))
     }
 
     fn diff<'a>(
@@ -179,10 +242,10 @@ impl crate::mitre::runner::Runner for MariaDB {
             return Ok(Box::new(migrations.map(|m| (MigrationState::Pending, m)).into_iter()));
             } else {
 
-              // TODO check what migrations did run, and 
-              // Thinking something like a SELECT * FROM <migration schema table> WHERE timestamp NOT IN <1,2,3,4,5,6> 
+              // TODO check what migrations did run, and
+              // Thinking something like a SELECT * FROM <migration schema table> WHERE timestamp NOT IN <1,2,3,4,5,6>
               // (the migrations we know about) .. theory being we send our list, they send back a list, maybe
-              // that list isn't enormous, or we check out cursor based 
+              // that list isn't enormous, or we check out cursor based
 
               panic!("this road isn't finished yet, turn around!");
 
@@ -357,7 +420,7 @@ mod tests {
                     Err(e) => Err(format!("did not expect error {:?}", e)),
                 };
 
-                helper_delete_test_db(conn, &config)?;
+                // helper_delete_test_db(conn, &config)?;
             }
             Err(e) => return Err(format!("test set-up err {:?}", e)),
         };

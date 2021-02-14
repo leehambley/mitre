@@ -51,12 +51,17 @@ fn main() {
         .subcommand(App::new("show-migrations").about("for migrations"))
         .get_matches();
 
-    let migrations_directory = m
-        .value_of("directory")
-        .unwrap_or(mitre::DEFAULT_MIGRATIONS_DIR);
-    let config_file = m
-        .value_of("config_file")
-        .unwrap_or(mitre::DEFAULT_CONFIG_FILE);
+    let migrations_dir = Path::new(
+        m.value_of("directory")
+            .unwrap_or(mitre::DEFAULT_MIGRATIONS_DIR),
+    );
+
+    let config_file = Path::new(
+        m.value_of("config_file")
+            .unwrap_or(mitre::DEFAULT_CONFIG_FILE),
+    );
+
+    let config = config::from_file(config_file).expect("cannot read config");
 
     // Validate config contains a mitre runner
 
@@ -84,26 +89,8 @@ fn main() {
         }
 
         Some("show-config") => {
-            if let Some(ref config_file) = m.value_of("config_file") {
-                let path = Path::new(config_file);
-                match config::from_file(path) {
-                    Ok(c) => {
-                        let mitre_config = c.get("mitre").expect("must provide mitre config");
-                        let mdb = MariaDB::new(mitre_config);
-                        match mdb {
-                            Ok(mut mmmdb) => {
-                                println!("bootstrap {:?}", mmmdb.bootstrap());
-                            }
-                            Err(e) => {
-                                println!("error connecting/reading config for mariadb {:?}", e);
-                                std::process::exit(123);
-                            }
-                        };
-                    }
-                    Err(e) => println!("error loading config: {:?}", e),
-                };
-                println!("using {:?}", path);
-            }
+            let mitre_config = config.get("mitre").expect("must provide mitre config");
+            let _mdb = MariaDB::new(mitre_config).expect("must be able to instance mariadb runner");
         }
 
         Some("ls") => {
@@ -118,7 +105,7 @@ fn main() {
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations list somehow
-            match migrations::migrations(Path::new(migrations_directory)) {
+            match migrations::migrations(migrations_dir) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migration_iter) => migration_iter.for_each(|m| {
                     m.clone().steps.into_iter().for_each(|(direction, s)| {
@@ -135,7 +122,17 @@ fn main() {
             table.printstd();
         }
 
-        Some("up") => {}
+        Some("up") => {
+            match migrations::migrations(Path::new(migrations_dir)) {
+                Err(e) => panic!("Error: {:?}", e),
+                Ok(migrations) => {
+                    let mitre_config = config.get("mitre").expect("must provide mitre config");
+                    let mut mdb = MariaDB::new(mitre_config)
+                        .expect("must be able to instance mariadb runner");
+                    mdb.up(migrations);
+                }
+            };
+        }
 
         // Some("ls") => {
         //   let migrations = match migrations::migrations(Path::new(
