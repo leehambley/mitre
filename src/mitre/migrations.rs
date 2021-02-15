@@ -54,6 +54,7 @@ impl From<mustache::Error> for MigrationsError {
 pub struct MigrationStep {
     pub path: PathBuf,
     pub content: mustache::Template,
+    pub source: String,
     pub runner: Runner, // runners are compiled-in
 }
 
@@ -185,6 +186,7 @@ pub fn part_from_migration_file(
                 Direction::Change,
                 MigrationStep {
                     content: t,
+                    source: String::from(c),
                     path: p,
                     runner: r,
                 },
@@ -223,6 +225,7 @@ fn parts_in_migration_dir(
                 d,
                 MigrationStep {
                     content: template,
+                    source: buffer,
                     path: p,
                     runner: r,
                 },

@@ -73,9 +73,9 @@ impl MariaDB {
         match self.conn.prep(format!("INSERT INTO {} (`version`, `up`, `down`, `change`, `applied_at_utc`, `apply_time_sec`, `built_in`, `environment`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);", MARIADB_MIGRATION_STATE_TABLE_NAME)) {
           Ok(stmt) => match self.conn.exec_first::<String, _, _>(stmt, (
               m.date_time,
-              m.steps.get(&Direction::Up).map(|ms| format!("{:?}", ms.content )),
-              m.steps.get(&Direction::Down).map(|ms| format!("{:?}", ms.content )),
-              m.steps.get(&Direction::Change).map(|ms| format!("{:?}", ms.content )),
+              m.steps.get(&Direction::Up).map(|ms| format!("{:?}", ms.source )),
+              m.steps.get(&Direction::Down).map(|ms| format!("{:?}", ms.source )),
+              m.steps.get(&Direction::Change).map(|ms| format!("{:?}", ms.source )),
               chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
               d.as_secs(),
               m.built_in,
