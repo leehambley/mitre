@@ -13,7 +13,8 @@ CREATE TABLE {{mariadb_migration_state_table_name}} (
 
   -- TIMESTMAP is YYYYMMDDHHMMSS just like migration filenames
   -- assumed to be UTC, and stored as such.
-  `version` TIMESTAMP NOT NULL PRIMARY KEY,
+  -- BIGINT(14) is just a rendering hint, not a real qualifier
+  `version` BIGINT(14) NOT NULL PRIMARY KEY,
 
   -- These columns store the up/down/change migrations, so we
   -- know what was applied and can handle turning the database

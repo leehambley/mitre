@@ -23,41 +23,27 @@ pub enum MigrationState {
 
 #[derive(PartialEq, Debug)]
 pub enum MigrationResult {
+    AlreadyApplied,
     Success,
-    Failure,
+    Failure(String),
+    NothingToDo,
 }
 
 #[derive(Debug)]
 pub enum Error {
     MariaDB(mysql::Error),
-    PingFailed(),
-
     ErrorRunningQuery,
-    MigrationStateSchemaDoesNotExist,
-    MigrationStateTableDoesNotExist,
-
     NoStateStoreDatabaseNameProvided,
-
     // (reason, the template)
     TemplateError(String, mustache::Template),
-
     ErrorRunningMigration(String),
-
-    AnyError, // placeholder remove me
+    MigrationHasFailed(String, Migration),
 }
 
 impl From<mysql::Error> for Error {
     fn from(err: mysql::Error) -> Error {
         Error::MariaDB(err)
     }
-}
-
-// non-public helper method
-fn ensure_connectivity(db: &mut MariaDB) -> Result<(), Error> {
-    return match db.conn.ping() {
-        true => Ok(()),
-        false => Err(Error::PingFailed()),
-    };
 }
 
 /// Helper methods for MariaDB (non-public) used in the context
@@ -71,7 +57,7 @@ impl MariaDB {
         d: std::time::Duration,
     ) -> Result<(), Error> {
         match self.conn.prep(format!("INSERT INTO {} (`version`, `up`, `down`, `change`, `applied_at_utc`, `apply_time_sec`, `built_in`, `environment`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);", MARIADB_MIGRATION_STATE_TABLE_NAME)) {
-          Ok(stmt) => match self.conn.exec_first::<String, _, _>(stmt, (
+          Ok(stmt) => match self.conn.exec_iter(stmt, (
               m.date_time,
               m.steps.get(&Direction::Up).map(|ms| format!("{:?}", ms.source )),
               m.steps.get(&Direction::Down).map(|ms| format!("{:?}", ms.source )),
@@ -81,11 +67,11 @@ impl MariaDB {
               m.built_in,
               "NOT IMPLEMENTED"
             )) {
-            Ok(reply) => match reply {
-              Some(r) => {println!("db says: {}", r); Ok(())},
-              None => panic!("affected no rows"), 
+            Ok(query_results) => match query_results.affected_rows() { // TODO: this also contains warnings, could be cool
+              1 => Ok(()),
+              _ => panic!("error recording success, expected to affect exactly one row")
             },
-            Err(e) => panic!("error recording success {:?}", e),
+            Err(e) => panic!("error running query {:?}", e),
           },
           Err(e) => panic!("coult not prepare statement {:?}", e)
         }
@@ -117,16 +103,8 @@ impl crate::mitre::runner::Runner for MariaDB {
         });
     }
 
-    // https://docs.rs/mysql/20.1.0/mysql/struct.Conn.html
-    //
-    // TODO: bootstrap can probably go away, diff() handles missing stuff
-    // gracefully, and "up" will err right away I guess.
-    fn bootstrap(&mut self) -> Result<(), Error> {
-        ensure_connectivity(self)
-    }
-
     // Applies a single migration (each runner needs something like this)
-    fn apply<'a>(&mut self, ms: &Self::MigrationStep) -> Result<(), Error> {
+    fn apply<'a>(&mut self, ms: &'a Self::MigrationStep) -> Result<(), Error> {
         let template_ctx = MapBuilder::new()
             .insert_str(
                 "mariadb_migration_state_table_name",
@@ -158,43 +136,40 @@ impl crate::mitre::runner::Runner for MariaDB {
         &mut self,
         migrations: impl Iterator<Item = Self::Migration> + 'a,
     ) -> Result<Box<dyn Iterator<Item = Self::MigrationResultTuple> + 'a>, Error> {
-        let mut results = vec![];
-
-        // let mut tx = self.conn.start_transaction(TxOpts::default())?;
-        // tx.query_drop("CREATE TEMPORARY TABLE tmp (TEXT a)")?;
-        // tx.exec_drop("INSERT INTO tmp (a) VALUES (?)", ("foo",))?;
-        // let val: Option<String> = tx.query_first("SELECT a from tmp")?;
-        // assert_eq!(val.unwrap(), "foo");
-        // // Note, that transaction will be rolled back implicitly on Drop, if not committed.
-        // tx.rollback();
-
-        for migration in migrations {
-            // TODO: blow-up (mayne not here?) if we have up+change, only up+down makes sense.migration
-            match migration.steps.get(&Direction::Change) {
-                // TODO: also Up.
-                Some(up_step) => {
-                    let start = std::time::Instant::now();
-                    // have an up migration, let's run it ...
-                    match self.apply(up_step) {
-                        Ok(res) => {
-                            match self.record_success(&migration, up_step, start.elapsed()) {
-                                Ok(_) => results.push((MigrationResult::Success, migration)),
-                                Err(e) => {
-                                    println!("There was an error recording success, but the migration ran, probably {:?}", e);
-                                    break;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            println!("There was an error {:?}", e);
-                            break;
-                        }
-                    };
-                }
-                None => {} // TODO: warn if a migration has no up-step?
-            }
-        }
-        Ok(Box::new(results.into_iter()))
+        // Ok(Box::new(migrations.map(|m| (MigrationResult::NothingToDo, m) ).into_iter()))
+        Ok(Box::new(
+            self.diff(migrations)?
+                .map(|(migration_state, migration)| {
+                    // TODO: blow-up (mayne not here?) if we have up+change, only up+down makes sense.migration
+                    match migration.steps.get(&Direction::Change) {
+                        // TODO: also Up.
+                        Some(change_step) => match self.apply(change_step) {
+                            Ok(_) => (MigrationResult::Success, migration),
+                            Err(_) => (MigrationResult::NothingToDo, migration),
+                        },
+                        None => (MigrationResult::NothingToDo, migration), //     let start = std::time::Instant::now();
+                                                                           //             //         // have an up migration, let's run it ...
+                                                                           //         match self.apply(change_step) {
+                                                                           //             Ok(res) => match self.record_success(
+                                                                           //                 &migration,
+                                                                           //                 change_step,
+                                                                           //                 start.elapsed(),
+                                                                           //             //             ) {
+                                                                           //             //                 Ok(_) => (MigrationResult::Success, migration),
+                                                                           //             //                 Err(e) => {
+                                                                           //             //                     (MigrationResult::Failure(format!("{:?}", e)), migration)
+                                                                           //             //                 }
+                                                                           //             //             },
+                                                                           //             //             Err(e) => (MigrationResult::Failure(format!("{:?}", e)), migration),
+                                                                           //             //         }
+                                                                           //             //     }
+                                                                           //             //     None => (MigrationResult::NothingToDo, migration),
+                                                                           //             // }
+                                                                           //             // (MigrationResult::NothingToDo, migration)
+                    }
+                })
+                .into_iter(),
+        ))
     }
 
     fn diff<'a>(
@@ -247,8 +222,26 @@ impl crate::mitre::runner::Runner for MariaDB {
               // (the migrations we know about) .. theory being we send our list, they send back a list, maybe
               // that list isn't enormous, or we check out cursor based
 
-              panic!("this road isn't finished yet, turn around!");
 
+              // while let Some(result_set) = result.next_set() {
+              //   let result_set = result_set?; //TODO: check result_set validity here and skip it if it's an Err
+              //   sets += 1;
+              //   println!("Result set columns: {:?}", result_set.columns());
+
+
+              // Let's select payments from database. Type inference should do the trick here.
+              match self.conn.query_map::<_,_,_,String>(format!("SELECT version FROM {} ORDER BY version ASC;", MARIADB_MIGRATION_STATE_TABLE_NAME), |version| version) {
+                Ok(stored_migration_versions) => {
+                   Ok(Box::new(migrations.map(move |m| {
+                    let migration_version = format!("{}", m.date_time.format(crate::mitre::migrations::FORMAT_STR));
+                    match stored_migration_versions.clone().into_iter().find(|stored_m| &migration_version == stored_m ) {
+                        Some(_) =>(MigrationState::Applied, m),
+                        None => (MigrationState::Pending, m)
+                    }
+                  }).into_iter()))
+                },
+                Err(e) => panic!("error with querying for applied versions {:?}", e)
+              }
             }
           },
           None => return Err(Error::ErrorRunningQuery)
@@ -404,26 +397,64 @@ mod tests {
     fn migrating_up_just_the_built_in_migrations() -> Result<(), String> {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let mut res: Result<(), String> = Ok(());
-        match helper_create_test_db() {
-            Ok((conn, config)) => {
-                let mut runner = MariaDB::new(&config).map_err(|e| "Could not create runner")?;
-                let migrations =
-                    migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
+        let config = helper_create_runner_config();
 
-                res = match runner.up(migrations) {
-                    Ok(mut migration_results) => {
-                        match migration_results.all(|pm| pm.0 == MigrationResult::Success) {
-                            true => Ok(()),
-                            false => Err(String::from("expected all migrations to be pending")),
-                        }
-                    }
-                    Err(e) => Err(format!("did not expect error {:?}", e)),
-                };
+        let mut runner = MariaDB::new(&config).map_err(|e| "Could not create runner")?;
+        let migs = migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
-                // helper_delete_test_db(conn, &config)?;
+        let migrations_again =
+            migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
+
+        let migrations_thrice =
+            migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
+
+        // Arrange: Run up (only built-in, because tmp dir)
+        res = match runner.up(migs) {
+            Ok(mut migration_results) => {
+                let v: Vec<(MigrationResult, Migration)> = migration_results.collect();
+                assert_eq!(1, v.len());
+
+                let v_success: Vec<(MigrationResult, Migration)> = v
+                    .into_iter()
+                    .filter(|mr| mr.0 == MigrationResult::Success)
+                    .collect();
+                assert_eq!(1, v_success.len());
+
+                Ok(())
             }
-            Err(e) => return Err(format!("test set-up err {:?}", e)),
+            Err(e) => Err(format!("did not expect error {:?}", e)),
         };
+
+        // Assert that diff thinks all is clear
+        match runner.diff(migrations_again) {
+            Err(e) => return Err(format!("didn't expect err from diff {:?}", e)),
+            Ok(diff_result) => {
+                let diff_pending: Vec<(MigrationState, Migration)> = diff_result
+                    .into_iter()
+                    .filter(|mr| mr.0 == MigrationState::Pending)
+                    .collect();
+                assert_eq!(0, diff_pending.len());
+            }
+        }
+
+        // Assert up is a noop
+        res = match runner.up(migrations_thrice) {
+            Ok(mut migration_results) => {
+                let v: Vec<(MigrationResult, Migration)> = migration_results.collect();
+                assert_eq!(1, v.len());
+
+                let v_success: Vec<(MigrationResult, Migration)> = v
+                    .into_iter()
+                    .filter(|mr| mr.0 == MigrationResult::AlreadyApplied)
+                    .collect();
+                assert_eq!(1, v_success.len());
+
+                Ok(())
+            }
+            Err(e) => Err(format!("did not expect error running up again {:?}", e)),
+        };
+
+        helper_delete_test_db(helper_db_conn(), &config)?;
         res
     }
 

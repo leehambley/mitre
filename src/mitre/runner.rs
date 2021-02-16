@@ -13,11 +13,7 @@ pub trait Runner {
     where
         Self: Sized;
 
-    fn bootstrap(&mut self) -> Result<(), Self::Error>
-    where
-        Self: Sized;
-
-    fn apply(&mut self, _: &Self::MigrationStep) -> Result<(), Self::Error>;
+    fn apply<'a>(&'a mut self, _: &Self::MigrationStep) -> Result<(), Self::Error>;
 
     fn up<'a>(
         &mut self,
