@@ -1,7 +1,7 @@
 pub mod mariadb;
 use crate::mitre::config::RunnerConfiguration;
 
-pub trait Runner {
+pub trait Runner<'a> {
     type Error;
     type Migration;
     type MigrationStep;
@@ -13,15 +13,15 @@ pub trait Runner {
     where
         Self: Sized;
 
-    fn apply<'a>(&'a mut self, _: &Self::MigrationStep) -> Result<(), Self::Error>;
+    fn apply(&'a mut self, _: &Self::MigrationStep) -> Result<(), Self::Error>;
 
-    fn up<'a>(
-        &mut self,
+    fn up(
+        &'a mut self,
         _: impl Iterator<Item = Self::Migration> + 'a,
     ) -> Result<Box<dyn Iterator<Item = Self::MigrationResultTuple> + 'a>, Self::Error>;
 
-    fn diff<'a>(
-        &mut self,
+    fn diff(
+        &'a mut self,
         _: impl Iterator<Item = Self::Migration> + 'a,
     ) -> Result<Box<dyn Iterator<Item = Self::MigrationStateTuple> + 'a>, Self::Error>;
 }

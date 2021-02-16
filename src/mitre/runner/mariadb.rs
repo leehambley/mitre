@@ -78,7 +78,7 @@ impl MariaDB {
     }
 }
 
-impl crate::mitre::runner::Runner for MariaDB {
+impl<'a> crate::mitre::runner::Runner<'a> for MariaDB {
     type Error = Error;
     type Migration = Migration;
     type MigrationStep = MigrationStep;
@@ -104,7 +104,7 @@ impl crate::mitre::runner::Runner for MariaDB {
     }
 
     // Applies a single migration (each runner needs something like this)
-    fn apply<'a>(&mut self, ms: &'a Self::MigrationStep) -> Result<(), Error> {
+    fn apply(&'a mut self, ms: &Self::MigrationStep) -> Result<(), Error> {
         let template_ctx = MapBuilder::new()
             .insert_str(
                 "mariadb_migration_state_table_name",
@@ -132,8 +132,8 @@ impl crate::mitre::runner::Runner for MariaDB {
         }
     }
 
-    fn up<'a>(
-        &mut self,
+    fn up(
+        &'a mut self,
         migrations: impl Iterator<Item = Self::Migration> + 'a,
     ) -> Result<Box<dyn Iterator<Item = Self::MigrationResultTuple> + 'a>, Error> {
         // Ok(Box::new(migrations.map(|m| (MigrationResult::NothingToDo, m) ).into_iter()))
@@ -172,8 +172,8 @@ impl crate::mitre::runner::Runner for MariaDB {
         ))
     }
 
-    fn diff<'a>(
-        &mut self,
+    fn diff(
+        &'a mut self,
         migrations: impl Iterator<Item = Self::Migration> + 'a,
     ) -> Result<Box<dyn Iterator<Item = Self::MigrationStateTuple> + 'a>, Error> {
         let database = match &self.config.database {
