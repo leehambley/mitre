@@ -139,7 +139,7 @@ impl<'a> crate::mitre::runner::Runner<'a> for MariaDB {
         // Ok(Box::new(migrations.map(|m| (MigrationResult::NothingToDo, m) ).into_iter()))
         Ok(Box::new(
             self.diff(migrations)?
-                .map(|(migration_state, migration)| {
+                .map(move |(migration_state, migration)| {
                     // TODO: blow-up (mayne not here?) if we have up+change, only up+down makes sense.migration
                     match migration.steps.get(&Direction::Change) {
                         // TODO: also Up.
@@ -337,13 +337,14 @@ mod tests {
             MariaDB::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
         let migrations = std::iter::empty::<Migration>();
 
-        match runner.diff(migrations) {
+        let x = match runner.diff(migrations) {
             Ok(_) => Err(String::from("expected an error about missing dbname")),
             Err(e) => match e {
                 Error::NoStateStoreDatabaseNameProvided => Ok(()),
                 _ => Err(format!("did not expect error {:?}", e)),
             },
-        }
+        };
+        x
     }
 
     #[test]
@@ -355,7 +356,7 @@ mod tests {
         let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
-        match runner.diff(migrations) {
+        let x = match runner.diff(migrations) {
             Ok(mut pending_migrations) => {
                 match pending_migrations.all(|pm| pm.0 == MigrationState::Pending) {
                     true => Ok(()),
@@ -363,7 +364,8 @@ mod tests {
                 }
             }
             Err(e) => Err(format!("did not expect error {:?}", e)),
-        }
+        };
+        x
     }
 
     #[test]
