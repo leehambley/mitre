@@ -107,17 +107,19 @@ fn main() {
             // TODO: sort the migrations list somehow
             match migrations::migrations(migrations_dir) {
                 Err(e) => panic!("Error: {:?}", e),
-                Ok(migration_iter) => migration_iter.for_each(|m| {
-                    m.clone().steps.into_iter().for_each(|(direction, s)| {
-                        table.add_row(Row::new(vec![
-                            Cell::new(format!("{:?}", m.built_in).as_str()).style_spec("bFy"),
-                            Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
-                            Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
-                            Cell::new(s.runner.name).style_spec("fB"),
-                            Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
-                        ]));
-                    });
-                }),
+                Ok(migrations) => {
+                    for m in migrations {
+                        m.clone().steps.into_iter().for_each(|(direction, s)| {
+                            table.add_row(Row::new(vec![
+                                Cell::new(format!("{:?}", m.built_in).as_str()).style_spec("bFy"),
+                                Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
+                                Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
+                                Cell::new(s.runner.name).style_spec("fB"),
+                                Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
+                            ]));
+                        });
+                    }
+                }
             };
             table.printstd();
         }

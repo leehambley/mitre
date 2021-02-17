@@ -78,7 +78,7 @@ impl MariaDB {
     }
 }
 
-impl<'a> crate::mitre::runner::Runner<'a> for MariaDB {
+impl crate::mitre::runner::Runner for MariaDB {
     type Error = Error;
     type Migration = Migration;
     type MigrationStep = MigrationStep;
@@ -104,7 +104,7 @@ impl<'a> crate::mitre::runner::Runner<'a> for MariaDB {
     }
 
     // Applies a single migration (each runner needs something like this)
-    fn apply(&'a mut self, ms: &Self::MigrationStep) -> Result<(), Error> {
+    fn apply(&mut self, ms: &Self::MigrationStep) -> Result<(), Error> {
         let template_ctx = MapBuilder::new()
             .insert_str(
                 "mariadb_migration_state_table_name",
@@ -133,49 +133,49 @@ impl<'a> crate::mitre::runner::Runner<'a> for MariaDB {
     }
 
     fn up(
-        &'a mut self,
-        migrations: impl Iterator<Item = Self::Migration> + 'a,
-    ) -> Result<Box<dyn Iterator<Item = Self::MigrationResultTuple> + 'a>, Error> {
-        // Ok(Box::new(migrations.map(|m| (MigrationResult::NothingToDo, m) ).into_iter()))
-        Ok(Box::new(
-            self.diff(migrations)?
-                .map(move |(migration_state, migration)| {
-                    // TODO: blow-up (mayne not here?) if we have up+change, only up+down makes sense.migration
-                    match migration.steps.get(&Direction::Change) {
-                        // TODO: also Up.
-                        Some(change_step) => match self.apply(change_step) {
-                            Ok(_) => (MigrationResult::Success, migration),
-                            Err(_) => (MigrationResult::NothingToDo, migration),
-                        },
-                        None => (MigrationResult::NothingToDo, migration), //     let start = std::time::Instant::now();
-                                                                           //             //         // have an up migration, let's run it ...
-                                                                           //         match self.apply(change_step) {
-                                                                           //             Ok(res) => match self.record_success(
-                                                                           //                 &migration,
-                                                                           //                 change_step,
-                                                                           //                 start.elapsed(),
-                                                                           //             //             ) {
-                                                                           //             //                 Ok(_) => (MigrationResult::Success, migration),
-                                                                           //             //                 Err(e) => {
-                                                                           //             //                     (MigrationResult::Failure(format!("{:?}", e)), migration)
-                                                                           //             //                 }
-                                                                           //             //             },
-                                                                           //             //             Err(e) => (MigrationResult::Failure(format!("{:?}", e)), migration),
-                                                                           //             //         }
-                                                                           //             //     }
-                                                                           //             //     None => (MigrationResult::NothingToDo, migration),
-                                                                           //             // }
-                                                                           //             // (MigrationResult::NothingToDo, migration)
-                    }
-                })
-                .into_iter(),
-        ))
+        &mut self,
+        migrations: Vec<Self::Migration>,
+    ) -> Result<Vec<Self::MigrationResultTuple>, Error> {
+        Ok(self
+            .diff(migrations)?
+            .into_iter()
+            .map(|(migration_state, migration)| {
+                // TODO: blow-up (mayne not here?) if we have up+change, only up+down makes sense.migration
+                match migration.steps.get(&Direction::Change) {
+                    // TODO: also Up.
+                    Some(change_step) => match self.apply(change_step) {
+                        Ok(_) => (MigrationResult::Success, migration),
+                        Err(_) => (MigrationResult::NothingToDo, migration),
+                    },
+                    None => (MigrationResult::NothingToDo, migration), //     let start = std::time::Instant::now();
+                                                                       //             //         // have an up migration, let's run it ...
+                                                                       //         match self.apply(change_step) {
+                                                                       //             Ok(res) => match self.record_success(
+                                                                       //                 &migration,
+                                                                       //                 change_step,
+                                                                       //                 start.elapsed(),
+                                                                       //             //             ) {
+                                                                       //             //                 Ok(_) => (MigrationResult::Success, migration),
+                                                                       //             //                 Err(e) => {
+                                                                       //             //                     (MigrationResult::Failure(format!("{:?}", e)), migration)
+                                                                       //             //                 }
+                                                                       //             //             },
+                                                                       //             //             Err(e) => (MigrationResult::Failure(format!("{:?}", e)), migration),
+                                                                       //             //         }
+                                                                       //             //     }
+                                                                       //             //     None => (MigrationResult::NothingToDo, migration),
+                                                                       //             // }
+                                                                       //             // (MigrationResult::NothingToDo, migration)
+                }
+            })
+            .collect())
+        // Ok(Box::new(result.collect::<Vec<(MigrationResult, Migration)>>().into_iter()))
     }
 
     fn diff(
-        &'a mut self,
-        migrations: impl Iterator<Item = Self::Migration> + 'a,
-    ) -> Result<Box<dyn Iterator<Item = Self::MigrationStateTuple> + 'a>, Error> {
+        &mut self,
+        migrations: Vec<Self::Migration>,
+    ) -> Result<Vec<Self::MigrationStateTuple>, Error> {
         let database = match &self.config.database {
             Some(database) => Ok(database),
             None => Err(Error::NoStateStoreDatabaseNameProvided),
@@ -193,9 +193,10 @@ impl<'a> crate::mitre::runner::Runner<'a> for MariaDB {
                     // println!("about to create {}", database);
                     // let stmt_create_db = self.conn.prep(format!("CREATE DATABASE {}", database))?;
                     // self.conn.exec::<bool, _, _>(stmt_create_db, ())?;
-                    return Ok(Box::new(
-                        migrations.map(|m| (MigrationState::Pending, m)).into_iter(),
-                    ));
+                    return Ok(migrations
+                        .into_iter()
+                        .map(|m| (MigrationState::Pending, m))
+                        .collect());
                 }
             }
             None => {
@@ -214,7 +215,7 @@ impl<'a> crate::mitre::runner::Runner<'a> for MariaDB {
             if !table_exists {
             // let iter = migrations.map(|m| (false, m)).collect::<Vec<Self::MigrationStateTuple>>().into_iter();
             // let iter = migrations.map(|m| (false, m)).into_iter();
-            return Ok(Box::new(migrations.map(|m| (MigrationState::Pending, m)).into_iter()));
+            return Ok(migrations.into_iter().map(|m| (MigrationState::Pending, m)).collect());
             } else {
 
               // TODO check what migrations did run, and
@@ -232,13 +233,13 @@ impl<'a> crate::mitre::runner::Runner<'a> for MariaDB {
               // Let's select payments from database. Type inference should do the trick here.
               match self.conn.query_map::<_,_,_,String>(format!("SELECT version FROM {} ORDER BY version ASC;", MARIADB_MIGRATION_STATE_TABLE_NAME), |version| version) {
                 Ok(stored_migration_versions) => {
-                   Ok(Box::new(migrations.map(move |m| {
+                   Ok(migrations.into_iter().map(move |m| {
                     let migration_version = format!("{}", m.date_time.format(crate::mitre::migrations::FORMAT_STR));
                     match stored_migration_versions.clone().into_iter().find(|stored_m| &migration_version == stored_m ) {
                         Some(_) =>(MigrationState::Applied, m),
                         None => (MigrationState::Pending, m)
                     }
-                  }).into_iter()))
+                  }).collect())
                 },
                 Err(e) => panic!("error with querying for applied versions {:?}", e)
               }
@@ -335,7 +336,7 @@ mod tests {
         config.database = None {};
         let mut runner =
             MariaDB::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
-        let migrations = std::iter::empty::<Migration>();
+        let migrations = vec![];
 
         let x = match runner.diff(migrations) {
             Ok(_) => Err(String::from("expected an error about missing dbname")),
@@ -358,7 +359,10 @@ mod tests {
 
         let x = match runner.diff(migrations) {
             Ok(mut pending_migrations) => {
-                match pending_migrations.all(|pm| pm.0 == MigrationState::Pending) {
+                match pending_migrations
+                    .iter()
+                    .all(|pm| pm.0 == MigrationState::Pending)
+                {
                     true => Ok(()),
                     false => Err(String::from("expected all migrations to be pending")),
                 }
@@ -381,7 +385,10 @@ mod tests {
 
                 res = match runner.diff(migrations) {
                     Ok(mut pending_migrations) => {
-                        match pending_migrations.all(|pm| pm.0 == MigrationState::Pending) {
+                        match pending_migrations
+                            .iter()
+                            .all(|pm| pm.0 == MigrationState::Pending)
+                        {
                             true => Ok(()),
                             false => Err(String::from("expected all migrations to be pending")),
                         }
@@ -413,7 +420,7 @@ mod tests {
         // Arrange: Run up (only built-in, because tmp dir)
         res = match runner.up(migs) {
             Ok(mut migration_results) => {
-                let v: Vec<(MigrationResult, Migration)> = migration_results.collect();
+                let v = migration_results;
                 assert_eq!(1, v.len());
 
                 let v_success: Vec<(MigrationResult, Migration)> = v
@@ -442,7 +449,7 @@ mod tests {
         // Assert up is a noop
         res = match runner.up(migrations_thrice) {
             Ok(mut migration_results) => {
-                let v: Vec<(MigrationResult, Migration)> = migration_results.collect();
+                let v = migration_results;
                 assert_eq!(1, v.len());
 
                 let v_success: Vec<(MigrationResult, Migration)> = v

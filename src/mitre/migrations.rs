@@ -93,70 +93,73 @@ impl Migration {
 /// and composability than any specific optimization reason.
 ///
 /// Ideally provide an absolute path.
-pub fn migrations(p: &Path) -> Result<impl Iterator<Item = Migration>, MigrationsError> {
-    Ok(built_in_migrations().chain(migrations_in(p)?))
+pub fn migrations(p: &Path) -> Result<Vec<Migration>, MigrationsError> {
+    let mut m = built_in_migrations();
+    &m.extend(migrations_in(p)?);
+    Ok(m)
 }
 
 // https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
 // This should take an *absolute* path
-fn migrations_in(p: &Path) -> Result<Box<impl Iterator<Item = Migration>>, MigrationsError> {
-    Ok(Box::new(
-        WalkDir::new(p)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter_map(|entry| {
-                match extract_timestamp(entry.path().to_path_buf()) {
-                    Ok(timestamp) => {
-                        let path_buf = entry.path().to_path_buf();
-                        if entry.file_type().is_dir() {
-                            match parts_in_migration_dir(path_buf.clone()).ok()? {
-                                Some(parts) => Some(Migration {
-                                    date_time: timestamp,
-                                    steps: parts,
-                                    built_in: false,
-                                }),
-                                _ => None {},
-                            }
-                        } else {
-                            let mut f = File::open(path_buf.clone()).ok()?;
-                            let mut buffer = String::new();
-                            f.read_to_string(&mut buffer).ok()?;
-                            match part_from_migration_file(path_buf.clone(), &buffer).ok()? {
-                                Some(parts) => Some(Migration {
-                                    date_time: timestamp,
-                                    steps: parts,
-                                    built_in: false,
-                                }),
-                                _ => None {},
-                            }
+fn migrations_in(p: &Path) -> Result<Vec<Migration>, MigrationsError> {
+    Ok(WalkDir::new(p)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            match extract_timestamp(entry.path().to_path_buf()) {
+                Ok(timestamp) => {
+                    let path_buf = entry.path().to_path_buf();
+                    if entry.file_type().is_dir() {
+                        match parts_in_migration_dir(path_buf.clone()).ok()? {
+                            Some(parts) => Some(Migration {
+                                date_time: timestamp,
+                                steps: parts,
+                                built_in: false,
+                            }),
+                            _ => None {},
+                        }
+                    } else {
+                        let mut f = File::open(path_buf.clone()).ok()?;
+                        let mut buffer = String::new();
+                        f.read_to_string(&mut buffer).ok()?;
+                        match part_from_migration_file(path_buf.clone(), &buffer).ok()? {
+                            Some(parts) => Some(Migration {
+                                date_time: timestamp,
+                                steps: parts,
+                                built_in: false,
+                            }),
+                            _ => None {},
                         }
                     }
-                    Err(_) => None {}, // err contains a string reason why from timestamp parser, ignore it
                 }
-            }),
-    ))
+                Err(_) => None {}, // err contains a string reason why from timestamp parser, ignore it
+            }
+        })
+        .collect())
 }
 
 // WARNING: Built-in migrations do not support the up/down director
 //          style of migration yet. Please stick to "change" only files
-fn built_in_migrations() -> impl Iterator<Item = Migration> {
-    BuiltInMigrations::iter().filter_map(|file| {
-        let p = PathBuf::from(file.as_ref());
-        let bytes = BuiltInMigrations::get(file.as_ref()).unwrap();
-        let contents = std::str::from_utf8(&bytes).ok().unwrap();
+fn built_in_migrations() -> Vec<Migration> {
+    BuiltInMigrations::iter()
+        .filter_map(|file| {
+            let p = PathBuf::from(file.as_ref());
+            let bytes = BuiltInMigrations::get(file.as_ref()).unwrap();
+            let contents = std::str::from_utf8(&bytes).ok().unwrap();
 
-        match extract_timestamp(p.clone()) {
-            Ok(timestamp) => match part_from_migration_file(p, contents).ok()? {
-                Some(parts) => Some(Migration {
-                    date_time: timestamp,
-                    steps: parts,
-                    built_in: true,
-                }),
-                _ => None {},
-            },
-            Err(_) => panic!("built-in migration has bogus filename"),
-        }
-    })
+            match extract_timestamp(p.clone()) {
+                Ok(timestamp) => match part_from_migration_file(p, contents).ok()? {
+                    Some(parts) => Some(Migration {
+                        date_time: timestamp,
+                        steps: parts,
+                        built_in: true,
+                    }),
+                    _ => None {},
+                },
+                Err(_) => panic!("built-in migration has bogus filename"),
+            }
+        })
+        .collect()
 }
 
 fn runner_reserved_word_from_str(s: &&str) -> Option<Runner> {
@@ -373,8 +376,7 @@ mod tests {
         match migrations(path.clone()) {
             Err(e) => Err(format!("Error: {:?}", e)),
             Ok(migrations) => {
-                let m: Vec<Migration> = migrations.collect();
-                assert_eq!(m.len(), 4);
+                assert_eq!(migrations.len(), 4);
                 Ok(())
             }
         }
@@ -382,10 +384,8 @@ mod tests {
 
     #[test]
     fn test_build_in_migrations() -> Result<(), String> {
-        let migrations: Vec<Migration> = built_in_migrations().collect();
-
+        let migrations = built_in_migrations();
         assert_eq!(migrations.len(), 1);
-
         Ok(())
     }
 }
