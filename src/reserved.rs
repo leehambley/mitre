@@ -41,14 +41,14 @@ pub enum ReservedWord {
 /// Static constantts for runner names. Be mindful to perform
 /// case insensitive comparisons, the configuration file for example
 /// is not required to be capitalized any particular way.
-pub static BASH_3: &'static str = "Bash3";
-pub static BASH_4: &'static str = "Bash4";
-pub static CURL: &'static str = "cURL";
-pub static KAFKA: &'static str = "Kafka";
-pub static MARIA_DB: &'static str = "MariaDB";
-pub static PYTHON_3: &'static str = "Python3";
-pub static RAILS: &'static str = "Rails";
-pub static REDIS: &'static str = "Redis";
+pub static BASH_3: &str = "Bash3";
+pub static BASH_4: &str = "Bash4";
+pub static CURL: &str = "cURL";
+pub static KAFKA: &str = "Kafka";
+pub static MARIA_DB: &str = "MariaDB";
+pub static PYTHON_3: &str = "Python3";
+pub static RAILS: &str = "Rails";
+pub static REDIS: &str = "Redis";
 
 pub fn words() -> Vec<ReservedWord> {
     vec![

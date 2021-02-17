@@ -1,7 +1,6 @@
 extern crate mustache;
 
 use super::reserved::{runners, Runner};
-use regex;
 use rust_embed::RustEmbed;
 use std::collections::HashMap;
 use std::fs;
@@ -33,13 +32,13 @@ pub const FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
 #[derive(Debug)]
 pub enum MigrationsError {
-    IO(io::Error),
+    Io(io::Error),
     Mustache(mustache::Error),
 }
 
 impl From<io::Error> for MigrationsError {
     fn from(err: io::Error) -> MigrationsError {
-        MigrationsError::IO(err)
+        MigrationsError::Io(err)
     }
 }
 
@@ -81,14 +80,14 @@ pub struct Migration {
 /// Ideally provide an absolute path.
 pub fn migrations(p: &Path) -> Result<Vec<Migration>, MigrationsError> {
     let mut m = built_in_migrations();
-    &m.extend(migrations_in(p)?);
+    m.extend(migrations_in(p));
     Ok(m)
 }
 
 // https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
 // This should take an *absolute* path
-fn migrations_in(p: &Path) -> Result<Vec<Migration>, MigrationsError> {
-    Ok(WalkDir::new(p)
+fn migrations_in(p: &Path) -> Vec<Migration> {
+    WalkDir::new(p)
         .into_iter()
         .filter_map(Result::ok)
         .filter_map(|entry| {
@@ -96,7 +95,7 @@ fn migrations_in(p: &Path) -> Result<Vec<Migration>, MigrationsError> {
                 Ok(timestamp) => {
                     let path_buf = entry.path().to_path_buf();
                     if entry.file_type().is_dir() {
-                        match parts_in_migration_dir(path_buf.clone()).ok()? {
+                        match parts_in_migration_dir(path_buf).ok()? {
                             Some(parts) => Some(Migration {
                                 date_time: timestamp,
                                 steps: parts,
@@ -105,10 +104,10 @@ fn migrations_in(p: &Path) -> Result<Vec<Migration>, MigrationsError> {
                             _ => None {},
                         }
                     } else {
-                        let mut f = File::open(path_buf.clone()).ok()?;
+                        let mut f = File::open(&path_buf).ok()?;
                         let mut buffer = String::new();
                         f.read_to_string(&mut buffer).ok()?;
-                        match part_from_migration_file(path_buf.clone(), &buffer).ok()? {
+                        match part_from_migration_file(path_buf, &buffer).ok()? {
                             Some(parts) => Some(Migration {
                                 date_time: timestamp,
                                 steps: parts,
@@ -121,7 +120,7 @@ fn migrations_in(p: &Path) -> Result<Vec<Migration>, MigrationsError> {
                 Err(_) => None {}, // err contains a string reason why from timestamp parser, ignore it
             }
         })
-        .collect())
+        .collect()
 }
 
 // WARNING: Built-in migrations do not support the up/down director

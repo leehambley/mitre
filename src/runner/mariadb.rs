@@ -5,10 +5,10 @@ use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};
 use std::convert::From;
 
-const MARIADB_MIGRATION_STATE_TABLE_NAME: &'static str = "mitre_migration_state";
+const MARIADB_MIGRATION_STATE_TABLE_NAME: &str = "mitre_migration_state";
 
 #[derive(Debug)]
-pub struct MariaDB {
+pub struct MariaDb {
     conn: Conn,
     config: RunnerConfiguration,
 }
@@ -29,7 +29,7 @@ pub enum MigrationResult {
 
 #[derive(Debug)]
 pub enum Error {
-    MariaDB(mysql::Error),
+    MariaDb(mysql::Error),
     ErrorRunningQuery,
     NoStateStoreDatabaseNameProvided,
     // (reason, the template)
@@ -40,13 +40,13 @@ pub enum Error {
 
 impl From<mysql::Error> for Error {
     fn from(err: mysql::Error) -> Error {
-        Error::MariaDB(err)
+        Error::MariaDb(err)
     }
 }
 
-/// Helper methods for MariaDB (non-public) used in the context
+/// Helper methods for MariaDb (non-public) used in the context
 /// of fulfilling the implementation of the runner::Runner trait.
-impl MariaDB {
+impl MariaDb {
     /// We do not record failures,
     fn record_success(
         &mut self,
@@ -76,7 +76,7 @@ impl MariaDB {
     }
 }
 
-impl crate::runner::Runner for MariaDB {
+impl crate::runner::Runner for MariaDb {
     type Error = Error;
     type Migration = Migration;
     type MigrationStep = MigrationStep;
@@ -84,7 +84,7 @@ impl crate::runner::Runner for MariaDB {
     type MigrationStateTuple = (MigrationState, Migration);
     type MigrationResultTuple = (MigrationResult, Migration);
 
-    fn new(config: &RunnerConfiguration) -> Result<MariaDB, Error> {
+    fn new(config: &RunnerConfiguration) -> Result<MariaDb, Error> {
         let opts = mysql::Opts::from(
             OptsBuilder::new()
                 .ip_or_hostname(config.ip_or_hostname.clone())
@@ -95,10 +95,10 @@ impl crate::runner::Runner for MariaDB {
                 // .db_name(config.database.clone())
                 .pass(config.password.clone()),
         );
-        return Ok(MariaDB {
+        Ok(MariaDb {
             conn: Conn::new(opts)?,
             config: config.to_owned(),
-        });
+        })
     }
 
     // Applies a single migration (each runner needs something like this)
@@ -206,7 +206,7 @@ impl crate::runner::Runner for MariaDB {
             if !table_exists {
             // let iter = migrations.map(|m| (false, m)).collect::<Vec<Self::MigrationStateTuple>>().into_iter();
             // let iter = migrations.map(|m| (false, m)).into_iter();
-            return Ok(migrations.into_iter().map(|m| (MigrationState::Pending, m)).collect());
+                Ok(migrations.into_iter().map(|m| (MigrationState::Pending, m)).collect())
             } else {
 
               // TODO check what migrations did run, and
@@ -232,11 +232,11 @@ impl crate::runner::Runner for MariaDB {
                     }
                   }).collect())
                 },
-                Err(e) => panic!("error with querying for applied versions {:?}", e)
+                Err(e) => Err(Error::MariaDb(e))
               }
             }
           },
-          None => return Err(Error::ErrorRunningQuery)
+          None => Err(Error::ErrorRunningQuery)
         }
     }
 }
@@ -348,7 +348,7 @@ mod tests {
         let mut config = helper_create_runner_config();
         config.database = None {};
         let mut runner =
-            MariaDB::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
+            MariaDb::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
         let migrations = vec![];
 
         let x = match runner.diff(migrations) {
@@ -366,7 +366,7 @@ mod tests {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let config = helper_create_runner_config();
         let mut runner =
-            MariaDB::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
+            MariaDb::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
         let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
@@ -391,8 +391,8 @@ mod tests {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let test_db = helper_create_test_db()?;
 
-        let mut runner =
-            MariaDB::new(&test_db.runner_config).map_err(|e| format!("Could not create runner {:?}", e))?;
+        let mut runner = MariaDb::new(&test_db.runner_config)
+            .map_err(|e| format!("Could not create runner {:?}", e))?;
         let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
@@ -416,7 +416,7 @@ mod tests {
         let config = helper_create_runner_config();
 
         let mut runner =
-            MariaDB::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
+            MariaDb::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
         let migs = migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
         let migrations_again =

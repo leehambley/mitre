@@ -15,7 +15,7 @@ use std::path::Path;
 use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
-use mitre::runner::mariadb::MariaDB;
+use mitre::runner::mariadb::MariaDb;
 use mitre::runner::Runner;
 
 fn main() {
@@ -91,7 +91,7 @@ fn main() {
 
         Some("show-config") => {
             let mitre_config = config.get("mitre").expect("must provide mitre config");
-            let _mdb = MariaDB::new(mitre_config).expect("must be able to instance mariadb runner");
+            let _mdb = MariaDb::new(mitre_config).expect("must be able to instance mariadb runner");
         }
 
         Some("ls") => {
@@ -131,7 +131,7 @@ fn main() {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
                     let mitre_config = config.get("mitre").expect("must provide mitre config");
-                    let mut mdb = MariaDB::new(mitre_config)
+                    let mut mdb = MariaDb::new(mitre_config)
                         .expect("must be able to instance mariadb runner");
                     match mdb.up(migrations) {
                         Ok(_r) => println!("Ran up() successfully"),
@@ -180,7 +180,7 @@ fn main() {
         //         _ => {}
         //     }
 
-        //     let mdb = match MariaDB::new(mitre_config) {
+        //     let mdb = match MariaDb::new(mitre_config) {
         //         Ok(mut mdb) => {
         //             println!("bootstrap {:?}", mdb.bootstrap());
         //             mdb
@@ -192,7 +192,7 @@ fn main() {
         //     };
         // }
         // let mitre_config = c.get("mitre").expect("must provide mitre config");
-        // let mdb = MariaDB::new(mitre_config);
+        // let mdb = MariaDb::new(mitre_config);
         //           // let runner: &dyn runner::Runner<Error = mariadb::Error> = mdb.clone();
         //           // let store: &dyn migration_state_store::MigrationStateStore = mdb;
         //           match mdb {
