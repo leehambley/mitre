@@ -4,7 +4,6 @@ use super::reserved::{runners, Runner};
 use regex;
 use rust_embed::RustEmbed;
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io;
@@ -63,19 +62,6 @@ pub struct Migration {
     pub date_time: chrono::NaiveDateTime,
     pub steps: HashMap<Direction, MigrationStep>,
     pub built_in: bool,
-}
-
-impl Migration {
-    fn new(
-        date_time: chrono::NaiveDateTime,
-        steps: HashMap<Direction, MigrationStep>,
-    ) -> Migration {
-        Migration {
-            date_time,
-            steps,
-            built_in: false,
-        }
-    }
 }
 
 /// List all migrations known in the given context.
@@ -205,11 +191,12 @@ fn parts_in_migration_dir(
     p: PathBuf,
 ) -> Result<Option<HashMap<Direction, MigrationStep>>, MigrationsError> {
     fn has_proper_name(p: PathBuf) -> Option<(Direction, MigrationStep)> {
-        let (up, down) = (OsStr::new("up"), OsStr::new("down"));
         // TODO: warn on `change` direction in a directory
-        let direction = match p.file_stem().unwrap_or(OsStr::new("")) {
-            up => Some(Direction::Up),
-            down => Some(Direction::Down),
+        let stem_str = p.file_stem().unwrap().to_str().unwrap();
+        let direction = match stem_str {
+            "up" => Some(Direction::Up),
+            "down" => Some(Direction::Down),
+            _ => None {}, // something else, never-mind
         };
         let runner = match p.extension() {
             Some(e) => runner_reserved_word_from_str(&e.to_str().unwrap()),
@@ -326,10 +313,10 @@ mod tests {
         // requires a real file or directory, will try to
         // build the template after reading the file
         let path = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20200904205000_get_es_health.es-docker.curl");
-        let mut f = File::open(&path).map_err(|e| "Could not open path")?;
+        let mut f = File::open(&path).map_err(|e| format!("Could not open path {:?}", e))?;
         let mut buffer = String::new();
         f.read_to_string(&mut buffer)
-            .map_err(|e| "Could not read path")?;
+            .map_err(|e| format!("Could not read path {:?}", e))?;
 
         match part_from_migration_file(path.clone(), &buffer) {
             Err(e) => Err(format!("Error: {:?}", e)),

@@ -104,7 +104,7 @@ pub enum ConfigProblem {
 #[derive(Debug, PartialEq)]
 pub struct Configuration {
     // no fields yet
-    configuredRunners: HashMap<String, RunnerConfiguration>,
+    configured_runners: HashMap<String, RunnerConfiguration>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -135,7 +135,7 @@ impl Configuration {
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         // TODO: write tests
         let mut problems = vec![];
-        if self.configuredRunners.get("mitre").is_none() {
+        if self.configured_runners.get("mitre").is_none() {
             problems.push(ConfigProblem::NoMitreConfiguration)
         }
 
@@ -147,7 +147,7 @@ impl Configuration {
     }
 
     pub fn get(&self, k: &str) -> Option<&RunnerConfiguration> {
-        self.configuredRunners.get(k)
+        self.configured_runners.get(k)
     }
 }
 
@@ -281,7 +281,7 @@ pub fn from_file(p: &Path) -> Result<Configuration, ConfigError> {
     let s = std::fs::read_to_string(p)?;
     let yaml_docs = YamlLoader::load_from_str(&s)?;
     Ok(Configuration {
-        configuredRunners: from_yaml(yaml_docs)?,
+        configured_runners: from_yaml(yaml_docs)?,
     })
 }
 

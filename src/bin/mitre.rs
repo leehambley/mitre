@@ -8,14 +8,15 @@ extern crate prettytable;
 
 use clap::{App, Arg};
 use prettytable::{Cell, Row, Table};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-mod mitre;
-use crate::mitre::config;
-use crate::mitre::migrations;
-use crate::mitre::reserved;
-use crate::mitre::runner::mariadb::MariaDB;
-use crate::mitre::runner::Runner;
+// crate mitre;
+
+use mitre::config;
+use mitre::migrations;
+use mitre::reserved;
+use mitre::runner::mariadb::MariaDB;
+use mitre::runner::Runner;
 
 fn main() {
     env_logger::init();
@@ -105,6 +106,7 @@ fn main() {
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations list somehow
+            info!("cool dude, no more warnings");
             match migrations::migrations(migrations_dir) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
@@ -131,7 +133,10 @@ fn main() {
                     let mitre_config = config.get("mitre").expect("must provide mitre config");
                     let mut mdb = MariaDB::new(mitre_config)
                         .expect("must be able to instance mariadb runner");
-                    mdb.up(migrations);
+                    match mdb.up(migrations) {
+                        Ok(_r) => println!("Ran up() successfully"),
+                        Err(e) => println!("up() had an error {:?}", e),
+                    }
                 }
             };
         }
