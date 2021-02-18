@@ -1,9 +1,5 @@
 -- Bootstrap the database
---
--- This does not include the stanza IF NOT EXISTS because we
--- should never enter this path if the DB does already exist,
--- this bootstrapping migration _must_ create the world.
-CREATE DATABASE {{mariadb_migration_state_databaes_name}} CHARACTER SET utf8 COLLATE utf8_bin;
+CREATE DATABASE {{mariadb_migration_state_databaes_name}} IF NOT EXISTS CHARACTER SET utf8 COLLATE utf8_bin;
 
 -- Use the newly created database
 USE {{mariadb_migration_state_databaes_name}};

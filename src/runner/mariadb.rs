@@ -266,7 +266,10 @@ mod tests {
     impl Drop for TestDB {
         fn drop(&mut self) {
             println!("Dropping DB Conn");
-            let _ = helper_delete_test_db(&mut self.conn, &self.runner_config);
+            match helper_delete_test_db(&mut self.conn, &self.runner_config) {
+                Ok(_) => println!("success"),
+                Err(_) => println!("error, there may be some clean-up to do"),
+            };
         }
     }
 
@@ -413,10 +416,10 @@ mod tests {
     #[test]
     fn migrating_up_just_the_built_in_migrations() -> Result<(), String> {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
-        let config = helper_create_runner_config();
+        let test_db = helper_create_test_db()?;
 
-        let mut runner =
-            MariaDb::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
+        let mut runner = MariaDb::new(&test_db.runner_config)
+            .map_err(|e| format!("Could not create runner {:?}", e))?;
         let migs = migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
         let migrations_again =
@@ -467,7 +470,7 @@ mod tests {
             Err(e) => return Err(format!("did not expect error running up again {:?}", e)),
         };
 
-        Ok(helper_delete_test_db(&mut helper_db_conn()?, &config)?)
+        Ok(())
     }
 
     #[test]
