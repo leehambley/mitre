@@ -1,5 +1,3 @@
-extern crate env_logger;
-
 #[macro_use]
 extern crate log;
 
@@ -10,8 +8,6 @@ use clap::{App, Arg};
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
 
-// crate mitre;
-
 use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
@@ -20,6 +16,8 @@ use mitre::runner::Runner;
 
 fn main() {
     env_logger::init();
+
+    trace!("starting");
 
     let m = App::new("mitre")
         .version("0.1")

@@ -1,11 +1,8 @@
 -- Bootstrap the database
-CREATE DATABASE IF NOT EXISTS {{mariadb_migration_state_database_name}} CHARACTER SET utf8 COLLATE utf8_bin;
-
--- Use the newly created database
-USE {{mariadb_migration_state_database_name}};
+CREATE DATABASE IF NOT EXISTS `{{mariadb_migration_state_database_name}}` CHARACTER SET utf8 COLLATE utf8_bin;
 
 -- Table name must agree with the constant in the mariadb.rs 
-CREATE TABLE {{mariadb_migration_state_table_name}} (
+CREATE TABLE `{{mariadb_migration_state_database_name}}`.`{{mariadb_migration_state_table_name}}` (
 
   -- TIMESTMAP is YYYYMMDDHHMMSS just like migration filenames
   -- assumed to be UTC, and stored as such.
