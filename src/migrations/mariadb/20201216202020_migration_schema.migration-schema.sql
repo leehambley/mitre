@@ -1,8 +1,8 @@
 -- Bootstrap the database
-CREATE DATABASE {{mariadb_migration_state_databaes_name}} IF NOT EXISTS CHARACTER SET utf8 COLLATE utf8_bin;
+CREATE DATABASE IF NOT EXISTS {{mariadb_migration_state_database_name}} CHARACTER SET utf8 COLLATE utf8_bin;
 
 -- Use the newly created database
-USE {{mariadb_migration_state_databaes_name}};
+USE {{mariadb_migration_state_database_name}};
 
 -- Table name must agree with the constant in the mariadb.rs 
 CREATE TABLE {{mariadb_migration_state_table_name}} (
@@ -28,7 +28,7 @@ CREATE TABLE {{mariadb_migration_state_table_name}} (
 
   -- Simple metadata columns
   `applied_at_utc` TIMESTAMP NOT NULL,
-  `apply_time_sec` BIGINT UNSIGNED NOT NULL,
+  `apply_time_ms` BIGINT UNSIGNED NOT NULL,
 
   -- Was this a built-in migration
   `built_in` BOOLEAN NOT NULL,

@@ -97,6 +97,7 @@ fn main() {
         Some("ls") => {
             let mut table = Table::new();
             table.add_row(row![
+                "Status",
                 "Built-In",
                 "Timestamp",
                 "Path",
@@ -104,15 +105,21 @@ fn main() {
                 "Directions"
             ]);
 
+            let mitre_config = config.get("mitre").expect("must provide mitre config");
+            let mut mdb =
+                MariaDb::new(mitre_config).expect("must be able to instance mariadb runner");
+
             // TODO: return something from error_code module in this crate
-            // TODO: sort the migrations list somehow
+            // TODO: sort the migrations, list somehow
             info!("cool dude, no more warnings");
             match migrations::migrations(migrations_dir) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
-                    for m in migrations {
+                    for (migration_state, m) in mdb.diff(migrations).expect("boom") {
                         m.clone().steps.into_iter().for_each(|(direction, s)| {
                             table.add_row(Row::new(vec![
+                                Cell::new(format!("{:?}", migration_state).as_str())
+                                    .style_spec("bFy"),
                                 Cell::new(format!("{:?}", m.built_in).as_str()).style_spec("bFy"),
                                 Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
                                 Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),

@@ -31,6 +31,7 @@ pub enum MigrationResult {
 pub enum Error {
     MariaDb(mysql::Error),
     ErrorRunningQuery,
+    CouldNotSelectDatabase,
     NoStateStoreDatabaseNameProvided,
     // (reason, the template)
     TemplateError(String, mustache::Template),
@@ -54,14 +55,14 @@ impl MariaDb {
         _ms: &MigrationStep,
         d: std::time::Duration,
     ) -> Result<(), Error> {
-        match self.conn.prep(format!("INSERT INTO {} (`version`, `up`, `down`, `change`, `applied_at_utc`, `apply_time_sec`, `built_in`, `environment`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);", MARIADB_MIGRATION_STATE_TABLE_NAME)) {
+        match self.conn.prep(format!("INSERT INTO {} (`version`, `up`, `down`, `change`, `applied_at_utc`, `apply_time_ms`, `built_in`, `environment`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);", MARIADB_MIGRATION_STATE_TABLE_NAME)) {
           Ok(stmt) => match self.conn.exec_iter(stmt, (
               m.date_time,
               m.steps.get(&Direction::Up).map(|ms| format!("{:?}", ms.source )),
               m.steps.get(&Direction::Down).map(|ms| format!("{:?}", ms.source )),
               m.steps.get(&Direction::Change).map(|ms| format!("{:?}", ms.source )),
               chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-              d.as_secs(),
+              d.as_millis(),
               m.built_in,
               "NOT IMPLEMENTED"
             )) {
@@ -109,7 +110,7 @@ impl crate::runner::Runner for MariaDb {
                 MARIADB_MIGRATION_STATE_TABLE_NAME,
             )
             .insert_str(
-                "mariadb_migration_state_databaes_name",
+                "mariadb_migration_state_database_name",
                 self.config.database.as_ref().unwrap(),
             )
             .build();
@@ -160,7 +161,6 @@ impl crate::runner::Runner for MariaDb {
                 }
             })
             .collect())
-        // Ok(Box::new(result.collect::<Vec<(MigrationResult, Migration)>>().into_iter()))
     }
 
     fn diff(
@@ -172,22 +172,24 @@ impl crate::runner::Runner for MariaDb {
             None => Err(Error::NoStateStoreDatabaseNameProvided),
         }?;
 
-        // Database doesn't exist, then obviously nothing ran... (or we have no permission)
         let schema_exists = self.conn.exec_first::<bool, _, _>(
           "SELECT EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?)",
           (database,) //trailing comma makes this a tuple
         )?;
+
         match schema_exists {
             Some(schema_exists) => {
                 println!("schema exists?: {}", schema_exists);
                 if !schema_exists {
-                    // println!("about to create {}", database);
-                    // let stmt_create_db = self.conn.prep(format!("CREATE DATABASE {}", database))?;
-                    // self.conn.exec::<bool, _, _>(stmt_create_db, ())?;
                     return Ok(migrations
                         .into_iter()
                         .map(|m| (MigrationState::Pending, m))
                         .collect());
+                } else {
+                    match &self.conn.select_db(&database) {
+                        true => {}
+                        false => return Err(Error::CouldNotSelectDatabase),
+                    }
                 }
             }
             None => {
@@ -204,22 +206,17 @@ impl crate::runner::Runner for MariaDb {
           )? {
           Some(table_exists) => {
             if !table_exists {
-            // let iter = migrations.map(|m| (false, m)).collect::<Vec<Self::MigrationStateTuple>>().into_iter();
-            // let iter = migrations.map(|m| (false, m)).into_iter();
                 Ok(migrations.into_iter().map(|m| (MigrationState::Pending, m)).collect())
             } else {
-
               // TODO check what migrations did run, and
               // Thinking something like a SELECT * FROM <migration schema table> WHERE timestamp NOT IN <1,2,3,4,5,6>
               // (the migrations we know about) .. theory being we send our list, they send back a list, maybe
               // that list isn't enormous, or we check out cursor based
 
-
               // while let Some(result_set) = result.next_set() {
               //   let result_set = result_set?; //TODO: check result_set validity here and skip it if it's an Err
               //   sets += 1;
               //   println!("Result set columns: {:?}", result_set.columns());
-
 
               // Let's select payments from database. Type inference should do the trick here.
               match self.conn.query_map::<_,_,_,String>(format!("SELECT version FROM {} ORDER BY version ASC;", MARIADB_MIGRATION_STATE_TABLE_NAME), |version| version) {
