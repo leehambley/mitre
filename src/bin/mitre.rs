@@ -1,5 +1,3 @@
-extern crate env_logger;
-
 #[macro_use]
 extern crate log;
 
@@ -8,17 +6,18 @@ extern crate prettytable;
 
 use clap::{App, Arg};
 use prettytable::{Cell, Row, Table};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-mod mitre;
-use crate::mitre::config;
-use crate::mitre::migrations;
-use crate::mitre::reserved;
-use crate::mitre::runner::mariadb::MariaDB;
-use crate::mitre::runner::Runner;
+use mitre::config;
+use mitre::migrations;
+use mitre::reserved;
+use mitre::runner::mariadb::MariaDb;
+use mitre::runner::Runner;
 
 fn main() {
     env_logger::init();
+
+    trace!("starting");
 
     let m = App::new("mitre")
         .version("0.1")
@@ -51,12 +50,17 @@ fn main() {
         .subcommand(App::new("show-migrations").about("for migrations"))
         .get_matches();
 
-    let migrations_directory = m
-        .value_of("directory")
-        .unwrap_or(mitre::DEFAULT_MIGRATIONS_DIR);
-    let config_file = m
-        .value_of("config_file")
-        .unwrap_or(mitre::DEFAULT_CONFIG_FILE);
+    let migrations_dir = Path::new(
+        m.value_of("directory")
+            .unwrap_or(mitre::DEFAULT_MIGRATIONS_DIR),
+    );
+
+    let config_file = Path::new(
+        m.value_of("config_file")
+            .unwrap_or(mitre::DEFAULT_CONFIG_FILE),
+    );
+
+    let config = config::from_file(config_file).expect("cannot read config");
 
     // Validate config contains a mitre runner
 
@@ -84,31 +88,14 @@ fn main() {
         }
 
         Some("show-config") => {
-            if let Some(ref config_file) = m.value_of("config_file") {
-                let path = Path::new(config_file);
-                match config::from_file(path) {
-                    Ok(c) => {
-                        let mitre_config = c.get("mitre").expect("must provide mitre config");
-                        let mdb = MariaDB::new(mitre_config);
-                        match mdb {
-                            Ok(mut mmmdb) => {
-                                println!("bootstrap {:?}", mmmdb.bootstrap());
-                            }
-                            Err(e) => {
-                                println!("error connecting/reading config for mariadb {:?}", e);
-                                std::process::exit(123);
-                            }
-                        };
-                    }
-                    Err(e) => println!("error loading config: {:?}", e),
-                };
-                println!("using {:?}", path);
-            }
+            let mitre_config = config.get("mitre").expect("must provide mitre config");
+            let _mdb = MariaDb::new(mitre_config).expect("must be able to instance mariadb runner");
         }
 
         Some("ls") => {
             let mut table = Table::new();
             table.add_row(row![
+                "Status",
                 "Built-In",
                 "Timestamp",
                 "Path",
@@ -116,26 +103,48 @@ fn main() {
                 "Directions"
             ]);
 
+            let mitre_config = config.get("mitre").expect("must provide mitre config");
+            let mut mdb =
+                MariaDb::new(mitre_config).expect("must be able to instance mariadb runner");
+
             // TODO: return something from error_code module in this crate
-            // TODO: sort the migrations list somehow
-            match migrations::migrations(Path::new(migrations_directory)) {
+            // TODO: sort the migrations, list somehow
+            info!("cool dude, no more warnings");
+            match migrations::migrations(migrations_dir) {
                 Err(e) => panic!("Error: {:?}", e),
-                Ok(migration_iter) => migration_iter.for_each(|m| {
-                    m.clone().steps.into_iter().for_each(|(direction, s)| {
-                        table.add_row(Row::new(vec![
-                            Cell::new(format!("{:?}", m.built_in).as_str()).style_spec("bFy"),
-                            Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
-                            Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
-                            Cell::new(s.runner.name).style_spec("fB"),
-                            Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
-                        ]));
-                    });
-                }),
+                Ok(migrations) => {
+                    for (migration_state, m) in mdb.diff(migrations).expect("boom") {
+                        m.clone().steps.into_iter().for_each(|(direction, s)| {
+                            table.add_row(Row::new(vec![
+                                Cell::new(format!("{:?}", migration_state).as_str())
+                                    .style_spec("bFy"),
+                                Cell::new(format!("{:?}", m.built_in).as_str()).style_spec("bFy"),
+                                Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
+                                Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
+                                Cell::new(s.runner.name).style_spec("fB"),
+                                Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
+                            ]));
+                        });
+                    }
+                }
             };
             table.printstd();
         }
 
-        Some("up") => {}
+        Some("up") => {
+            match migrations::migrations(Path::new(migrations_dir)) {
+                Err(e) => panic!("Error: {:?}", e),
+                Ok(migrations) => {
+                    let mitre_config = config.get("mitre").expect("must provide mitre config");
+                    let mut mdb = MariaDb::new(mitre_config)
+                        .expect("must be able to instance mariadb runner");
+                    match mdb.up(migrations) {
+                        Ok(_r) => println!("Ran up() successfully"),
+                        Err(e) => println!("up() had an error {:?}", e),
+                    }
+                }
+            };
+        }
 
         // Some("ls") => {
         //   let migrations = match migrations::migrations(Path::new(
@@ -176,7 +185,7 @@ fn main() {
         //         _ => {}
         //     }
 
-        //     let mdb = match MariaDB::new(mitre_config) {
+        //     let mdb = match MariaDb::new(mitre_config) {
         //         Ok(mut mdb) => {
         //             println!("bootstrap {:?}", mdb.bootstrap());
         //             mdb
@@ -188,7 +197,7 @@ fn main() {
         //     };
         // }
         // let mitre_config = c.get("mitre").expect("must provide mitre config");
-        // let mdb = MariaDB::new(mitre_config);
+        // let mdb = MariaDb::new(mitre_config);
         //           // let runner: &dyn runner::Runner<Error = mariadb::Error> = mdb.clone();
         //           // let store: &dyn migration_state_store::MigrationStateStore = mdb;
         //           match mdb {
@@ -243,5 +252,13 @@ fn main() {
         Some("down") => {} // down was used
         Some("redo") => {} // redo was used
         _ => {}            // Either no subcommand or one not tested for...
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn anything() -> Result<(), &'static str> {
+        Ok(())
     }
 }

@@ -104,7 +104,7 @@ pub enum ConfigProblem {
 #[derive(Debug, PartialEq)]
 pub struct Configuration {
     // no fields yet
-    configuredRunners: HashMap<String, RunnerConfiguration>,
+    configured_runners: HashMap<String, RunnerConfiguration>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -135,11 +135,11 @@ impl Configuration {
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         // TODO: write tests
         let mut problems = vec![];
-        if self.configuredRunners.get("mitre").is_none() {
+        if self.configured_runners.get("mitre").is_none() {
             problems.push(ConfigProblem::NoMitreConfiguration)
         }
 
-        if problems.len() == 0 {
+        if problems.is_empty() {
             Ok(())
         } else {
             Err(problems)
@@ -147,7 +147,7 @@ impl Configuration {
     }
 
     pub fn get(&self, k: &str) -> Option<&RunnerConfiguration> {
-        self.configuredRunners.get(k)
+        self.configured_runners.get(k)
     }
 }
 
@@ -160,7 +160,7 @@ impl RunnerConfiguration {
             return Err(vec);
         }
 
-        if !reserved::runner_by_name(self._runner.as_ref()).is_some() {
+        if reserved::runner_by_name(self._runner.as_ref()).is_none() {
             vec.push(ConfigProblem::UnsupportedRunnerSpecified);
         }
 
@@ -169,13 +169,12 @@ impl RunnerConfiguration {
             .clone()
             .map(|r| r.to_lowercase() == reserved::REDIS.to_lowercase())
             .is_some()
+            && self.database_number.is_none()
         {
-            if self.database_number.is_none() {
-                vec.push(ConfigProblem::NoDatabaseNumberSpecified)
-            }
+            vec.push(ConfigProblem::NoDatabaseNumberSpecified)
         }
 
-        if vec.len() > 0 {
+        if !vec.is_empty() {
             Err(vec)
         } else {
             Ok(())
@@ -219,7 +218,7 @@ pub fn ignore_patterns() -> Result<Vec<String>, io::Error> {
     ])
 }
 
-fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &String) -> Result<yaml_rust::Yaml, ConfigError> {
+fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &str) -> Result<yaml_rust::Yaml, ConfigError> {
     match yaml {
         Yaml::Hash(ref map) => {
             for (k, v) in map {
@@ -233,14 +232,14 @@ fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &String) -> Result<yaml_rust::Yam
     Err(ConfigError::GetStringError())
 }
 
-fn dig_string(yaml: &yaml_rust::Yaml, key: &String) -> Result<Option<String>, ConfigError> {
+fn dig_string(yaml: &yaml_rust::Yaml, key: &str) -> Option<String> {
     match dig_yaml_value(yaml, key) {
-        Ok(Yaml::String(value)) => Ok(Some(value.to_string())),
-        _ => Ok(None {}),
+        Ok(Yaml::String(value)) => Some(value),
+        _ => None {},
     }
 }
 
-fn dig_u8(yaml: &yaml_rust::Yaml, key: &String) -> Result<Option<u8>, ConfigError> {
+fn dig_u8(yaml: &yaml_rust::Yaml, key: &str) -> Result<Option<u8>, ConfigError> {
     match dig_yaml_value(yaml, key) {
         Ok(Yaml::Integer(value)) => {
             if value > u8::MAX as i64 {
@@ -255,7 +254,7 @@ fn dig_u8(yaml: &yaml_rust::Yaml, key: &String) -> Result<Option<u8>, ConfigErro
     }
 }
 
-fn dig_u16(yaml: &yaml_rust::Yaml, key: &String) -> Result<Option<u16>, ConfigError> {
+fn dig_u16(yaml: &yaml_rust::Yaml, key: &str) -> Result<Option<u16>, ConfigError> {
     match dig_yaml_value(yaml, key) {
         Ok(Yaml::Integer(value)) => {
             if value > u16::MAX as i64 {
@@ -281,7 +280,7 @@ pub fn from_file(p: &Path) -> Result<Configuration, ConfigError> {
     let s = std::fs::read_to_string(p)?;
     let yaml_docs = YamlLoader::load_from_str(&s)?;
     Ok(Configuration {
-        configuredRunners: from_yaml(yaml_docs)?,
+        configured_runners: from_yaml(yaml_docs)?,
     })
 }
 
@@ -315,44 +314,26 @@ fn from_yaml(
         })
         .try_for_each(|(k, config_value)| {
             let c = RunnerConfiguration {
-                _runner: match dig_string(config_value, &String::from("_runner")) {
-                    Ok(res) => res,
-                    Err(e) => return Err(e),
-                },
-                database: match dig_string(config_value, &String::from("database")) {
-                    Ok(res) => res,
-                    Err(e) => return Err(e),
-                },
-                index: match dig_string(config_value, &String::from("index")) {
-                    Ok(res) => res,
-                    Err(e) => return Err(e),
-                },
+                _runner: dig_string(config_value, &String::from("_runner")),
+                database: dig_string(config_value, &String::from("database")),
+                index: dig_string(config_value, &String::from("index")),
                 database_number: match dig_u8(config_value, &String::from("database_number")) {
                     Ok(res) => res,
                     Err(e) => return Err(e),
                 },
-                ip_or_hostname: match dig_string(config_value, &String::from("ip_or_hostname")) {
-                    Ok(res) => res,
-                    Err(e) => return Err(e),
-                },
+                ip_or_hostname: dig_string(config_value, &String::from("ip_or_hostname")),
                 port: match dig_u16(config_value, &String::from("port")) {
                     Ok(res) => res,
                     Err(e) => return Err(e),
                 },
-                username: match dig_string(config_value, &String::from("username")) {
-                    Ok(res) => res,
-                    Err(e) => return Err(e),
-                },
-                password: match dig_string(config_value, &String::from("password")) {
-                    Ok(res) => res,
-                    Err(e) => return Err(e),
-                },
+                username: dig_string(config_value, &String::from("username")),
+                password: dig_string(config_value, &String::from("password")),
             };
             hm.insert(as_string(k), c);
             Ok(())
         }) {
-        Err(e) => return Err(e),
-        Ok(_) => return Ok(hm),
+        Err(e) => Err(e),
+        Ok(_) => Ok(hm),
     }
 }
 
@@ -378,11 +359,8 @@ key: bestValue
             _ => return Err("doc didn't parse"),
         };
         let v = match yaml_docs.first() {
-            Some(document) => match dig_string(document, &String::from("key")) {
-                Ok(value) => value,
-                _ => return Err("result didn't match"),
-            },
-            _ => return Err("dig_string returned nothing"),
+            Some(document) => dig_string(document, &String::from("key")),
+            _ => return Err("yaml docs was empty"),
         };
         assert_eq!(v, Some(String::from("bestValue")));
         Ok(())
@@ -404,7 +382,7 @@ key: 255
                 Ok(value) => value,
                 _ => return Err("result didn't match"),
             },
-            _ => return Err("dig_u8 returned nothing"),
+            _ => return Err("yaml docs was empty"),
         };
         assert_eq!(v, Some(255));
         Ok(())
@@ -433,7 +411,7 @@ key: 2550000
                     _ => return Err("wrong class of error returned"),
                 },
             },
-            _ => return Err("dig_u8 returned nothing"),
+            _ => return Err("yaml docs was empty"),
         };
     }
 
