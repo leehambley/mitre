@@ -254,3 +254,11 @@ fn main() {
         _ => {}            // Either no subcommand or one not tested for...
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn anything() -> Result<(), &'static str> {
+        Ok(())
+    }
+}
