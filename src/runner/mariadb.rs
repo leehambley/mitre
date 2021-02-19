@@ -487,33 +487,15 @@ mod tests {
     #[test]
     fn migrating_up_just_the_built_in_migrations() -> Result<(), String> {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
-        let mut test_db = helper_create_test_db()?;
+        let test_db = helper_create_test_db()?;
 
         let mut runner = MariaDb::new(&test_db.runner_config)
             .map_err(|e| format!("Could not create runner {:?}", e))?;
-        let migs = migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
-
-        let migrations_again =
+        let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
-
-        let migrations_thrice =
-            migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
-
-        // match test_db.conn.query_iter(r"CREATE DATABASE mitre; CREATE DATABASE mitrelele;") {
-        //   Ok(mut result) => {
-        //     warn!("ok: {:#?} {:#?}", result.info_str(), result.affected_rows());
-        //     while let Some(result_set) = result.next_set() {
-        //       warn!("Got next set {:#?}", result_set.);
-        //       let _result_set = result_set.expect("boom");
-        //     }
-        //   },
-        //   Err(e) => warn!("err {:?}", e),
-        // }
-
-        // return Err(String::from("it's broke yo"));
 
         // Arrange: Run up (only built-in, because tmp dir
-        match runner.up(migs) {
+        match runner.up(migrations.clone()) {
             Ok(migration_results) => {
                 let v = migration_results;
                 assert_eq!(1, v.len());
@@ -528,7 +510,7 @@ mod tests {
         };
 
         // Assert that diff thinks all is clear
-        match runner.diff(migrations_again) {
+        match runner.diff(migrations.clone()) {
             Err(e) => return Err(format!("didn't expect err from diff {:?}", e)),
             Ok(diff_result) => {
                 let diff_pending: Vec<(MigrationState, Migration)> = diff_result
@@ -540,12 +522,14 @@ mod tests {
         };
 
         // Assert up is a noop
-        match runner.up(migrations_thrice) {
+        match runner.up(migrations) {
             Ok(migration_results) => {
-                let v = migration_results;
-                // trace!("v is {:#?}", v;
+                let diff_pending: Vec<(MigrationResult, Migration)> = migration_results
+                    .into_iter()
+                    .filter(|mr| mr.0 == MigrationResult::AlreadyApplied)
+                    .collect();
 
-                assert_eq!(1, v_success.len());
+                assert_eq!(1, diff_pending.len());
             }
             Err(e) => return Err(format!("did not expect error running up again {:?}", e)),
         };
