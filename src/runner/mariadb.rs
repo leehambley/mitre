@@ -1,4 +1,4 @@
-use crate::config::RunnerConfiguration;
+use crate::config::{Configuration, RunnerConfiguration};
 use crate::migrations::{Direction, Migration, MigrationStep};
 use mustache::MapBuilder;
 use mysql::prelude::Queryable;
@@ -10,7 +10,11 @@ const MARIADB_MIGRATION_STATE_TABLE_NAME: &str = "mitre_migration_state";
 #[derive(Debug)]
 pub struct MariaDb {
     conn: Conn,
-    config: RunnerConfiguration,
+
+    // all the configs, since mariadb is also a state store
+    configuration: Configuration,
+    // my own configuration The
+    runner_config: RunnerConfiguration,
 }
 
 #[derive(PartialEq, Debug)]
@@ -30,13 +34,14 @@ pub enum MigrationResult {
 #[derive(Debug)]
 pub enum Error {
     MariaDb(mysql::Error),
-    ErrorRunningQuery,
+    NoMariaDbConfigProvided,
     CouldNotSelectDatabase,
     NoStateStoreDatabaseNameProvided,
     // (reason, the template)
     TemplateError(String, mustache::Template),
     ErrorRunningMigration(String),
     MigrationHasFailed(String, Migration),
+    ErrorRunningQuery,
 }
 
 impl From<mysql::Error> for Error {
@@ -49,7 +54,7 @@ impl From<mysql::Error> for Error {
 /// of fulfilling the implementation of the runner::Runner trait.
 impl MariaDb {
     fn select_db(&mut self) {
-        match &self.config.database {
+        match &self.runner_config.database {
             Some(database) => {
                 trace!("select_db database name is {}", database);
                 match &self.conn.select_db(&database) {
@@ -99,20 +104,26 @@ impl crate::runner::Runner for MariaDb {
     type MigrationStateTuple = (MigrationState, Migration);
     type MigrationResultTuple = (MigrationResult, Migration);
 
-    fn new(config: &RunnerConfiguration) -> Result<MariaDb, Error> {
+    fn new(config: Configuration) -> Result<MariaDb, Error> {
+        let mariadb_config = match config.configured_runners.get("mariadb") {
+            None => return Err(Error::NoMariaDbConfigProvided),
+            Some(c) => c.clone(),
+        };
+
         let opts = mysql::Opts::from(
             OptsBuilder::new()
-                .ip_or_hostname(config.ip_or_hostname.clone())
-                .user(config.username.clone())
+                .ip_or_hostname(mariadb_config.ip_or_hostname.clone())
+                .user(mariadb_config.username.clone())
                 // NOTE: Do not specify database name here, otherwise we cannot
                 // connect until the database exists. Makes it difficult to
                 // bootstrap.
-                // .db_name(config.database.clone())
-                .pass(config.password.clone()),
+                // .db_name(mariadb_config.database.clone())
+                .pass(mariadb_config.password.clone()),
         );
         Ok(MariaDb {
             conn: Conn::new(opts)?,
-            config: config.to_owned(),
+            configuration: config,
+            runner_config: mariadb_config,
         })
     }
 
@@ -125,7 +136,7 @@ impl crate::runner::Runner for MariaDb {
             )
             .insert_str(
                 "mariadb_migration_state_database_name",
-                self.config.database.as_ref().unwrap(),
+                self.runner_config.database.as_ref().unwrap(),
             )
             .build();
 
@@ -221,14 +232,14 @@ impl crate::runner::Runner for MariaDb {
     ) -> Result<Vec<Self::MigrationStateTuple>, Error> {
         self.select_db();
 
-        let database = match &self.config.database {
+        let database = match &self.runner_config.database {
             Some(database) => Ok(database),
             None => Err(Error::NoStateStoreDatabaseNameProvided),
         }?;
 
         let schema_exists = self.conn.exec_first::<bool, _, _>(
           "SELECT EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?)",
-          (database,) //trailing comma makes this a tuple
+          (database,)
         )?;
 
         match schema_exists {
@@ -317,6 +328,7 @@ mod tests {
     use super::*;
     use crate::migrations::migrations;
     use crate::runner::Runner;
+    use maplit::hashmap;
     use rand::Rng;
     use tempdir::TempDir;
 
@@ -327,38 +339,57 @@ mod tests {
 
     struct TestDB {
         conn: mysql::Conn,
-        runner_config: RunnerConfiguration,
+        // Config for impl Runner compatibility,
+        // mariadb_config duplicated for convenience
+        mariadb_config: RunnerConfiguration,
+        config: Configuration,
     }
 
     impl Drop for TestDB {
         fn drop(&mut self) {
             println!("Dropping DB Conn");
-            match helper_delete_test_db(&mut self.conn, &self.runner_config) {
+            match helper_delete_test_db(&mut self.conn, &self.mariadb_config) {
                 Ok(_) => println!("success"),
                 Err(_) => println!("error, there may be some clean-up to do"),
             };
         }
     }
 
-    fn helper_create_runner_config() -> RunnerConfiguration {
-        let random_database_name = format!("mitre_test_{}", rand::thread_rng().gen::<u32>());
-        RunnerConfiguration {
-            _runner: Some(String::from("mariadb")),
-            database_number: None,
-            database: Some(String::from(random_database_name)),
-            index: None,
-            ip_or_hostname: Some(String::from(TEST_DB_IP)),
-            password: Some(String::from(TEST_DB_PASSWORD)),
-            port: Some(TEST_DB_PORT),
-            username: Some(String::from(TEST_DB_USER)),
+    fn helper_create_runner_config(dbname: Option<&str>) -> Configuration {
+        // None means really none, but Some("") indicates that we should
+        // generate a random one. A non-empty string will be used.
+        let dbname = match dbname {
+            Some(dbname) => Some(match dbname {
+                "" => format!("mitre_test_{}", rand::thread_rng().gen::<u32>()),
+                _ => dbname.to_string(),
+            }),
+            None => None,
+        };
+        Configuration {
+            configured_runners: hashmap! {
+                String::from("mariadb") => RunnerConfiguration {
+                  _runner: Some(String::from("mariadb")),
+                  database_number: None,
+                  database: dbname,
+                  index: None,
+                  ip_or_hostname: Some(String::from(TEST_DB_IP)),
+                  password: Some(String::from(TEST_DB_PASSWORD)),
+                  port: Some(TEST_DB_PORT),
+                  username: Some(String::from(TEST_DB_USER)),
+              }
+            },
         }
     }
 
     fn helper_create_test_db() -> Result<TestDB, String> {
-        let runner_config = helper_create_runner_config();
+        let config = helper_create_runner_config(Some(""));
+        let mariadb_config = config
+            .configured_runners
+            .get("mariadb")
+            .ok_or_else(|| "no config")?;
         let mut conn = helper_db_conn()?;
 
-        match &runner_config.database {
+        match &mariadb_config.database {
             Some(dbname) => {
                 let stmt_create_db = conn
                     .prep(format!("CREATE DATABASE {}", dbname))
@@ -367,7 +398,8 @@ mod tests {
                     Err(e) => Err(format!("error creating test db {:?}", e)),
                     Ok(_) => Ok(TestDB {
                         conn,
-                        runner_config,
+                        config: config.clone(),
+                        mariadb_config: mariadb_config.clone(),
                     }),
                 }
             }
@@ -415,10 +447,9 @@ mod tests {
 
     #[test]
     fn it_requires_a_config_with_a_table_name() -> Result<(), String> {
-        let mut config = helper_create_runner_config();
-        config.database = None {};
+        let config = helper_create_runner_config(None {});
         let mut runner =
-            MariaDb::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
+            MariaDb::new(config).map_err(|e| format!("Could not create runner {:?}", e))?;
         let migrations = vec![];
 
         let x = match runner.diff(migrations) {
@@ -434,9 +465,9 @@ mod tests {
     #[test]
     fn it_returns_all_migrations_pending_if_db_does_not_exist() -> Result<(), String> {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
-        let config = helper_create_runner_config();
+        let config = helper_create_runner_config(Some(""));
         let mut runner =
-            MariaDb::new(&config).map_err(|e| format!("Could not create runner {:?}", e))?;
+            MariaDb::new(config).map_err(|e| format!("Could not create runner {:?}", e))?;
         let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
@@ -458,14 +489,10 @@ mod tests {
     #[test]
     fn it_returns_all_migrations_pending_if_migrations_table_does_not_exist() -> Result<(), String>
     {
-        trace!("I AM TRACE");
-        debug!("I AM DEBUG");
-        info!("I AM INFO");
-
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let test_db = helper_create_test_db()?;
 
-        let mut runner = MariaDb::new(&test_db.runner_config)
+        let mut runner = MariaDb::new(test_db.config.clone())
             .map_err(|e| format!("Could not create runner {:?}", e))?;
         let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
@@ -489,7 +516,7 @@ mod tests {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let test_db = helper_create_test_db()?;
 
-        let mut runner = MariaDb::new(&test_db.runner_config)
+        let mut runner = MariaDb::new(test_db.config.clone())
             .map_err(|e| format!("Could not create runner {:?}", e))?;
         let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");

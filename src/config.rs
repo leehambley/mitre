@@ -101,10 +101,9 @@ pub enum ConfigProblem {
     NoPasswordSpecified,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Configuration {
-    // no fields yet
-    configured_runners: HashMap<String, RunnerConfiguration>,
+    pub configured_runners: HashMap<String, RunnerConfiguration>,
 }
 
 #[derive(Debug, PartialEq, Clone)]

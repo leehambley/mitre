@@ -1,5 +1,5 @@
 pub mod mariadb;
-use crate::config::RunnerConfiguration;
+use crate::config::Configuration;
 
 pub trait Runner {
     type Error;
@@ -9,7 +9,7 @@ pub trait Runner {
     type MigrationStateTuple;
     type MigrationResultTuple;
 
-    fn new(config: &RunnerConfiguration) -> Result<Self, Self::Error>
+    fn new(config: Configuration) -> Result<Self, Self::Error>
     where
         Self: Sized;
 

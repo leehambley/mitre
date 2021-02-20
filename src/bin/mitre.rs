@@ -1,10 +1,6 @@
-#[macro_use]
-extern crate log;
-
-#[macro_use]
-extern crate prettytable;
-
 use clap::{App, Arg};
+use log::{info, trace};
+use prettytable::{row, *};
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
 
@@ -88,8 +84,7 @@ fn main() {
         }
 
         Some("show-config") => {
-            let mitre_config = config.get("mitre").expect("must provide mitre config");
-            let _mdb = MariaDb::new(mitre_config).expect("must be able to instance mariadb runner");
+            let _mdb = MariaDb::new(config).expect("must be able to instance mariadb runner");
         }
 
         Some("ls") => {
@@ -103,9 +98,7 @@ fn main() {
                 "Directions"
             ]);
 
-            let mitre_config = config.get("mitre").expect("must provide mitre config");
-            let mut mdb =
-                MariaDb::new(mitre_config).expect("must be able to instance mariadb runner");
+            let mut mdb = MariaDb::new(config).expect("must be able to instance mariadb runner");
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow
@@ -135,9 +128,8 @@ fn main() {
             match migrations::migrations(Path::new(migrations_dir)) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
-                    let mitre_config = config.get("mitre").expect("must provide mitre config");
-                    let mut mdb = MariaDb::new(mitre_config)
-                        .expect("must be able to instance mariadb runner");
+                    let mut mdb =
+                        MariaDb::new(config).expect("must be able to instance mariadb runner");
                     match mdb.up(migrations) {
                         Ok(_r) => println!("Ran up() successfully"),
                         Err(e) => println!("up() had an error {:?}", e),
