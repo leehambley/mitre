@@ -53,10 +53,11 @@ impl From<mysql::Error> for Error {
 /// Helper methods for MariaDb (non-public) used in the context
 /// of fulfilling the implementation of the runner::Runner trait.
 impl MariaDb {
-    fn select_db(&mut self) {
+    // We can reuse a single mutated connection since all migratuins for each runner run in band
+    fn conn(&mut self) -> &mysql::Conn {
         match &self.runner_config.database {
             Some(database) => {
-                trace!("select_db database name is {}", database);
+                trace!("conn with database name is {}", database);
                 match &self.conn.select_db(&database) {
                     true => trace!("select_db successfully using {}", database),
                     false => trace!("could not switch to {} (may not exist yet?)", database),
@@ -64,6 +65,8 @@ impl MariaDb {
             }
             None => trace!("select_db no database name provided"),
         }
+
+        &self.conn
     }
 
     /// We do not record failures,
@@ -73,8 +76,7 @@ impl MariaDb {
         _ms: &MigrationStep,
         d: std::time::Duration,
     ) -> Result<(), Error> {
-        self.select_db(); // TODO: maybe move select_db inside .conn -> .conn()
-        match self.conn.prep(format!("INSERT INTO {} (`version`, `up`, `down`, `change`, `applied_at_utc`, `apply_time_ms`, `built_in`, `environment`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);", MARIADB_MIGRATION_STATE_TABLE_NAME)) {
+        match self.conn().prep(format!("INSERT INTO {} (`version`, `up`, `down`, `change`, `applied_at_utc`, `apply_time_ms`, `built_in`, `environment`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);", MARIADB_MIGRATION_STATE_TABLE_NAME)) {
           Ok(stmt) => match self.conn.exec_iter(stmt, (
               m.date_time,
               m.steps.get(&Direction::Up).map(|ms| format!("{:?}", ms.source )),
@@ -230,14 +232,12 @@ impl crate::runner::Runner for MariaDb {
         &mut self,
         migrations: Vec<Self::Migration>,
     ) -> Result<Vec<Self::MigrationStateTuple>, Error> {
-        self.select_db();
-
         let database = match &self.runner_config.database {
             Some(database) => Ok(database),
             None => Err(Error::NoStateStoreDatabaseNameProvided),
         }?;
 
-        let schema_exists = self.conn.exec_first::<bool, _, _>(
+        let schema_exists = &self.conn().exec_first::<bool, _, _>(
           "SELECT EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?)",
           (database,)
         )?;
