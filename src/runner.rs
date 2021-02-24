@@ -109,4 +109,6 @@ pub trait Runner {
         Self: Sized;
 
     fn apply(&mut self, _: &MigrationStep) -> Result<(), Error>;
+
+    fn migration_template(&mut self) -> String;
 }

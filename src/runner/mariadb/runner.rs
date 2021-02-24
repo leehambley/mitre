@@ -86,4 +86,15 @@ impl Runner for MariaDb {
             }
         }
     }
+
+    fn migration_template(&mut self) -> String {
+        String::from(
+            "
+# Put your migration here
+CREATE TABLE your_table (
+    column_one VARCHAR(255) NOT NULL
+)    
+",
+        )
+    }
 }

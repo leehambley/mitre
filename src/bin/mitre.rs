@@ -1,3 +1,4 @@
+use chrono::Local;
 use clap::{App, Arg};
 use log::{error, info, trace, warn};
 use std::path::Path;
@@ -7,6 +8,7 @@ use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
 use mitre::runner::mariadb::MariaDb;
+use mitre::runner::Runner;
 use mitre::state_store::StateStore;
 use mitre::ui::start_web_ui;
 
@@ -50,6 +52,26 @@ fn main() {
         .subcommand(App::new("migrate").about("run all outstanding migrations"))
         .subcommand(App::new("show-config").about("for showing config file"))
         .subcommand(App::new("show-migrations").about("for migrations"))
+        .subcommand(
+            App::new("generate-migration")
+                .about("generates a boilerplate migration for you")
+                .arg(
+                    Arg::new("name")
+                        .long("name")
+                        .takes_value(true)
+                        .value_name("NAME")
+                        .required(true)
+                        .about("Name of the migration"),
+                )
+                .arg(
+                    Arg::new("key")
+                        .long("key")
+                        .takes_value(true)
+                        .value_name("CONFIG KEY")
+                        .required(true)
+                        .about("The data source config you want to generate the migration for"),
+                ),
+        )
         .get_matches();
 
     let config_file = Path::new(
@@ -282,7 +304,48 @@ mitre --help
         }
         Some("down") => {} // down was used
         Some("redo") => {} // redo was used
-        _ => {}            // Either no subcommand or one not tested for...
+        Some("generate-migration") => {
+            info!("generating migration");
+            let sub_m = m
+                .subcommand_matches("generate-migration")
+                .expect("expected to match subcommand");
+            let name = sub_m.value_of("name").expect("expected name argument");
+            let key = sub_m.value_of("key").expect("expected key argument");
+
+            let migrations_dir = Path::new(
+                m.value_of("directory")
+                    .unwrap_or(mitre::config::DEFAULT_MIGRATIONS_DIR),
+            );
+
+            let config_file = Path::new(
+                m.value_of("config_file")
+                    .unwrap_or(mitre::config::DEFAULT_CONFIG_FILE),
+            );
+
+            let config = config::from_file(config_file).expect("cannot read config");
+
+            match config.get(key) {
+                Some(runnerConfig) => {
+                    let timestamp = Local::now().format(crate::migrations::FORMAT_STR);
+                    // TODO: Use runner config (once we have more than one runner) to make path and content
+                    let target_path = migrations_dir
+                        .join(key)
+                        .join(format!("{}_{}.sql", timestamp, name));
+                    info!(
+                        "Generating migration into {}",
+                        target_path
+                            .to_str()
+                            .expect("could not transform target_path to string")
+                    );
+                    let runner = Runner::new_runner(runnerConfig.clone()).expect("foo");
+                    let template = Runner::migration_template(runner);
+                }
+                None => {
+                    panic!("Could not find key {} in config", key)
+                }
+            }
+        }
+        _ => {} // Either no subcommand or one not tested for...
     }
 }
 

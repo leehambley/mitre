@@ -86,6 +86,15 @@ impl Runner for Redis {
             Err(e) => Err(Error::PostgreSQL(e)),
         }
     }
+
+    fn migration_template(&mut self) -> String {
+        String::from(
+            "
+# Put your migration here
+${hostname}/_cluster/health?wait_for_status=yellow&timeout=50s   
+",
+        )
+    }
 }
 
 #[cfg(test)]

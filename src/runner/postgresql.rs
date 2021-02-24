@@ -55,6 +55,15 @@ impl Runner for PostgreSql {
             Err(e) => Err(Error::PostgreSql(e)),
         }
     }
+
+    fn migration_template(&mut self) -> String {
+        String::from(
+            "
+# Put your migration here
+CREATE DATABASE your_database;
+",
+        )
+    }
 }
 
 #[cfg(test)]
