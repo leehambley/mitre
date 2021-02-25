@@ -1,3 +1,7 @@
+//! Contains configuration loading, validation and parsing code
+//! Relies on [`yaml rust`] for parsing because `serde_yaml` does not support
+//! [YAML anchors & tags](https://yaml.org/spec/1.2/spec.html#id2765878).
+
 extern crate yaml_rust;
 
 use super::reserved;
@@ -10,14 +14,28 @@ use std::process::Command;
 use yaml_rust::{Yaml, YamlLoader};
 
 #[derive(Debug)]
+/// Describe problems with the loading, parsing and general processing
+/// of the config. A valid YAML file may still produce an invalid config,
+/// however those problems will be reported using [`fn.Configuration.validate`].
 pub enum ConfigError {
     Io(io::Error),
     Yaml(yaml_rust::ScanError),
-    NoYamlHash(),
-    // ValueForKeyIsNotString(String),
-    // ValueForKeyIsNotInteger(String),
-    GetStringError(),
-    IntegerOutOfRange { value: u64, max: u64 }, // value, max value
+    NoYamlHash,
+    GetStringError,
+    /// If we would parse with `serde_yaml` all fields on the [`RunnerConfiguration`] would be [`Option<T>`], however
+    /// we parse by hand, and we can specify that `_runner` is mandatory, which it is. Failing to provide it
+    /// will cause an error. If a language binding is used, and the language provides the config, we may not have a parsing-time
+    /// opportunity to notice this problem in the config file, so the [`ConfigProblem::UnsupportedRunnerSpecified`] may manifest
+    /// (e.g if the language binding provides an empty string for the runner).
+    NoRunnerSpecified,
+    /// YAML supports ["arbitrarily sized finite mathematical integers"](https://yaml.org/type/int.html) however we may not need or want that.
+    /// Parsing a port number which is typically the range `(2^16)-1`, therefore we can constrain what we accept.
+    ///
+    /// The permitted range differs for example between [`struct.RunnerConfiguration.port`] and [`struct.RunnerConfiguration.ip_or_hostname`].
+    IntegerOutOfRange {
+        value: u64,
+        max: u64,
+    }, // value, max value
 }
 
 impl fmt::Display for ConfigError {
@@ -27,10 +45,13 @@ impl fmt::Display for ConfigError {
             // their implementations.
             ConfigError::Io(ref err) => write!(f, "MITRE: IO error: {}", err),
             ConfigError::Yaml(ref err) => write!(f, "MITRE: YAML error: {}", err),
-            ConfigError::NoYamlHash() => write!(
+            ConfigError::NoYamlHash => write!(
                 f,
                 "MITRE: YAML error: the top level doc in the yaml wasn't a hash"
             ),
+            ConfigError::NoRunnerSpecified => {
+                write!(f, "MITRE: No runner specified in config block")
+            }
             // ConfigError::ValueForKeyIsNotString(ref s) => {
             //     write!(f, "Mitre: YAML error: value at key '{}' is not a string", s)
             // }
@@ -44,7 +65,7 @@ impl fmt::Display for ConfigError {
                 "Mitre: YAML error: value '{}' is out of range, max is '{}'",
                 value, max
             ),
-            ConfigError::GetStringError() => write!(
+            ConfigError::GetStringError => write!(
                 f,
                 "Mitre: YAML error: get_string() passed-thru without match"
             ),
@@ -61,10 +82,9 @@ impl error::Error for ConfigError {
             // implement `Error`.
             ConfigError::Io(ref err) => Some(err),
             ConfigError::Yaml(ref err) => Some(err),
-            ConfigError::NoYamlHash() => None {},
-            // ConfigError::ValueForKeyIsNotString(_) => None {},
-            // ConfigError::ValueForKeyIsNotInteger(_) => None {},
-            ConfigError::GetStringError() => None {},
+            ConfigError::NoYamlHash => None {},
+            ConfigError::NoRunnerSpecified => None {},
+            ConfigError::GetStringError => None {},
             ConfigError::IntegerOutOfRange { value: _, max: _ } => None {},
         }
     }
@@ -76,12 +96,6 @@ impl From<io::Error> for ConfigError {
     }
 }
 
-// impl From<serde_yaml::Error> for ConfigError {
-//   fn from(err: serde_yaml::Error) -> ConfigError {
-//     ConfigError::Yaml(err)
-//   }
-// }
-
 impl From<yaml_rust::ScanError> for ConfigError {
     fn from(err: yaml_rust::ScanError) -> ConfigError {
         ConfigError::Yaml(err)
@@ -90,14 +104,37 @@ impl From<yaml_rust::ScanError> for ConfigError {
 
 // Inexhaustive list for now
 #[derive(Debug, PartialEq)]
+/// Describe problems with the configuration, may be useful in performing pre-flight
+/// sanity checks on the configuration before trying to run things up.
 pub enum ConfigProblem {
+    /// All configurations are expected to specify a mitre: key. This mitre key
+    /// is used to select the runner for the state store so that the library and tool
+    /// can set-up a correct working environment. It is recommeneded to use YAML's
+    /// "Anchors and Aliases" functions to specify a `mitre:\n<<: *myappdb` block when
+    /// Mitre should store state in the same database to which we are applying migrations.
     NoMitreConfiguration,
-    NoRunnerSpecified,
+    /// Unsupported runner specified. See [crate::reserved] for supported runners.
     UnsupportedRunnerSpecified,
+    /// Certain databases (e.g ElasticSearch) have a concept of an index. This configuration option
+    /// is exposed as `{indexName}` within the templates of migrations targeting a runner where this
+    /// concept applies.
     NoIndexSpecified,
+    /// Certain databases (e.g Redis) number their databases. This configuration option is exposed
+    /// as `{databaseNumber}` within the templates of migrations targeting a runner where this concept
+    /// applies.
     NoDatabaseNumberSpecified,
+    /// Most all databases expect to be connected over a network or unix domain socket. If nothing is specified
+    /// the underlying libraries may fall-back to a default such as `127.0.0.1` or similar. Prefer not to rely on
+    /// any such behaviour and specify a proper hostname and port.
     NoIpOrHostnameSpecified,
+    /// It is good practice to specify usernames. From development environments in increasing confusing
+    /// contemporary network topologies, through cloud-based and shared (e.g public) environments. If not
+    /// specified, libraries may default to connecting as the effective system user name of the process running
+    /// Mitre which may lead to situations where Mitre works sometimes but not others, depending on who, and how it
+    /// is called.
     NoUsernameSpecified,
+    /// It is good practice to specify passwords. From development environments in increasing confusing
+    /// contemporary network topologies, through cloud-based and shared (e.g public) environments.
     NoPasswordSpecified,
 }
 
@@ -110,7 +147,7 @@ pub struct Configuration {
 pub struct RunnerConfiguration {
     // Runner is not optional, but we need to option it here to maintain
     // serde::Deserialize compatibility
-    pub _runner: Option<String>,
+    pub _runner: String,
 
     pub database: Option<String>, // used by MariaDB, MySQL, PostgreSQL runners
 
@@ -154,20 +191,11 @@ impl RunnerConfiguration {
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         let mut vec = Vec::new();
 
-        if self._runner.is_none() {
-            vec.push(ConfigProblem::NoRunnerSpecified);
-            return Err(vec);
-        }
-
-        if reserved::runner_by_name(self._runner.as_ref()).is_none() {
+        if reserved::runner_by_name(&self._runner).is_none() {
             vec.push(ConfigProblem::UnsupportedRunnerSpecified);
         }
 
-        if self
-            ._runner
-            .clone()
-            .map(|r| r.to_lowercase() == reserved::REDIS.to_lowercase())
-            .is_some()
+        if self._runner.to_lowercase() == reserved::REDIS.to_lowercase()
             && self.database_number.is_none()
         {
             vec.push(ConfigProblem::NoDatabaseNumberSpecified)
@@ -185,7 +213,7 @@ impl RunnerConfiguration {
 /// if configured locally or globally. Requires `git` to be on the Path
 /// which is a safe bet.
 ///
-/// https://docs.github.com/en/github/using-git/ignoring-files
+/// <https://docs.github.com/en/github/using-git/ignoring-files>
 //
 // TODO Ensure this works on Windows?
 // TODO extract in a library?
@@ -226,9 +254,9 @@ fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &str) -> Result<yaml_rust::Yaml, 
                 }
             }
         }
-        _ => return Err(ConfigError::NoYamlHash()),
+        _ => return Err(ConfigError::NoYamlHash),
     };
-    Err(ConfigError::GetStringError())
+    Err(ConfigError::GetStringError)
 }
 
 fn dig_string(yaml: &yaml_rust::Yaml, key: &str) -> Option<String> {
@@ -346,7 +374,10 @@ fn from_yaml(
         })
         .try_for_each(|(k, config_value)| {
             let c = RunnerConfiguration {
-                _runner: dig_string(config_value, &String::from("_runner")),
+                _runner: match dig_string(config_value, &String::from("_runner")) {
+                    Some(s) => s,
+                    None => return Err(ConfigError::NoRunnerSpecified),
+                },
                 database: dig_string(config_value, &String::from("database")),
                 index: dig_string(config_value, &String::from("index")),
                 database_number: match dig_u8(config_value, &String::from("database_number")) {
@@ -454,7 +485,7 @@ key: 2550000
             r#"
 ---
 a:
-  _runner: mysql
+  _runner: mariadb
   database: mitre
   ip_or_hostname: 127.0.0.1
   logLevel: debug
@@ -473,7 +504,7 @@ a:
         };
 
         let c = RunnerConfiguration {
-            _runner: Some(String::from("mysql")),
+            _runner: String::from("mariadb"),
             database: Some(String::from("mitre")),
             ip_or_hostname: Some(String::from("127.0.0.1")),
             // log_level: Some(String::from("debug")),
@@ -509,7 +540,7 @@ a:
         };
 
         let c = RunnerConfiguration {
-            _runner: Some(String::from("foobarbaz")),
+            _runner: String::from("foobarbaz"),
             database: None {},
             ip_or_hostname: None {},
             password: None {},

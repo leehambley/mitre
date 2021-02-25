@@ -8,7 +8,7 @@ use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
 use mitre::runner::mariadb::MariaDb;
-use mitre::runner::Runner;
+use mitre::runner::StateStore;
 
 fn main() {
     env_logger::init();
@@ -154,7 +154,8 @@ mitre --help
         }
 
         Some("show-config") => {
-            let _mdb = MariaDb::new(config).expect("must be able to instance mariadb runner");
+            let _mdb = MariaDb::new_state_store(config)
+                .expect("must be able to instance mariadb state store");
         }
 
         Some("ls") => {
@@ -168,7 +169,8 @@ mitre --help
                 "Directions"
             ]);
 
-            let mut mdb = MariaDb::new(config).expect("must be able to instance mariadb runner");
+            let mut mdb = MariaDb::new_state_store(config)
+                .expect("must be able to instance mariadb state store");
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow
@@ -198,8 +200,8 @@ mitre --help
             match migrations::migrations(Path::new(migrations_dir)) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
-                    let mut mdb =
-                        MariaDb::new(config).expect("must be able to instance mariadb runner");
+                    let mut mdb = MariaDb::new_state_store(config)
+                        .expect("must be able to instance mariadb state store");
                     match mdb.up(migrations) {
                         Ok(_r) => println!("Ran up() successfully"),
                         Err(e) => println!("up() had an error {:?}", e),
@@ -247,7 +249,7 @@ mitre --help
         //         _ => {}
         //     }
 
-        //     let mdb = match MariaDb::new(mitre_config) {
+        //     let mdb = match MariaDb::new_state_store(mitre_config) {
         //         Ok(mut mdb) => {
         //             println!("bootstrap {:?}", mdb.bootstrap());
         //             mdb
@@ -259,7 +261,7 @@ mitre --help
         //     };
         // }
         // let mitre_config = c.get("mitre").expect("must provide mitre config");
-        // let mdb = MariaDb::new(mitre_config);
+        // let mdb = MariaDb::new_state_store(mitre_config);
         //           // let runner: &dyn runner::Runner<Error = mariadb::Error> = mdb.clone();
         //           // let store: &dyn migration_state_store::MigrationStateStore = mdb;
         //           match mdb {

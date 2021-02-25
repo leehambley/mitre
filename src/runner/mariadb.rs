@@ -1,20 +1,41 @@
 use crate::config::{Configuration, RunnerConfiguration};
 use crate::migrations::{Direction, Migration, MigrationStep};
+use crate::reserved::Runner as RunnerReservedWord;
+use crate::runner::Runner;
 use mustache::MapBuilder;
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};
+use std::collections::HashMap;
 use std::convert::From;
 
 const MARIADB_MIGRATION_STATE_TABLE_NAME: &str = "mitre_migration_state";
 
-#[derive(Debug)]
+type BoxedRunner =
+    Box<dyn Runner<Error = Error, Migration = Migration, MigrationStep = MigrationStep>>;
+type RunnersHashMap = HashMap<RunnerReservedWord, BoxedRunner>;
+
+/// MariaDb is both a StateStore and a runner. The bootstrapping phase
+/// means that when no migrations have yet been run, the StateStore may
+/// attempt to connect to the database server when no database, or a
+/// database with no tables exists. When bootstrapping the first connections
+/// may swallow errors, the `diff()` method of StateStore may simply
+/// return that all migrations are unapplied. Once the bootstrap migration
+/// has run, it should be possible for the state store behaviour to
+/// properly store results.
 pub struct MariaDb {
     conn: Conn,
 
-    // all the configs, since mariadb is also a state store
-    configuration: Configuration,
-    // my own configuration The
+    // All configurations because as a state-store MariaDb also
+    // has to be able to look-up the correct implementation for.
+    // Option<T> because we may simply be a runner (if someone uses
+    // another store, and MariaDb is only used for running)
+    config: Option<Configuration>,
+
+    // Configuration in case we are a runner not a state store
     runner_config: RunnerConfiguration,
+
+    // Runners in a muxed'ed hashmap. This hashmap is keyed by [`crate::reserved::Runner`]
+    runners: RunnersHashMap,
 }
 
 #[derive(PartialEq, Debug)]
@@ -33,7 +54,19 @@ pub enum MigrationResult {
 
 #[derive(Debug)]
 pub enum Error {
+    /// Shadowing the errors from the mysql crate to have them type-safely in our scope.
     MariaDb(mysql::Error),
+    /// The configuration did not contain a `mitre: ...` block
+    NoMitreConfigProvided,
+    /// An attempt was made to instantiate a runner or state store
+    /// with a runner name that did not match the implementation's expected name.
+    /// e.g starting a PostgreSQL state store with a value of "curl" in the runner name.
+    /// Error contains the expected and actual names.
+    RunnerNameMismatch {
+        expected: String,
+        found: String,
+    },
+    /// No runner name
     NoMariaDbConfigProvided,
     CouldNotSelectDatabase,
     NoStateStoreDatabaseNameProvided,
@@ -41,6 +74,13 @@ pub enum Error {
     TemplateError(String, mustache::Template),
     ErrorRunningMigration(String),
     MigrationHasFailed(String, Migration),
+
+    /// When in StateStore mode, we need to instantiate runners
+    /// from configurations, if we fail to do that, we'll bubble
+    /// up this error with the runner configuration.
+    ///
+    /// TODO: Instances of this should have good errors
+    CannotCreateRunnerFor,
     ErrorRunningQuery,
 }
 
@@ -53,6 +93,36 @@ impl From<mysql::Error> for Error {
 /// Helper methods for MariaDb (non-public) used in the context
 /// of fulfilling the implementation of the runner::Runner trait.
 impl MariaDb {
+    /// Given the set of runner configs on config, this will
+    /// try to create a
+    fn get_runner(&mut self, ms: &MigrationStep) -> Result<&mut BoxedRunner, Error> {
+        // If we have a cached runner miss, let's
+        trace!("looking up runner for {:?}", ms);
+        if self.runners.get(&ms.runner).is_none() {
+            trace!("none found, will create");
+            warn!("!! hard-coded only to create MariaDb runners !!");
+            match self.runners.insert(
+                ms.runner.clone(),
+                Box::new(MariaDb::new_runner(self.runner_config.clone())?),
+            ) {
+                None => trace!(
+                    "clean insert of {} into runners map, no old value",
+                    ms.runner.name
+                ),
+                Some(_) => warn!(
+                    "insert of {} into runners map overwrote a previous value, race condition?",
+                    ms.runner.name
+                ),
+            };
+        }
+
+        trace!("returning from get_runner with runner");
+        match self.runners.get_mut(&ms.runner) {
+            Some(r) => Ok(r),
+            None => Err(Error::CannotCreateRunnerFor),
+        }
+    }
+
     fn select_db(&mut self) {
         match &self.runner_config.database {
             Some(database) => {
@@ -96,18 +166,30 @@ impl MariaDb {
     }
 }
 
-impl crate::runner::Runner for MariaDb {
+impl crate::runner::StateStore for MariaDb {
     type Error = Error;
     type Migration = Migration;
-    type MigrationStep = MigrationStep;
-
     type MigrationStateTuple = (MigrationState, Migration);
     type MigrationResultTuple = (MigrationResult, Migration);
 
-    fn new(config: Configuration) -> Result<MariaDb, Error> {
-        let mariadb_config = match config.configured_runners.get("mariadb") {
-            None => return Err(Error::NoMariaDbConfigProvided),
-            Some(c) => c.clone(),
+    fn new_state_store(config: Configuration) -> Result<MariaDb, Error> {
+        let runner_name = String::from(crate::reserved::MARIA_DB).to_lowercase();
+        let mariadb_config = match config.get("mitre") {
+            None => {
+                debug!("no config entry `mitre' found, please check the docs");
+                return Err(Error::NoMitreConfigProvided);
+            }
+            Some(c) => {
+                if c._runner.to_lowercase() == runner_name {
+                    c.clone()
+                } else {
+                    warn!("runner name mismatch, please check the docs and your config");
+                    return Err(Error::RunnerNameMismatch {
+                        expected: runner_name,
+                        found: c._runner.to_lowercase(),
+                    });
+                }
+            }
         };
 
         let opts = mysql::Opts::from(
@@ -122,8 +204,165 @@ impl crate::runner::Runner for MariaDb {
         );
         Ok(MariaDb {
             conn: Conn::new(opts)?,
-            configuration: config,
+            config: None {}, // we are a runner
             runner_config: mariadb_config,
+            runners: RunnersHashMap::new(),
+        })
+    }
+
+    fn up(
+        &mut self,
+        migrations: Vec<Self::Migration>,
+    ) -> Result<Vec<Self::MigrationResultTuple>, Error> {
+        Ok(self
+            .diff(migrations)?
+            .into_iter()
+            .map(|(migration_state, migration)| {
+                match migration_state {
+                    // TODO: check mgiation_state is pending
+                    // TODO: blow-up (mayne not here?) if we have up+change, only up+down makes sense.migration
+                    MigrationState::Pending => match migration.steps.get(&Direction::Change) {
+                        Some(change_step) => {
+                            let start = std::time::Instant::now();
+                            trace!("starting apply");
+
+                            match self.get_runner(change_step) {
+                                Err(e) => (
+                                    MigrationResult::Failure(format!(
+                                        "error setting up runner for change step{:?}",
+                                        e
+                                    )),
+                                    migration,
+                                ),
+                                Ok(runner) => match runner.apply(change_step) {
+                                    Ok(_) => {
+                                        trace!("apply ok");
+                                        match self.record_success(
+                                            &migration,
+                                            change_step,
+                                            start.elapsed(),
+                                        ) {
+                                            Ok(_) => (MigrationResult::Success, migration),
+                                            Err(e) => (
+                                                MigrationResult::Failure(format!("{:?}", e)),
+                                                migration,
+                                            ),
+                                        }
+                                    }
+                                    Err(e) => {
+                                        trace!("apply not ok");
+                                        (MigrationResult::Failure(format!("{:?}", e)), migration)
+                                    }
+                                },
+                            }
+                        }
+                        None => (MigrationResult::NothingToDo, migration),
+                    },
+                    MigrationState::Applied => {
+                        info!("already applied {}", migration.date_time);
+
+                        (MigrationResult::AlreadyApplied, migration)
+                    }
+                }
+            })
+            .collect())
+    }
+
+    fn diff(
+        &mut self,
+        migrations: Vec<Self::Migration>,
+    ) -> Result<Vec<Self::MigrationStateTuple>, Error> {
+        self.select_db();
+
+        let database = match &self.runner_config.database {
+            Some(database) => Ok(database),
+            None => Err(Error::NoStateStoreDatabaseNameProvided),
+        }?;
+
+        let schema_exists = self.conn.exec_first::<bool, _, _>(
+      "SELECT EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?)",
+      (database,)
+    )?;
+
+        match schema_exists {
+            Some(schema_exists) => {
+                println!("schema exists?: {}", schema_exists);
+                if !schema_exists {
+                    return Ok(migrations
+                        .into_iter()
+                        .map(|m| (MigrationState::Pending, m))
+                        .collect());
+                }
+            }
+            None => {
+                return Err(Error::ErrorRunningQuery);
+            }
+        }
+
+        // Same story for the table when diffing, we don't want to run any migrations, so
+        // we simply say, if the table doesn't exist, then we answer that all migrations (incl. built-in)
+        // _must_ be un-run as far as we know.
+        match self.conn.exec_first::<bool, _, _>(
+      "SELECT EXISTS( SELECT * FROM information_schema.tables WHERE table_schema = ? AND table_name = ? );",
+        (database, MARIADB_MIGRATION_STATE_TABLE_NAME), //trailing comma makes this a tuple
+      )? {
+      Some(table_exists) => {
+        if !table_exists {
+            Ok(migrations.into_iter().map(|m| (MigrationState::Pending, m)).collect())
+        } else {
+            match self.conn.query_map::<_,_,_,String>(format!("SELECT `version` FROM `{}` ORDER BY `version` ASC;", MARIADB_MIGRATION_STATE_TABLE_NAME), |version| version) {
+            Ok(stored_migration_versions) =>
+               Ok(migrations.into_iter().map(move |m| {
+                let migration_version = format!("{}", m.date_time.format(crate::migrations::FORMAT_STR));
+                trace!("applied migrations {:?}", stored_migration_versions );
+                match stored_migration_versions.clone().into_iter().find(|stored_m| &migration_version == stored_m ) {
+                    Some(_) => { trace!("found applied"); (MigrationState::Applied, m)},
+                    None => { trace!("found pending"); (MigrationState::Pending, m)}
+                }
+              }).collect()),
+            Err(e) => {
+              warn!("could not check for migrations {:?}", e);
+              Err(Error::MariaDb(e))
+            }
+          }
+        }
+      },
+      None => Err(Error::ErrorRunningQuery)
+    }
+    }
+}
+
+impl crate::runner::Runner for MariaDb {
+    type Error = Error;
+    type Migration = Migration;
+    type MigrationStep = MigrationStep;
+
+    fn new_runner(config: RunnerConfiguration) -> Result<MariaDb, Error> {
+        let runner_name = String::from(crate::reserved::MARIA_DB).to_lowercase();
+        let mariadb_config = if config._runner.to_lowercase() == runner_name {
+            config.clone()
+        } else {
+            return Err(Error::RunnerNameMismatch {
+                expected: runner_name,
+                found: config._runner,
+            });
+        };
+
+        let opts = mysql::Opts::from(
+            OptsBuilder::new()
+                .ip_or_hostname(mariadb_config.ip_or_hostname.clone())
+                .user(mariadb_config.username.clone())
+                // NOTE: Do not specify database name here, otherwise we cannot
+                // connect until the database exists. Makes it difficult to
+                // bootstrap.
+                // .db_name(mariadb_config.database.clone())
+                .pass(mariadb_config.password.clone()),
+        );
+        Ok(MariaDb {
+            conn: Conn::new(opts)?,
+            config: None {}, // we are a runner
+            runner_config: mariadb_config,
+            runners: RunnersHashMap::new(),
         })
     }
 
@@ -139,8 +378,6 @@ impl crate::runner::Runner for MariaDb {
                 self.runner_config.database.as_ref().unwrap(),
             )
             .build();
-
-        debug!("template context is {:?}", template_ctx);
 
         trace!("rendering template to string");
         let parsed = match ms.content.render_data_to_string(&template_ctx) {
@@ -177,146 +414,12 @@ impl crate::runner::Runner for MariaDb {
             }
         }
     }
+}
 
-    fn up(
-        &mut self,
-        migrations: Vec<Self::Migration>,
-    ) -> Result<Vec<Self::MigrationResultTuple>, Error> {
-        Ok(self
-            .diff(migrations)?
-            .into_iter()
-            .map(|(migration_state, migration)| {
-                match migration_state {
-                    // TODO: check mgiation_state is pending
-                    // TODO: blow-up (mayne not here?) if we have up+change, only up+down makes sense.migration
-                    MigrationState::Pending => match migration.steps.get(&Direction::Change) {
-                        Some(change_step) => {
-                            let start = std::time::Instant::now();
-                            trace!("starting apply");
-                            match self.apply(change_step) {
-                                Ok(_) => {
-                                    trace!("apply ok");
-                                    match self.record_success(
-                                        &migration,
-                                        change_step,
-                                        start.elapsed(),
-                                    ) {
-                                        Ok(_) => (MigrationResult::Success, migration),
-                                        Err(e) => (
-                                            MigrationResult::Failure(format!("{:?}", e)),
-                                            migration,
-                                        ),
-                                    }
-                                }
-                                Err(e) => {
-                                    trace!("apply not ok");
-                                    (MigrationResult::Failure(format!("{:?}", e)), migration)
-                                }
-                            }
-                        }
-                        None => (MigrationResult::NothingToDo, migration),
-                    },
-                    MigrationState::Applied => {
-                        info!("already applied {}", migration.date_time);
-
-                        (MigrationResult::AlreadyApplied, migration)
-                    }
-                }
-            })
-            .collect())
-    }
-
-    fn diff(
-        &mut self,
-        migrations: Vec<Self::Migration>,
-    ) -> Result<Vec<Self::MigrationStateTuple>, Error> {
-        self.select_db();
-
-        let database = match &self.runner_config.database {
-            Some(database) => Ok(database),
-            None => Err(Error::NoStateStoreDatabaseNameProvided),
-        }?;
-
-        let schema_exists = self.conn.exec_first::<bool, _, _>(
-          "SELECT EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?)",
-          (database,)
-        )?;
-
-        match schema_exists {
-            Some(schema_exists) => {
-                println!("schema exists?: {}", schema_exists);
-                if !schema_exists {
-                    return Ok(migrations
-                        .into_iter()
-                        .map(|m| (MigrationState::Pending, m))
-                        .collect());
-                }
-            }
-            None => {
-                return Err(Error::ErrorRunningQuery);
-            }
-        }
-
-        // Same story for the table when diffing, we don't want to run any migrations, so
-        // we simply say, if the table doesn't exist, then we answer that all migrations (incl. built-in)
-        // _must_ be un-run as far as we know.
-        match self.conn.exec_first::<bool, _, _>(
-          "SELECT EXISTS( SELECT * FROM information_schema.tables WHERE table_schema = ? AND table_name = ? );",
-            (database, MARIADB_MIGRATION_STATE_TABLE_NAME), //trailing comma makes this a tuple
-          )? {
-          Some(table_exists) => {
-            if !table_exists {
-                Ok(migrations.into_iter().map(|m| (MigrationState::Pending, m)).collect())
-            } else {
-              // TODO check what migrations did run, and
-              // Thinking something like a SELECT * FROM <migration schema table> WHERE timestamp NOT IN <1,2,3,4,5,6>
-              // (the migrations we know about) .. theory being we send our list, they send back a list, maybe
-              // that list isn't enormous, or we check out cursor based
-
-              // while let Some(result_set) = result.next_set() {
-              //   let result_set = result_set?; //TODO: check result_set validity here and skip it if it's an Err
-              //   sets += 1;
-              //   println!("Result set columns: {:?}", result_set.columns());
-              // for m in &migrations {
-              //   warn!("M is {}", m.date_time.format(crate::migrations::FORMAT_STR));
-              //   return Ok(vec![(MigrationState::Pending, m.clone())]);
-              // }
-
-
-              // let _ = match self.conn.query_map::<_,_,_,String>(format!("SELECT `version` FROM `{}` ORDER BY `version` ASC;", MARIADB_MIGRATION_STATE_TABLE_NAME), |version| version) {
-              //   Ok(stored_migration_versions) => {
-              //     for version in stored_migration_versions {
-              //       warn!("stored is {}", version);
-              //     }
-              //     Ok(())
-              //   },
-              //   Err(e) => { // COULDNOT EVEN RUN QUERY BOOM
-              //     warn!("could not check for migrations {:?}", e);
-              //     Err(Error::MariaDb(e))
-              //   }
-              // };
-
-              // info!("-------------");
-                match self.conn.query_map::<_,_,_,String>(format!("SELECT `version` FROM `{}` ORDER BY `version` ASC;", MARIADB_MIGRATION_STATE_TABLE_NAME), |version| version) {
-                Ok(stored_migration_versions) =>
-                   Ok(migrations.into_iter().map(move |m| {
-                    let migration_version = format!("{}", m.date_time.format(crate::migrations::FORMAT_STR));
-                    trace!("applied migrations {:?}", stored_migration_versions );
-                    match stored_migration_versions.clone().into_iter().find(|stored_m| &migration_version == stored_m ) {
-                        Some(_) => { trace!("found applied"); (MigrationState::Applied, m)},
-                        None => { trace!("found pending"); (MigrationState::Pending, m)}
-                    }
-                  }).collect()),
-                Err(e) => {
-                  warn!("could not check for migrations {:?}", e);
-                  Err(Error::MariaDb(e))
-                }
-              }
-            }
-          },
-          None => Err(Error::ErrorRunningQuery)
-        }
-    }
+#[cfg(test)]
+#[ctor::ctor]
+fn init() {
+    env_logger::init();
 }
 
 #[cfg(test)]
@@ -327,7 +430,7 @@ mod tests {
 
     use super::*;
     use crate::migrations::migrations;
-    use crate::runner::Runner;
+    use crate::runner::StateStore;
     use maplit::hashmap;
     use rand::Rng;
     use tempdir::TempDir;
@@ -368,15 +471,25 @@ mod tests {
         Configuration {
             configured_runners: hashmap! {
                 String::from("mariadb") => RunnerConfiguration {
-                  _runner: Some(String::from("mariadb")),
+                  _runner: String::from(crate::reserved::MARIA_DB).to_lowercase(),
                   database_number: None,
-                  database: dbname,
+                  database: Some(format!("mitre_other_test_db_{}", rand::thread_rng().gen::<u32>()),),
                   index: None,
                   ip_or_hostname: Some(String::from(TEST_DB_IP)),
                   password: Some(String::from(TEST_DB_PASSWORD)),
                   port: Some(TEST_DB_PORT),
                   username: Some(String::from(TEST_DB_USER)),
-              }
+              },
+              String::from("mitre") => RunnerConfiguration {
+                _runner: String::from(crate::reserved::MARIA_DB).to_lowercase(),
+                database_number: None,
+                database: dbname, // the one we want to bootstrap
+                index: None,
+                ip_or_hostname: Some(String::from(TEST_DB_IP)),
+                password: Some(String::from(TEST_DB_PASSWORD)),
+                port: Some(TEST_DB_PORT),
+                username: Some(String::from(TEST_DB_USER)),
+            }
             },
         }
     }
@@ -389,10 +502,11 @@ mod tests {
             .ok_or_else(|| "no config")?;
         let mut conn = helper_db_conn()?;
 
+        trace!("helper_create_test_db: creating database");
         match &mariadb_config.database {
             Some(dbname) => {
                 let stmt_create_db = conn
-                    .prep(format!("CREATE DATABASE {}", dbname))
+                    .prep(format!("CREATE DATABASE `{}`", dbname))
                     .expect("could not prepare db create statement");
                 match conn.exec::<bool, _, _>(stmt_create_db, ()) {
                     Err(e) => Err(format!("error creating test db {:?}", e)),
@@ -448,8 +562,8 @@ mod tests {
     #[test]
     fn it_requires_a_config_with_a_table_name() -> Result<(), String> {
         let config = helper_create_runner_config(None {});
-        let mut runner =
-            MariaDb::new(config).map_err(|e| format!("Could not create runner {:?}", e))?;
+        let mut runner = MariaDb::new_state_store(config)
+            .map_err(|e| format!("Could not create state store {:?}", e))?;
         let migrations = vec![];
 
         let x = match runner.diff(migrations) {
@@ -466,8 +580,8 @@ mod tests {
     fn it_returns_all_migrations_pending_if_db_does_not_exist() -> Result<(), String> {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let config = helper_create_runner_config(Some(""));
-        let mut runner =
-            MariaDb::new(config).map_err(|e| format!("Could not create runner {:?}", e))?;
+        let mut runner = MariaDb::new_state_store(config)
+            .map_err(|e| format!("Could not create state store {:?}", e))?;
         let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
@@ -492,8 +606,8 @@ mod tests {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let test_db = helper_create_test_db()?;
 
-        let mut runner = MariaDb::new(test_db.config.clone())
-            .map_err(|e| format!("Could not create runner {:?}", e))?;
+        let mut runner = MariaDb::new_state_store(test_db.config.clone())
+            .map_err(|e| format!("Could not create state store {:?}", e))?;
         let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
@@ -516,8 +630,8 @@ mod tests {
         let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let test_db = helper_create_test_db()?;
 
-        let mut runner = MariaDb::new(test_db.config.clone())
-            .map_err(|e| format!("Could not create runner {:?}", e))?;
+        let mut runner = MariaDb::new_state_store(test_db.config.clone())
+            .map_err(|e| format!("Could not create state store {:?}", e))?;
         let migrations =
             migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
 
