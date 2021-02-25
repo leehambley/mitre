@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use log::{info, trace};
+use log::{info, trace, warn};
 use prettytable::{row, *};
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
@@ -169,8 +169,14 @@ mitre --help
                 "Directions"
             ]);
 
-            let mut mdb = MariaDb::new_state_store(config)
-                .expect("must be able to instance mariadb state store");
+            let mut mdb = match MariaDb::new_state_store(config) {
+                Ok(mdb) => Ok(mdb),
+                Err(reason) => {
+                    warn!("Error instantiating mdb {:?}", reason);
+                    Err(reason)
+                }
+            }
+            .expect("must be able to instance mariadb state store");
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow

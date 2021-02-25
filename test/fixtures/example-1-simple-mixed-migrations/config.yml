@@ -1,10 +1,10 @@
 ---
-# Each entry here is a "runner" configuration. If a 
+# Each entry here is a "runner" configuration. If a
 # migration is named like ???_foo_bar.es-docker.curl
 # then there must be an entry `runner: curl` with the
 # name `es-docker` to host it.
 es-mariadb: &es-mariadb
-  _runner: mysql
+  _runner: mariadb
   database: mitre
   ip_or_hostname: 127.0.0.1
   logLevel: debug

@@ -97,10 +97,19 @@ impl MariaDb {
     /// try to create a
     fn get_runner(&mut self, ms: &MigrationStep) -> Result<&mut BoxedRunner, Error> {
         // If we have a cached runner miss, let's
-        trace!("looking up runner for {:?}", ms);
+        trace!("looking up runner for {}", ms.runner.name);
         if self.runners.get(&ms.runner).is_none() {
             trace!("none found, will create");
             warn!("!! hard-coded only to create MariaDb runners !!");
+            // TODO: this look-up should look at ms.<configName> (doesn't exist) and look for the *named configuration*
+            // whilst also validating that `ms` file extension is one of the ones for that runner, etc, etc.
+            let _ = match &self.config {
+                Some(c) => c
+                    .configured_runners
+                    .iter()
+                    .find(|(_name, cr)| cr._runner == "hellelee"),
+                None => None {},
+            };
             match self.runners.insert(
                 ms.runner.clone(),
                 Box::new(MariaDb::new_runner(self.runner_config.clone())?),
@@ -286,7 +295,7 @@ impl crate::runner::StateStore for MariaDb {
 
         match schema_exists {
             Some(schema_exists) => {
-                println!("schema exists?: {}", schema_exists);
+                trace!("state store schema found? {}", schema_exists);
                 if !schema_exists {
                     return Ok(migrations
                         .into_iter()
@@ -339,9 +348,7 @@ impl crate::runner::Runner for MariaDb {
 
     fn new_runner(config: RunnerConfiguration) -> Result<MariaDb, Error> {
         let runner_name = String::from(crate::reserved::MARIA_DB).to_lowercase();
-        let mariadb_config = if config._runner.to_lowercase() == runner_name {
-            config.clone()
-        } else {
+        if config._runner.to_lowercase() != runner_name {
             return Err(Error::RunnerNameMismatch {
                 expected: runner_name,
                 found: config._runner,
@@ -350,18 +357,18 @@ impl crate::runner::Runner for MariaDb {
 
         let opts = mysql::Opts::from(
             OptsBuilder::new()
-                .ip_or_hostname(mariadb_config.ip_or_hostname.clone())
-                .user(mariadb_config.username.clone())
+                .ip_or_hostname(config.ip_or_hostname.clone())
+                .user(config.username.clone())
                 // NOTE: Do not specify database name here, otherwise we cannot
                 // connect until the database exists. Makes it difficult to
                 // bootstrap.
-                // .db_name(mariadb_config.database.clone())
-                .pass(mariadb_config.password.clone()),
+                // .db_name(config.database.clone())
+                .pass(config.password.clone()),
         );
         Ok(MariaDb {
             conn: Conn::new(opts)?,
             config: None {}, // we are a runner
-            runner_config: mariadb_config,
+            runner_config: config,
             runners: RunnersHashMap::new(),
         })
     }
@@ -384,7 +391,7 @@ impl crate::runner::Runner for MariaDb {
             Ok(str) => Ok(str),
             Err(e) => Err(Error::TemplateError(e.to_string(), ms.content.clone())),
         }?;
-        trace!("template rendered to string successfully: {:#?}", parsed);
+        trace!("template rendered to string successfully: {:?}", parsed);
 
         debug!("executing query");
         match self.conn.query_iter(parsed) {
@@ -395,7 +402,6 @@ impl crate::runner::Runner for MariaDb {
                     res.warnings(),
                     res.info_str()
                 );
-                trace!("applying parsed query success {:?}", res);
                 while let Some(result_set) = res.next_set() {
                     let result_set = result_set.expect("boom");
                     info!(
@@ -442,19 +448,20 @@ mod tests {
 
     struct TestDB {
         conn: mysql::Conn,
-        // Config for impl Runner compatibility,
-        // mariadb_config duplicated for convenience
-        mariadb_config: RunnerConfiguration,
         config: Configuration,
     }
 
     impl Drop for TestDB {
         fn drop(&mut self) {
-            println!("Dropping DB Conn");
-            match helper_delete_test_db(&mut self.conn, &self.mariadb_config) {
-                Ok(_) => println!("success"),
-                Err(_) => println!("error, there may be some clean-up to do"),
-            };
+            for (_, rc) in &self.config.configured_runners {
+                match helper_delete_test_db(&mut self.conn, &rc) {
+                    Ok(_) => debug!("success cleaning up db {:?} text database", rc.database),
+                    Err(e) => warn!(
+                        "error, there may be some clean-up to do for {:?}: {:?}",
+                        rc, e
+                    ),
+                };
+            }
         }
     }
 
@@ -513,7 +520,6 @@ mod tests {
                     Ok(_) => Ok(TestDB {
                         conn,
                         config: config.clone(),
-                        mariadb_config: mariadb_config.clone(),
                     }),
                 }
             }
