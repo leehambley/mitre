@@ -11,6 +11,7 @@ crate-type = ["rlib", "dylib"]
 ctor = "0.1.19"
 rand = "0.8.0"
 tempdir = "0.3.7"
+tempfile = "3"
 maplit = "1.0.2"
 
 [dependencies]
