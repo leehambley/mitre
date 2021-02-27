@@ -2,12 +2,14 @@ extern crate mustache;
 
 use super::reserved::{runners, Runner};
 use crate::config::Configuration;
+use crate::config::RunnerConfiguration;
 use rust_embed::RustEmbed;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::Read;
+use std::path::Path;
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
@@ -56,6 +58,7 @@ pub struct Migration {
     pub date_time: chrono::NaiveDateTime,
     pub steps: HashMap<Direction, MigrationStep>,
     pub built_in: bool,
+    pub runner_and_config: Option<(Runner, RunnerConfiguration)>, // runners are compiled-in
 }
 
 /// List all migrations known in the given context.
@@ -75,15 +78,71 @@ pub struct Migration {
 /// Ideally provide an absolute path.
 pub fn migrations(c: &Configuration) -> Result<Vec<Migration>, MigrationsError> {
     let mut m = built_in_migrations();
-    m.extend(migrations_in(&c.migrations_directory));
+    m.extend(MigrationFinder::new(c).migrations_in_migrations_dir());
     Ok(m)
+}
+
+struct MigrationFinder<'a> {
+    config: &'a Configuration,
+    found: Vec<Migration>,
+}
+
+impl<'a> MigrationFinder<'a> {
+    fn new(c: &'a Configuration) -> MigrationFinder {
+        return MigrationFinder {
+            config: c,
+            found: vec![],
+        };
+    }
+    // List files
+    fn migrations_in_migrations_dir(&mut self) -> Vec<Migration> {
+        self.find_migrations_in_dir(&self.config.migrations_directory);
+        self.found.clone()
+    }
+    fn find_migrations_in_dir<P: AsRef<Path>>(&mut self, p: &P) {
+        for entry in fs::read_dir(p).expect("TODO: err handling") {
+            info!("exploring {:?}", entry);
+            match entry {
+                Ok(e) => match e.metadata() {
+                    Ok(m) => match m.is_file() {
+                        true => self.find_migration_from_file(&e.path()),
+                        false => self.find_migrations_in_dir(&e.path()),
+                    },
+                    Err(e) => warn!("entry metadata err {}", e),
+                },
+                Err(e) => warn!("dir traversal err {}", e),
+            }
+        }
+    }
+    fn find_migration_from_file(&mut self, p: &Path) {
+        trace!("checking if {:?} looks like a migration", p);
+        // 20201208210038_hello_world.foo.bar
+        // ^^^^^^^^^^^^^^ timestamp
+        //                ^^^^^^^^^^^^^^^ stem
+        //                                ^^^ ext
+        //                            ^^^ config name
+        let stem = p.file_stem().map(|s| PathBuf::from(s));
+        let config_name = match &stem {
+            Some(stem) => stem.extension().map(|ext| ext.to_str()).flatten(),
+            None => None {},
+        };
+        let ext = p.extension();
+
+        match (config_name, ext) {
+            (Some(cn), Some(e)) => info!("found good candidate {:?}, {:?}", cn, e),
+            _ => debug!("no good candidate {:?}", p),
+        }
+    }
 }
 
 // https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
 // This should take an *absolute* path
-fn migrations_in(p: &PathBuf) -> Vec<Migration> {
-    trace!("beginning to search for migrations in {:?}", p);
-    WalkDir::new(p)
+fn migrations_in(c: &Configuration) -> Vec<Migration> {
+    trace!(
+        "beginning to search for migrations in {:?}",
+        c.migrations_directory
+    );
+    WalkDir::new(&c.migrations_directory)
         .into_iter()
         .filter_map(Result::ok)
         .filter_map(|entry| {
@@ -97,6 +156,7 @@ fn migrations_in(p: &PathBuf) -> Vec<Migration> {
                                 date_time: timestamp,
                                 steps: parts,
                                 built_in: false,
+                                runner_and_config: None {},
                             }),
                             _ => None {},
                         }
@@ -109,6 +169,7 @@ fn migrations_in(p: &PathBuf) -> Vec<Migration> {
                                 date_time: timestamp,
                                 steps: parts,
                                 built_in: false,
+                                runner_and_config: None {},
                             }),
                             _ => None {},
                         }
@@ -135,6 +196,7 @@ fn built_in_migrations() -> Vec<Migration> {
                         date_time: timestamp,
                         steps: parts,
                         built_in: true,
+                        runner_and_config: None {},
                     }),
                     _ => None {},
                 },
@@ -162,6 +224,28 @@ pub fn part_from_migration_file(
         .filter_map(|p| runner_reserved_word_from_str(&p))
         .take(1)
         .next();
+
+    // hello_world.foo.bar
+    // ^^^^^^^^^^^^^^^ stem
+    //                 ^^^ ext
+    //             ^^^ config name
+    let stem = p.file_stem().map(|s| PathBuf::from(s));
+    let config_name = match &stem {
+        Some(stem) => stem.extension().map(|ext| ext.to_str()),
+        None => None {},
+    };
+    let ext = p.extension();
+
+    // match (config_name, ext) {
+    //   // Structurally we found two dot parts in the filename, see example above,
+    //   // now we need to check the config has that key, and
+    //   (Some(config_name), Some(ext)) => {
+    //     self.runn
+    //   }
+    //   _ => {
+    //     warn!("Did not find both runner and config name file parts in {:?}", p);
+    //   }
+    // }
 
     let t = mustache::compile_str(c)?;
 
@@ -354,9 +438,18 @@ mod tests {
     }
 
     #[test]
+    fn test_the_new_thing_finds_all_the_fixtures_correctly() -> Result<(), String> {
+        let path = PathBuf::from("./test/fixtures/example-1-simple-mixed-migrations");
+        let config = Configuration::new(Some(path));
+        MigrationFinder::new(&config).migrations_in_migrations_dir();
+        Ok(())
+    }
+
+    #[test]
     fn test_the_fixture_returns_correct_results() -> Result<(), String> {
         let path = PathBuf::from("./test/fixtures/example-1-simple-mixed-migrations");
         let config = Configuration::new(Some(path));
+
         match migrations(&config) {
             Err(e) => Err(format!("Error: {:?}", e)),
             Ok(migrations) => {

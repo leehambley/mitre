@@ -40,6 +40,8 @@ pub const BASH_3: &str = "Bash3";
 pub const BASH_4: &str = "Bash4";
 /// Const "cURL". Copyright <https://curl.se/>. **Currently not supported.**
 pub const CURL: &str = "cURL";
+/// Const "Elasticsearch". **Currently not supported.**
+pub const ELASTICSEARCH: &str = "Elasticsearch";
 /// Const "Kafka". **Currently not supported.**
 pub const KAFKA: &str = "Kafka";
 /// Const "MariaDB". Prefer this name over MySQL due to Oracle. This package supports MariaDB and MySQL insofar as they are interoperable.
@@ -66,11 +68,16 @@ pub fn words() -> Vec<ReservedWord> {
       desc: "The screaming fast in-memory object store",
       exts: vec!["redis"],
   }),
-    ReservedWord::Runner(Runner {
-      name: CURL,
-      desc: "cURL",
-      exts: vec!["curl"],
-  }),
+  ReservedWord::Runner(Runner {
+    name: CURL,
+    desc: "cURL",
+    exts: vec!["curl"],
+}),
+ReservedWord::Runner(Runner {
+  name: ELASTICSEARCH,
+  desc: ELASTICSEARCH,
+  exts: vec!["es"],
+}),
     ReservedWord::Runner(Runner {
       name: BASH_3,
       desc: "GNU Bash 3",
