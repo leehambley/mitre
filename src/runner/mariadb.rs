@@ -181,7 +181,7 @@ impl crate::runner::StateStore for MariaDb {
     type MigrationStateTuple = (MigrationState, Migration);
     type MigrationResultTuple = (MigrationResult, Migration);
 
-    fn new_state_store(config: Configuration) -> Result<MariaDb, Error> {
+    fn new_state_store(config: &Configuration) -> Result<MariaDb, Error> {
         let runner_name = String::from(crate::reserved::MARIA_DB).to_lowercase();
         let mariadb_config = match config.get("mitre") {
             None => {
@@ -439,6 +439,7 @@ mod tests {
     use crate::runner::StateStore;
     use maplit::hashmap;
     use rand::Rng;
+    use std::path::PathBuf;
     use tempdir::TempDir;
 
     const TEST_DB_IP: &'static str = "127.0.0.1";
@@ -476,6 +477,11 @@ mod tests {
             None => None,
         };
         Configuration {
+            migrations_directory: PathBuf::from(
+                TempDir::new("helper_create_runner_config")
+                    .expect("could not make tmpdir")
+                    .into_path(),
+            ),
             configured_runners: hashmap! {
                 String::from("mariadb") => RunnerConfiguration {
                   _runner: String::from(crate::reserved::MARIA_DB).to_lowercase(),
@@ -568,7 +574,7 @@ mod tests {
     #[test]
     fn it_requires_a_config_with_a_table_name() -> Result<(), String> {
         let config = helper_create_runner_config(None {});
-        let mut runner = MariaDb::new_state_store(config)
+        let mut runner = MariaDb::new_state_store(&config)
             .map_err(|e| format!("Could not create state store {:?}", e))?;
         let migrations = vec![];
 
@@ -584,12 +590,10 @@ mod tests {
 
     #[test]
     fn it_returns_all_migrations_pending_if_db_does_not_exist() -> Result<(), String> {
-        let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let config = helper_create_runner_config(Some(""));
-        let mut runner = MariaDb::new_state_store(config)
+        let mut runner = MariaDb::new_state_store(&config)
             .map_err(|e| format!("Could not create state store {:?}", e))?;
-        let migrations =
-            migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
+        let migrations = migrations(&config).expect("should make at least default migrations");
 
         let x = match runner.diff(migrations) {
             Ok(pending_migrations) => {
@@ -609,13 +613,12 @@ mod tests {
     #[test]
     fn it_returns_all_migrations_pending_if_migrations_table_does_not_exist() -> Result<(), String>
     {
-        let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let test_db = helper_create_test_db()?;
+        let config = Configuration::new(Some(PathBuf::from("/tmp/any/path/here")));
 
-        let mut runner = MariaDb::new_state_store(test_db.config.clone())
+        let mut runner = MariaDb::new_state_store(&test_db.config)
             .map_err(|e| format!("Could not create state store {:?}", e))?;
-        let migrations =
-            migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
+        let migrations = migrations(&config).expect("should make at least default migrations");
 
         match runner.diff(migrations) {
             Ok(pending_migrations) => {
@@ -633,13 +636,12 @@ mod tests {
 
     #[test]
     fn migrating_up_just_the_built_in_migrations() -> Result<(), String> {
-        let tmp_dir = TempDir::new("example").expect("gen tmpdir");
         let test_db = helper_create_test_db()?;
+        let config = Configuration::new(Some(PathBuf::from("/tmp/any/path/here")));
 
-        let mut runner = MariaDb::new_state_store(test_db.config.clone())
+        let mut runner = MariaDb::new_state_store(&test_db.config)
             .map_err(|e| format!("Could not create state store {:?}", e))?;
-        let migrations =
-            migrations(tmp_dir.as_ref()).expect("should make at least default migrations");
+        let migrations = migrations(&config).expect("should make at least default migrations");
 
         // Arrange: Run up (only built-in, because tmp dir
         match runner.up(migrations.clone()) {

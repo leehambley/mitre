@@ -10,8 +10,12 @@ use std::error;
 use std::fmt;
 use std::io;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 use yaml_rust::{Yaml, YamlLoader};
+
+pub const DEFAULT_MIGRATIONS_DIR: &str = ".";
+pub const DEFAULT_CONFIG_FILE: &str = "mitre.yml";
 
 #[derive(Debug)]
 /// Describe problems with the loading, parsing and general processing
@@ -43,32 +47,22 @@ impl fmt::Display for ConfigError {
         match *self {
             // Underlying errors already impl `Display`, so we defer to
             // their implementations.
-            ConfigError::Io(ref err) => write!(f, "MITRE: IO error: {}", err),
-            ConfigError::Yaml(ref err) => write!(f, "MITRE: YAML error: {}", err),
-            ConfigError::NoYamlHash => write!(
-                f,
-                "MITRE: YAML error: the top level doc in the yaml wasn't a hash"
-            ),
-            ConfigError::NoRunnerSpecified => {
-                write!(f, "MITRE: No runner specified in config block")
+            ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
+            ConfigError::Yaml(ref err) => write!(f, "YAML error: {}", err),
+            ConfigError::NoYamlHash => {
+                write!(f, "YAML error: the top level doc in the yaml wasn't a hash")
             }
-            // ConfigError::ValueForKeyIsNotString(ref s) => {
-            //     write!(f, "Mitre: YAML error: value at key '{}' is not a string", s)
-            // }
-            // ConfigError::ValueForKeyIsNotInteger(ref s) => write!(
-            //     f,
-            //     "Mitre: YAML error: value at key '{}' is not an integer",
-            //     s
-            // ),
+            ConfigError::NoRunnerSpecified => {
+                write!(f, "No runner specified in config block")
+            }
             ConfigError::IntegerOutOfRange { value, max } => write!(
                 f,
-                "Mitre: YAML error: value '{}' is out of range, max is '{}'",
+                "YAML error: value '{}' is out of range, max is '{}'",
                 value, max
             ),
-            ConfigError::GetStringError => write!(
-                f,
-                "Mitre: YAML error: get_string() passed-thru without match"
-            ),
+            ConfigError::GetStringError => {
+                write!(f, "YAML error: get_string() passed-thru without match")
+            }
         }
     }
 }
@@ -140,6 +134,7 @@ pub enum ConfigProblem {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Configuration {
+    pub migrations_directory: PathBuf,
     pub configured_runners: HashMap<String, RunnerConfiguration>,
 }
 
@@ -168,6 +163,13 @@ pub struct RunnerConfiguration {
 }
 
 impl Configuration {
+    pub fn new(p: Option<PathBuf>) -> Configuration {
+        Configuration {
+            migrations_directory: p.unwrap_or(PathBuf::from(DEFAULT_MIGRATIONS_DIR)),
+            configured_runners: HashMap::new(),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         // TODO: write tests
         let mut problems = vec![];
@@ -306,9 +308,7 @@ fn as_string(yaml: &yaml_rust::Yaml) -> String {
 pub fn from_file(p: &Path) -> Result<Configuration, ConfigError> {
     let s = std::fs::read_to_string(p)?;
     let yaml_docs = YamlLoader::load_from_str(&s)?;
-    Ok(Configuration {
-        configured_runners: from_yaml(yaml_docs)?,
-    })
+    from_yaml(yaml_docs)
 }
 
 pub fn default_config_to_file(p: &Path) -> Result<(), ConfigError> {
@@ -344,10 +344,9 @@ mitre:
     std::fs::write(p, default_config).map_err(|err| ConfigError::Io(err))
 }
 
-fn from_yaml(
-    yaml_docs: Vec<yaml_rust::Yaml>,
-) -> Result<HashMap<String, RunnerConfiguration>, ConfigError> {
+fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigError> {
     let mut hm: HashMap<String, RunnerConfiguration> = HashMap::new();
+    let mut mig_dir = DEFAULT_MIGRATIONS_DIR;
     match yaml_docs
         .iter()
         .filter_map(|yaml| {
@@ -359,17 +358,31 @@ fn from_yaml(
         })
         .flat_map(|map| map.iter())
         .filter_map(|(k, v)| {
-            if let Yaml::Hash(value) = v {
-                let is_anchor = value.keys().find(|key| as_string(key).eq("<<"));
-                if is_anchor == None {
-                    Some((k, v))
-                } else {
-                    let anchor_element = value.iter().next(); // shows up as <<
-                    let referenced_value = anchor_element.unwrap().1;
-                    Some((k, referenced_value))
+            match k {
+                Yaml::String(key) => match key.as_str() {
+                    "migrations_directory" => {
+                        trace!("setting migrations dir from entry in config file {:?}", key);
+                        mig_dir = key;
+                    }
+                    _ => (),
+                },
+                _ => (),
+            };
+            match v {
+                Yaml::Hash(value) => {
+                    let is_anchor = value.keys().find(|key| as_string(key).eq("<<"));
+                    if is_anchor == None {
+                        Some((k, v))
+                    } else {
+                        let anchor_element = value.iter().next(); // shows up as <<
+                        let referenced_value = anchor_element.unwrap().1;
+                        Some((k, referenced_value))
+                    }
                 }
-            } else {
-                None
+                _ => {
+                    trace!("key {:?} ignored in config file", k);
+                    None {}
+                }
             }
         })
         .try_for_each(|(k, config_value)| {
@@ -396,7 +409,10 @@ fn from_yaml(
             Ok(())
         }) {
         Err(e) => Err(e),
-        Ok(_) => Ok(hm),
+        Ok(_) => Ok(Configuration {
+            migrations_directory: PathBuf::from(mig_dir),
+            configured_runners: hm,
+        }),
     }
 }
 
@@ -484,6 +500,7 @@ key: 2550000
         let yaml_docs = match YamlLoader::load_from_str(
             r#"
 ---
+migrations_dir: "./migrations/here"
 a:
   _runner: mariadb
   database: mitre
@@ -498,12 +515,12 @@ a:
             _ => return Err("doc didn't parse"),
         };
 
-        let configs = match from_yaml(yaml_docs) {
+        let config = match from_yaml(yaml_docs) {
             Err(_) => return Err("failed to load doc"),
-            Ok(configs) => configs,
+            Ok(config) => config,
         };
 
-        let c = RunnerConfiguration {
+        let rc_config_a = RunnerConfiguration {
             _runner: String::from("mariadb"),
             database: Some(String::from("mitre")),
             ip_or_hostname: Some(String::from("127.0.0.1")),
@@ -515,8 +532,38 @@ a:
             index: None {},
         };
 
-        assert_eq!(1, configs.keys().len());
-        assert_eq!(c, configs["a"]);
+        assert_eq!(1, config.configured_runners.keys().len());
+        assert_eq!(rc_config_a, config.configured_runners["a"]);
+        assert_eq!(
+            PathBuf::from(DEFAULT_MIGRATIONS_DIR),
+            config.migrations_directory
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_has_a_default_migrations_dir() -> Result<(), &'static str> {
+        let yaml_docs = match YamlLoader::load_from_str(
+            r#"
+---
+a:
+  _runner: foobarbaz
+"#,
+        ) {
+            Ok(docs) => docs,
+            _ => return Err("doc didn't parse"),
+        };
+
+        let config = match from_yaml(yaml_docs) {
+            Err(_) => return Err("failed to load doc"),
+            Ok(config) => config,
+        };
+
+        assert_eq!(
+            PathBuf::from(DEFAULT_MIGRATIONS_DIR),
+            config.migrations_directory
+        );
 
         Ok(())
     }
@@ -534,9 +581,9 @@ a:
             _ => return Err("doc didn't parse"),
         };
 
-        let configs = match from_yaml(yaml_docs) {
+        let config = match from_yaml(yaml_docs) {
             Err(_) => return Err("failed to load doc"),
-            Ok(configs) => configs,
+            Ok(config) => config,
         };
 
         let c = RunnerConfiguration {
@@ -550,8 +597,8 @@ a:
             index: None {},
         };
 
-        assert_eq!(1, configs.keys().len());
-        assert_eq!(c, configs["a"]);
+        assert_eq!(1, config.configured_runners.keys().len());
+        assert_eq!(c, config.configured_runners["a"]);
 
         match c.validate() {
             Ok(_) => return Err("expected not-ok from validate"),

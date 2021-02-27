@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use log::{info, trace, warn};
+use log::{trace, warn};
 use prettytable::{row, *};
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
@@ -47,14 +47,9 @@ fn main() {
         .subcommand(App::new("show-migrations").about("for migrations"))
         .get_matches();
 
-    let migrations_dir = Path::new(
-        m.value_of("directory")
-            .unwrap_or(mitre::DEFAULT_MIGRATIONS_DIR),
-    );
-
     let config_file = Path::new(
         m.value_of("config_file")
-            .unwrap_or(mitre::DEFAULT_CONFIG_FILE),
+            .unwrap_or(mitre::config::DEFAULT_CONFIG_FILE),
     );
 
     let config = config::from_file(config_file).expect("cannot read config");
@@ -154,7 +149,7 @@ mitre --help
         }
 
         Some("show-config") => {
-            let _mdb = MariaDb::new_state_store(config)
+            let _mdb = MariaDb::new_state_store(&config)
                 .expect("must be able to instance mariadb state store");
         }
 
@@ -169,7 +164,7 @@ mitre --help
                 "Directions"
             ]);
 
-            let mut mdb = match MariaDb::new_state_store(config) {
+            let mut mdb = match MariaDb::new_state_store(&config) {
                 Ok(mdb) => Ok(mdb),
                 Err(reason) => {
                     warn!("Error instantiating mdb {:?}", reason);
@@ -180,8 +175,7 @@ mitre --help
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow
-            info!("cool dude, no more warnings");
-            match migrations::migrations(migrations_dir) {
+            match migrations::migrations(&config) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
                     for (migration_state, m) in mdb.diff(migrations).expect("boom") {
@@ -203,10 +197,10 @@ mitre --help
         }
 
         Some("up") => {
-            match migrations::migrations(Path::new(migrations_dir)) {
+            match migrations::migrations(&config) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
-                    let mut mdb = MariaDb::new_state_store(config)
+                    let mut mdb = MariaDb::new_state_store(&config)
                         .expect("must be able to instance mariadb state store");
                     match mdb.up(migrations) {
                         Ok(_r) => println!("Ran up() successfully"),

@@ -1,4 +1,7 @@
 ---
+
+migrations_directory: "/tmp"
+
 # Each entry here is a "runner" configuration. If a
 # migration is named like ???_foo_bar.es-docker.curl
 # then there must be an entry `runner: curl` with the

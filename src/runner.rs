@@ -7,7 +7,7 @@ pub trait StateStore {
     type MigrationStateTuple;
     type MigrationResultTuple;
 
-    fn new_state_store(config: Configuration) -> Result<Self, Self::Error>
+    fn new_state_store(config: &Configuration) -> Result<Self, Self::Error>
     where
         Self: Sized;
 

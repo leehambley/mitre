@@ -1,14 +1,17 @@
 extern crate mustache;
 
 use super::reserved::{runners, Runner};
+use crate::config::Configuration;
 use rust_embed::RustEmbed;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use walkdir::WalkDir;
+
+pub const FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
 #[derive(RustEmbed)]
 #[folder = "src/migrations/"]
@@ -21,14 +24,6 @@ pub enum Direction {
     Down,
     Change,
 }
-
-// static ICONS: Map<Direction, &'static str> = phf_map! {
-//   Direction::Up => "⬆",
-//   Direction::Down => "⬇",
-//   Direction::Change => "⭬",
-// };
-
-pub const FORMAT_STR: &str = "%Y%m%d%H%M%S";
 
 #[derive(Debug)]
 pub enum MigrationsError {
@@ -78,19 +73,21 @@ pub struct Migration {
 /// and composability than any specific optimization reason.
 ///
 /// Ideally provide an absolute path.
-pub fn migrations(p: &Path) -> Result<Vec<Migration>, MigrationsError> {
+pub fn migrations(c: &Configuration) -> Result<Vec<Migration>, MigrationsError> {
     let mut m = built_in_migrations();
-    m.extend(migrations_in(p));
+    m.extend(migrations_in(&c.migrations_directory));
     Ok(m)
 }
 
 // https://rust-lang-nursery.github.io/rust-cookbook/file/dir.html
 // This should take an *absolute* path
-fn migrations_in(p: &Path) -> Vec<Migration> {
+fn migrations_in(p: &PathBuf) -> Vec<Migration> {
+    trace!("beginning to search for migrations in {:?}", p);
     WalkDir::new(p)
         .into_iter()
         .filter_map(Result::ok)
         .filter_map(|entry| {
+            trace!("migation search in {:?}", &entry);
             match extract_timestamp(entry.path().to_path_buf()) {
                 Ok(timestamp) => {
                     let path_buf = entry.path().to_path_buf();
@@ -358,8 +355,9 @@ mod tests {
 
     #[test]
     fn test_the_fixture_returns_correct_results() -> Result<(), String> {
-        let path = Path::new("./test/fixtures/example-1-simple-mixed-migrations");
-        match migrations(path.clone()) {
+        let path = PathBuf::from("./test/fixtures/example-1-simple-mixed-migrations");
+        let config = Configuration::new(Some(path));
+        match migrations(&config) {
             Err(e) => Err(format!("Error: {:?}", e)),
             Ok(migrations) => {
                 assert_eq!(migrations.len(), 4);
