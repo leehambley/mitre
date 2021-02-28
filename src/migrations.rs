@@ -1,8 +1,7 @@
 extern crate mustache;
 
-use super::reserved::{runners, Runner};
-use crate::config::Configuration;
-use crate::config::RunnerConfiguration;
+use super::reserved::{runner_by_name, runners, Runner};
+use crate::config::{Configuration, RunnerConfiguration};
 use rust_embed::RustEmbed;
 use std::collections::HashMap;
 use std::fs;
@@ -116,6 +115,10 @@ impl<'a> MigrationFinder<'a> {
     }
     fn find_migration_from_file(&mut self, p: &Path) {
         trace!("checking if {:?} looks like a migration", p);
+        let ts = match extract_timestamp(p.to_path_buf()) {
+            Ok(ts) => Some(ts),
+            Err(_e) => None {},
+        };
         // 20201208210038_hello_world.foo.bar
         // ^^^^^^^^^^^^^^ timestamp
         //                ^^^^^^^^^^^^^^^ stem
@@ -126,11 +129,40 @@ impl<'a> MigrationFinder<'a> {
             Some(stem) => stem.extension().map(|ext| ext.to_str()).flatten(),
             None => None {},
         };
-        let ext = p.extension();
+        let ext = p.extension().map(|ext| ext.to_str()).flatten();
 
-        match (config_name, ext) {
-            (Some(cn), Some(e)) => info!("found good candidate {:?}, {:?}", cn, e),
+        match (ts, config_name, ext) {
+            (Some(ts), Some(cn), Some(e)) => {
+                info!("found good candidate {:?} {:?}, {:?}", ts, cn, e);
+                let _r = self.is_configured_runner(cn, e);
+            }
             _ => debug!("no good candidate {:?}", p),
+        }
+    }
+    /// Returns
+    fn is_configured_runner(
+        &self,
+        config_name: &str,
+        ext: &str,
+    ) -> Result<(Runner, RunnerConfiguration), ()> {
+        match self.config.configured_runners.get(config_name) {
+            Some(config) => match runner_by_name(config_name) {
+                Some(runner) => match runner.exts.iter().find(|e| e == &&ext) {
+                    Some(_) => Ok((runner, config.clone())),
+                    None => {
+                        warn!("runner {} does not support ext {}", runner.name, ext);
+                        Err(())
+                    }
+                },
+                None => {
+                    warn!("no such runner {} in this version of Mitre", config_name);
+                    Err(())
+                }
+            },
+            None => {
+                warn!("no configuration found for runner {}", config_name);
+                Err(())
+            }
         }
     }
 }
