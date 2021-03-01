@@ -1,7 +1,7 @@
 pub mod mariadb;
 use crate::config::{Configuration, RunnerConfiguration};
 
-pub trait StateStore {
+pub trait StateStore<'a> {
     type Error;
     type Migration;
     type MigrationStateTuple;

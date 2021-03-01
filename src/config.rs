@@ -138,7 +138,7 @@ pub struct Configuration {
     pub configured_runners: HashMap<String, RunnerConfiguration>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub struct RunnerConfiguration {
     // Runner is not optional, but we need to option it here to maintain
     // serde::Deserialize compatibility

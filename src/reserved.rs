@@ -3,7 +3,7 @@
 //! case insensitive comparisons on runner names, the configuration file for example
 //! is not required to be capitalized any particular way.
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
 /// Runners contain a name and a list of file extensions which they know how to handle. Multiple runners
 /// may support the same file-names, the selecting factor is whether a [`crate::config::RunnerConfiguration`] exists
 /// for that combination of runner name and file extension when attempting to apply migrations.
