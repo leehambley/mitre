@@ -186,7 +186,7 @@ mitre --help
                                 Cell::new(format!("{:?}", m.built_in).as_str()).style_spec("bFy"),
                                 Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
                                 Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
-                                Cell::new(s.runner.name).style_spec("fB"),
+                                Cell::new(m.runner_and_config.0.name).style_spec("fB"),
                                 Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
                             ]));
                         });

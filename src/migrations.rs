@@ -58,41 +58,41 @@ impl From<mustache::Error> for MigrationsError {
 }
 
 #[derive(Debug, Clone)]
-pub struct MigrationStep<'a> {
-    pub path: &'a Path,
+pub struct MigrationStep {
+    pub path: PathBuf,
     pub content: mustache::Template,
     pub source: String,
 }
 
-impl<'a> Eq for MigrationStep<'a> {}
-impl<'a> PartialEq for MigrationStep<'a> {
+impl Eq for MigrationStep {}
+impl PartialEq for MigrationStep {
     fn eq(&self, other: &Self) -> bool {
         (self.path == other.path) && (self.source == other.source)
     }
 }
-impl<'a> PartialOrd for MigrationStep<'a> {
+impl<'a> PartialOrd for MigrationStep {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.source.cmp(&other.source))
     }
 }
 
-type MigrationSteps<'a> = HashMap<Direction, MigrationStep<'a>>;
+type MigrationSteps = HashMap<Direction, MigrationStep>;
 
 type RunnerAndConfiguration = (Runner, RunnerConfiguration);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Migration<'a> {
+pub struct Migration {
     pub date_time: chrono::NaiveDateTime,
-    pub steps: MigrationSteps<'a>,
+    pub steps: MigrationSteps,
     pub built_in: bool,
     pub runner_and_config: RunnerAndConfiguration, // runners are compiled-in
 }
-impl<'a> PartialOrd for Migration<'a> {
+impl<'a> PartialOrd for Migration {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.date_time.cmp(&other.date_time))
     }
 }
-impl<'a> Ord for Migration<'a> {
+impl<'a> Ord for Migration {
     fn cmp(&self, other: &Self) -> Ordering {
         self.date_time.cmp(&other.date_time)
     }
@@ -129,10 +129,7 @@ impl<'a> MigrationFinder<'a> {
         return MigrationFinder { config: c };
     }
 
-    fn migrations_in_dir<P: AsRef<Path>>(
-        &mut self,
-        p: &P,
-    ) -> Result<Vec<Migration>, MigrationsError> {
+    fn migrations_in_dir<P: AsRef<Path>>(&self, p: &P) -> Result<Vec<Migration>, MigrationsError> {
         let mut migrations: Vec<Migration> = vec![];
         for entry in fs::read_dir(p).expect("TODO: err handling") {
             info!("exploring {:?}", entry);
@@ -163,10 +160,13 @@ impl<'a> MigrationFinder<'a> {
         &self,
         path: &'a Path,
         d: Direction,
-    ) -> Result<MigrationSteps<'a>, MigrationsError> {
-        let file = File::open(path)?;
-        let mut source = String::new();
-        file.read_to_string(&mut source)?;
+    ) -> Result<MigrationSteps, MigrationsError> {
+        let source = {
+            let mut file = File::open(path)?;
+            let mut buffer = String::new();
+            file.read_to_string(&mut buffer)?;
+            buffer
+        };
         let content = mustache::compile_str(&source)?;
 
         let mut hm = HashMap::new();
@@ -175,7 +175,7 @@ impl<'a> MigrationFinder<'a> {
             MigrationStep {
                 content,
                 source,
-                path,
+                path: PathBuf::from(path),
             },
         );
         Ok(hm)
@@ -184,7 +184,7 @@ impl<'a> MigrationFinder<'a> {
     // This is used when a directory is expected to contain "up" or "down" migrations
     // lots of overlap with migration_from_file.
     // Path will always be a dirname
-    fn migration_from_dir(&mut self, dir: &Path) -> Result<Vec<Migration>, MigrationsError> {
+    fn migration_from_dir(&self, dir: &Path) -> Result<Vec<Migration>, MigrationsError> {
         trace!("checking if {:?} looks like a migration", dir);
 
         // Oh well, the safety dance
@@ -224,7 +224,7 @@ impl<'a> MigrationFinder<'a> {
         Ok(vec![])
     }
 
-    fn built_in_migrations(&self) -> Result<Vec<Migration<'a>>, MigrationsError> {
+    fn built_in_migrations(&self) -> Result<Vec<Migration>, MigrationsError> {
         Ok(BuiltInMigrations::iter()
             .filter_map(|file: Cow<'static, str>| {
                 // Reminder the .ok()? here is because we are in filter_map
@@ -275,7 +275,7 @@ impl<'a> MigrationFinder<'a> {
                                     MigrationStep {
                                         content,
                                         source,
-                                        path: &path,
+                                        path: path,
                                     },
                                 );
                                 Some(Migration {
@@ -291,6 +291,10 @@ impl<'a> MigrationFinder<'a> {
                             }
                         }
                     }
+                    _ => {
+                      warn!("no config name found, a migration has something in the filename which isn't in the configuration");
+                      None{}
+                    }
                 }
             })
             .collect())
@@ -300,7 +304,7 @@ impl<'a> MigrationFinder<'a> {
     // just because of random formatting, but we only return an errornous result incase
     // we were three-for-three finding filename traits, and we didn't find a corresponding
     // configuration
-    fn migration_from_file(&mut self, p: &'a Path) -> Result<Vec<Migration<'a>>, MigrationsError> {
+    fn migration_from_file(&self, p: &'a Path) -> Result<Vec<Migration>, MigrationsError> {
         trace!("checking if {:?} looks like a migration", p);
         // 20201208210038_hello_world.foo.bar
         // ^^^^^^^^^^^^^^ timestamp
@@ -317,7 +321,7 @@ impl<'a> MigrationFinder<'a> {
 
         match (date_time, config_name, ext) {
             (Some(date_time), Some(cn), Some(e)) => {
-                info!(
+                debug!(
                     "found migration candidate {:?} {:?}, {:?}",
                     date_time, cn, e
                 );
@@ -330,6 +334,7 @@ impl<'a> MigrationFinder<'a> {
                                 runner_and_config,
                                 steps,
                             }]),
+                            Err(e) => Err(e),
                         }
                     }
                     Err(e) => {

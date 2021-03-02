@@ -10,10 +10,9 @@ use std::convert::From;
 
 const MARIADB_MIGRATION_STATE_TABLE_NAME: &str = "mitre_migration_state";
 
-type BoxedRunner<'a> = Box<
-    dyn Runner<Error = Error<'a>, Migration = Migration<'a>, MigrationStep = MigrationStep<'a>>,
->;
-type RunnersHashMap<'a> = HashMap<RunnerReservedWord, BoxedRunner<'a>>;
+type BoxedRunner =
+    Box<dyn Runner<Error = Error, Migration = Migration, MigrationStep = MigrationStep>>;
+type RunnersHashMap = HashMap<RunnerReservedWord, BoxedRunner>;
 
 /// MariaDb is both a StateStore and a runner. The bootstrapping phase
 /// means that when no migrations have yet been run, the StateStore may
@@ -23,7 +22,7 @@ type RunnersHashMap<'a> = HashMap<RunnerReservedWord, BoxedRunner<'a>>;
 /// return that all migrations are unapplied. Once the bootstrap migration
 /// has run, it should be possible for the state store behaviour to
 /// properly store results.
-pub struct MariaDb<'a> {
+pub struct MariaDb {
     conn: Conn,
 
     // All configurations because as a state-store MariaDb also
@@ -36,7 +35,7 @@ pub struct MariaDb<'a> {
     runner_config: RunnerConfiguration,
 
     // Runners in a muxed'ed hashmap. This hashmap is keyed by [`crate::reserved::Runner`]
-    runners: RunnersHashMap<'a>,
+    runners: RunnersHashMap,
 }
 
 #[derive(PartialEq, Debug)]
@@ -54,7 +53,7 @@ pub enum MigrationResult {
 }
 
 #[derive(Debug)]
-pub enum Error<'a> {
+pub enum Error {
     /// Shadowing the errors from the mysql crate to have them type-safely in our scope.
     MariaDb(mysql::Error),
     /// The configuration did not contain a `mitre: ...` block
@@ -74,7 +73,7 @@ pub enum Error<'a> {
     // (reason, the template)
     TemplateError(String, mustache::Template),
     ErrorRunningMigration(String),
-    MigrationHasFailed(String, Migration<'a>),
+    MigrationHasFailed(String, Migration),
 
     /// When in StateStore mode, we need to instantiate runners
     /// from configurations, if we fail to do that, we'll bubble
@@ -85,18 +84,18 @@ pub enum Error<'a> {
     ErrorRunningQuery,
 }
 
-impl<'a> From<mysql::Error> for Error<'a> {
-    fn from(err: mysql::Error) -> Error<'static> {
+impl From<mysql::Error> for Error {
+    fn from(err: mysql::Error) -> Error {
         Error::MariaDb(err)
     }
 }
 
 /// Helper methods for MariaDb (non-public) used in the context
 /// of fulfilling the implementation of the runner::Runner trait.
-impl<'a> MariaDb<'a> {
+impl MariaDb {
     /// Given the set of runner configs on config, this will
     /// try to create a
-    fn get_runner(&mut self, m: &Migration) -> Result<&mut BoxedRunner<'a>, Error> {
+    fn get_runner(&mut self, m: &Migration) -> Result<&mut BoxedRunner, Error> {
         // If we have a cached runner miss, let's
         trace!("looking up runner for {}", m.runner_and_config.0.name);
         if self.runners.get(&m.runner_and_config.0).is_none() {
@@ -176,11 +175,11 @@ impl<'a> MariaDb<'a> {
     }
 }
 
-impl<'a> crate::runner::StateStore for MariaDb<'a> {
-    type Error = Error<'a>;
-    type Migration = Migration<'a>;
-    type MigrationStateTuple = (MigrationState, Migration<'a>);
-    type MigrationResultTuple = (MigrationResult, Migration<'a>);
+impl crate::runner::StateStore for MariaDb {
+    type Error = Error;
+    type Migration = Migration;
+    type MigrationStateTuple = (MigrationState, Migration);
+    type MigrationResultTuple = (MigrationResult, Migration);
 
     fn new_state_store(config: &Configuration) -> Result<MariaDb, Error> {
         let runner_name = String::from(crate::reserved::MARIA_DB).to_lowercase();
@@ -223,7 +222,7 @@ impl<'a> crate::runner::StateStore for MariaDb<'a> {
     fn up(
         &mut self,
         migrations: Vec<Self::Migration>,
-    ) -> Result<Vec<Self::MigrationResultTuple>, Error<'a>> {
+    ) -> Result<Vec<Self::MigrationResultTuple>, Error> {
         Ok(self
             .diff(migrations)?
             .into_iter()
@@ -342,12 +341,12 @@ impl<'a> crate::runner::StateStore for MariaDb<'a> {
     }
 }
 
-impl crate::runner::Runner for MariaDb<'_> {
-    type Error = Error<'static>;
-    type Migration = Migration<'a>;
-    type MigrationStep = MigrationStep<'a>;
+impl crate::runner::Runner for MariaDb {
+    type Error = Error;
+    type Migration = Migration;
+    type MigrationStep = MigrationStep;
 
-    fn new_runner(config: RunnerConfiguration) -> Result<MariaDb, Error<'static>> {
+    fn new_runner(config: RunnerConfiguration) -> Result<MariaDb, Error> {
         let runner_name = String::from(crate::reserved::MARIA_DB).to_lowercase();
         if config._runner.to_lowercase() != runner_name {
             return Err(Error::RunnerNameMismatch {
