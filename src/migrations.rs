@@ -129,18 +129,25 @@ impl<'a> MigrationFinder<'a> {
         return MigrationFinder { config: c };
     }
 
-    fn migrations_in_dir<P: AsRef<Path>>(&self, p: &P) -> Result<Vec<Migration>, MigrationsError> {
+    fn migrations_in_dir<P: AsRef<Path> + std::fmt::Debug>(
+        &self,
+        p: &P,
+    ) -> Result<Vec<Migration>, MigrationsError> {
         let mut migrations: Vec<Migration> = vec![];
-        for entry in fs::read_dir(p).expect("TODO: err handling") {
-            info!("exploring {:?}", entry);
+        for entry in fs::read_dir(p)? {
             match entry {
                 Ok(e) => match e.metadata() {
                     Ok(m) => match m.is_file() {
                         true => migrations.extend(self.migration_from_file(&e.path())?),
-                        false => {
-                            migrations.extend(self.migrations_in_dir(&e.path())?);
-                            migrations.extend(self.migration_from_dir(&e.path())?);
-                        }
+                        false => match m.is_dir() {
+                            true => {
+                                migrations.extend(self.migrations_in_dir(&e.path())?);
+                                migrations.extend(self.migration_from_dir(&e.path())?);
+                            }
+                            false => {
+                                debug!("{:?} is neither file nor directory (socket or symlink?)", p)
+                            }
+                        },
                     },
                     Err(e) => warn!("entry metadata err {}", e),
                 },
@@ -185,7 +192,7 @@ impl<'a> MigrationFinder<'a> {
     // lots of overlap with migration_from_file.
     // Path will always be a dirname
     fn migration_from_dir(&self, dir: &Path) -> Result<Vec<Migration>, MigrationsError> {
-        trace!("checking if {:?} looks like a migration", dir);
+        // trace!("checking if {:?} looks like a migration", dir);
 
         // Oh well, the safety dance
         // Ah yes, the safety dance
@@ -279,7 +286,7 @@ impl<'a> MigrationFinder<'a> {
                                     },
                                 );
                                 Some(Migration {
-                                    built_in: false,
+                                    built_in: true,
                                     date_time,
                                     runner_and_config,
                                     steps,
@@ -305,7 +312,7 @@ impl<'a> MigrationFinder<'a> {
     // we were three-for-three finding filename traits, and we didn't find a corresponding
     // configuration
     fn migration_from_file(&self, p: &'a Path) -> Result<Vec<Migration>, MigrationsError> {
-        trace!("checking if {:?} looks like a migration", p);
+        // trace!("checking if {:?} looks like a migration", p);
         // 20201208210038_hello_world.foo.bar
         // ^^^^^^^^^^^^^^ timestamp
         //                ^^^^^^^^^^^^^^^ stem
@@ -344,7 +351,7 @@ impl<'a> MigrationFinder<'a> {
                 }
             }
             _ => {
-                debug!("no good candidate {:?}", p);
+                // debug!("no good candidate {:?}", p);
                 Ok(vec![])
             }
         }
@@ -358,8 +365,13 @@ impl<'a> MigrationFinder<'a> {
         config_name: &str,
         ext: &str,
     ) -> Result<RunnerAndConfiguration, String> {
+        trace!(
+            "{} config name is, configured runners is {:#?}",
+            config_name,
+            self.config.configured_runners
+        );
         match self.config.configured_runners.get(config_name) {
-            Some(config) => match runner_by_name(config_name) {
+            Some(config) => match runner_by_name(&config._runner) {
                 Some(runner) => match runner.exts.iter().find(|e| e == &&ext) {
                     Some(_) => Ok((runner, config.clone())),
                     None => Err(format!(
@@ -369,7 +381,7 @@ impl<'a> MigrationFinder<'a> {
                 },
                 None => Err(format!(
                     "no such runner {} in this version of Mitre",
-                    config_name
+                    &config._runner
                 )),
             },
             None => Err(format!("no configuration found for runner {}", config_name)),

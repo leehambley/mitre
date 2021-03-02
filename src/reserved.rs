@@ -133,7 +133,7 @@ pub fn runners() -> impl Iterator<Item = Runner> {
 
 /// Maybe return a [`Runner`] by **strictly** matching including case sensitivity
 pub fn runner_by_name(s: &str) -> Option<Runner> {
-    runners().find(|r| r.name == s)
+    runners().find(|r| r.name.to_lowercase() == s.to_lowercase())
 }
 
 #[cfg(test)]

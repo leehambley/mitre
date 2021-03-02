@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use log::{debug, trace, warn};
+use log::{debug, error, trace, warn};
 use prettytable::{row, *};
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
@@ -27,15 +27,14 @@ fn main() {
                 .value_name("CONFIG FILE")
                 .about("The configuration file to use"),
         )
-        .arg(
-            Arg::with_name("directory")
-                .long("directory")
-                .short('d')
-                .takes_value(true)
-                .value_name("MIGRATION DIR")
-                .about("The directory to use"),
+        .subcommand(App::new("init").about("creates configuration and migrations directory")).arg(
+          Arg::with_name("directory")
+              .long("directory")
+              .short('d')
+              .takes_value(true)
+              .value_name("MIGRATION DIR")
+              .about("The directory to use"),
         )
-        .subcommand(App::new("init").about("creates configuration and migrations directory"))
         .subcommand(
             App::new("reserved-words")
                 .about("utilties for reserved words")
@@ -61,7 +60,7 @@ fn main() {
         Some("init") => {
             let config_path = m
                 .value_of("config_file")
-                .unwrap_or(mitre::DEFAULT_CONFIG_FILE);
+                .unwrap_or(mitre::config::DEFAULT_CONFIG_FILE);
             let migrations_dir = m.value_of("directory").unwrap_or("./migrations");
 
             if !Path::new(config_path).is_file() {
@@ -177,7 +176,7 @@ mitre --help
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow
             match migrations::migrations(&config) {
-                Err(e) => panic!("Error: {:?}", e),
+                Err(e) => error!("Error: {:?}", e),
                 Ok(migrations) => {
                     for (migration_state, m) in mdb.diff(migrations).expect("boom") {
                         m.clone().steps.into_iter().for_each(|(direction, s)| {
