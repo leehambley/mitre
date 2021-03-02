@@ -361,8 +361,15 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
             match k {
                 Yaml::String(key) => match key.as_str() {
                     "migrations_directory" => {
-                        trace!("setting migrations dir from entry in config file {:?}", key);
-                        mig_dir = key;
+                        trace!(
+                            "setting migrations dir from entry in config file {:?} to {:?}",
+                            key,
+                            v
+                        );
+                        mig_dir = match v {
+                            Yaml::String(value) => value,
+                            _ => panic!("must be a string value for migrations_directory"),
+                        }
                     }
                     _ => (),
                 },

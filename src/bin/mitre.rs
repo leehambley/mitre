@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use log::{trace, warn};
+use log::{debug, trace, warn};
 use prettytable::{row, *};
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
@@ -53,6 +53,7 @@ fn main() {
     );
 
     let config = config::from_file(config_file).expect("cannot read config");
+    debug!("Config is {:#?}", config);
 
     // Validate config contains a mitre runner
 
