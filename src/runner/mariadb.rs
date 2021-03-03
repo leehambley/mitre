@@ -425,7 +425,10 @@ impl crate::runner::Runner for MariaDb {
 #[cfg(test)]
 #[ctor::ctor]
 fn init() {
-    env_logger::init();
+    env_logger::Builder::new()
+        .filter_level(log::LevelFilter::Trace)
+        .init();
+    // env_logger::init();
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
-extern crate mustache;
-
-use super::reserved::{runner_by_name, Runner};
 use crate::config::{Configuration, RunnerConfiguration};
+/// Migration look-up functions. Explore the filesystem looking for
+/// files matching the migration naming rules.
+use crate::reserved::{runner_by_name, Runner};
 use core::cmp::Ordering;
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
@@ -100,19 +100,17 @@ impl<'a> Ord for Migration {
 
 /// List all migrations known in the given context.
 ///
-/// Returns a lazy iterator, or some wrapped error from std::io
-/// or the template library (Mustache).
+/// The file discovery will ignore a lot of files, hidden folders,
+/// anything ignored by git's local or global ignores and some other
+/// rules as described [here](https://docs.rs/ignore/0.4.17/ignore/struct.WalkBuilder.html#ignore-rules).
 ///
-/// Order of the returned migrations is not guaranteed as the filesytem
-/// walk cannot be guaranteed to run a specific way, also depending on
-/// system locale the built-in migrations (Mitre's own migration management migrations)
-/// may be interspersed.
+/// Order of the returned migrations is guaranteed by sorting the YYYYMMDDHHMMSS timestamp in ascending order (ordinal).AsRef
 ///
 /// Runners must *run* these in chronological order to maintain the library
-/// guarantees, so the lazy iterator is used more for it's neat interface
-/// and composability than any specific optimization reason.
+/// guarantees.
 ///
-/// Ideally provide an absolute path.
+/// Ideally provide an absolute path. When giving a relative path in the config (e.g ".") the relative
+/// path should be appended to the (ideally) absolute path.
 pub fn migrations(c: &Configuration) -> Result<Vec<Migration>, MigrationsError> {
     let mf = MigrationFinder::new(c);
     let mut m = mf.built_in_migrations()?;
@@ -134,14 +132,13 @@ impl<'a> MigrationFinder<'a> {
         p: &P,
     ) -> Result<Vec<Migration>, MigrationsError> {
         let mut migrations: Vec<Migration> = vec![];
-        for entry in fs::read_dir(p)? {
+        for entry in ignore::Walk::new(p) {
             match entry {
                 Ok(e) => match e.metadata() {
                     Ok(m) => match m.is_file() {
                         true => migrations.extend(self.migration_from_file(&e.path())?),
                         false => match m.is_dir() {
                             true => {
-                                migrations.extend(self.migrations_in_dir(&e.path())?);
                                 migrations.extend(self.migration_from_dir(&e.path())?);
                             }
                             false => {
@@ -215,18 +212,28 @@ impl<'a> MigrationFinder<'a> {
         //                            ^^^ ext
         //
         // files in the directory will be checked right after
-        let date_time = extract_timestamp(dir).ok();
-        let config_name = dir.extension().map(|ext| ext.to_str());
+        let _date_time = extract_timestamp(dir).ok();
+        let _config_name = dir.extension().map(|ext| ext.to_str());
 
         // We're not interested in recursing here, simple dir read is fine
         let dir_files: Vec<PathBuf> = fs::read_dir(dir)?
             .into_iter()
             .filter_map(|r| r.ok())
-            .map(|r| r.path())
-            .filter(|r| r.is_file())
+            .map(|entry| entry.path())
+            .filter(|path| path.is_file())
+            .filter_map(|path| match (path.file_stem(), path.extension()) {
+                (Some(stem), Some(_)) => match stem.to_str()? {
+                    "up" => Some(path),
+                    "down" => Some(path),
+                    _ => None,
+                },
+                _ => None,
+            })
             .collect();
 
-        warn!("dir files is {:?}", dir_files);
+        if dir_files.len() > 0 {
+            error!("dir files {:?}", dir_files);
+        }
 
         Ok(vec![])
     }
@@ -293,7 +300,7 @@ impl<'a> MigrationFinder<'a> {
                                 })
                             }
                             Err(e) => {
-                                error!("configuration for built-in runner not provided");
+                                error!("configuration for built-in runner not provided ({})", e);
                                 None {}
                             }
                         }

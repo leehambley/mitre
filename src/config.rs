@@ -11,10 +11,14 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
 use yaml_rust::{Yaml, YamlLoader};
 
+// This is evaluated relative to the configuration file, so the file makes sense
+// in context of itself and doesn't depend so much on the runner's effective CWD.
 pub const DEFAULT_MIGRATIONS_DIR: &str = ".";
+
+// Most examples are using config.yml, but let's be honest, in a complicated
+// polyglot project, we're probably not the only ones looking for that name!
 pub const DEFAULT_CONFIG_FILE: &str = "mitre.yml";
 
 #[derive(Debug)]
@@ -211,42 +215,6 @@ impl RunnerConfiguration {
     }
 }
 
-/// Reads patterns to exclude from the .gitignore file, an excludesfile
-/// if configured locally or globally. Requires `git` to be on the Path
-/// which is a safe bet.
-///
-/// <https://docs.github.com/en/github/using-git/ignoring-files>
-//
-// TODO Ensure this works on Windows?
-// TODO extract in a library?
-pub fn ignore_patterns() -> Result<Vec<String>, io::Error> {
-    let unshared_excludesfile = String::from(".git/info/exclude");
-    let default_excludesfile = String::from(".gitignore");
-    let local_excludesfile = Command::new("git")
-        .arg("config")
-        .arg("core.excludesfile")
-        .output()
-        .expect("failed to execute process");
-    let global_excludesfile = Command::new("git")
-        .arg("config")
-        .arg("core.excludesfile")
-        .output()
-        .expect("failed to execute process");
-
-    let global_excludes = String::from_utf8(global_excludesfile.stdout)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-    let local_excludes = String::from_utf8(local_excludesfile.stdout)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-
-    //.filter_map( |s| s.map(|s| Path::from(s) )).collect()
-    Ok(vec![
-        global_excludes,
-        default_excludesfile,
-        local_excludes,
-        unshared_excludesfile,
-    ])
-}
-
 fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &str) -> Result<yaml_rust::Yaml, ConfigError> {
     match yaml {
         Yaml::Hash(ref map) => {
@@ -308,7 +276,12 @@ fn as_string(yaml: &yaml_rust::Yaml) -> String {
 pub fn from_file(p: &Path) -> Result<Configuration, ConfigError> {
     let s = std::fs::read_to_string(p)?;
     let yaml_docs = YamlLoader::load_from_str(&s)?;
-    from_yaml(yaml_docs)
+    from_yaml(yaml_docs).and_then(|mut c| {
+        if c.migrations_directory.is_relative() {
+            c.migrations_directory = p.parent().unwrap().join(c.migrations_directory);
+        }
+        Ok(c)
+    })
 }
 
 pub fn default_config_to_file(p: &Path) -> Result<(), ConfigError> {
@@ -427,6 +400,9 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
 mod tests {
     use super::*;
     use tempfile::tempdir;
+    use std::fs::File;
+    use std::io::Write;
+    use tempdir::TempDir;
     use yaml_rust::YamlLoader;
 
     // -> fn validate_on_config_structs
@@ -573,6 +549,31 @@ a:
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn defaults_the_migrations_directory_relative_to_the_file_directory() -> Result<(), String> {
+        let example_config = r#"
+---
+# migrations_directory: "." # is implied here because of the default value
+mitre:
+  _runner: mariadb
+      "#;
+
+        let tmp_dir = TempDir::new("example").expect("must be able to make tmpdir");
+        let path = tmp_dir.path().join("config.yml").clone();
+
+        let mut file = File::create(&path).expect("couldn't create tmpfile");
+        file.write_all(example_config.as_bytes())
+            .expect("coulnd't write file");
+
+        match from_file(&path) {
+            Ok(c) => {
+                assert_eq!(&c.migrations_directory, tmp_dir.path());
+                Ok(())
+            }
+            Err(e) => Err(format!("error is {}", e)),
+        }
     }
 
     #[test]

@@ -11,7 +11,10 @@ use mitre::runner::mariadb::MariaDb;
 use mitre::runner::StateStore;
 
 fn main() {
-    env_logger::init();
+    env_logger::Builder::new()
+        .filter(None, log::LevelFilter::Info)
+        .parse_env("MITRE_LOG")
+        .init();
 
     trace!("starting");
 
@@ -20,7 +23,7 @@ fn main() {
         .author("Lee Hambley <lee.hambley@gmail.com>")
         .about("CLI runner for migrations")
         .arg(
-            Arg::with_name("config_file")
+            Arg::new("config_file")
                 .long("config")
                 .short('c')
                 .takes_value(true)
@@ -28,7 +31,7 @@ fn main() {
                 .about("The configuration file to use"),
         )
         .subcommand(App::new("init").about("creates configuration and migrations directory")).arg(
-          Arg::with_name("directory")
+          Arg::new("directory")
               .long("directory")
               .short('d')
               .takes_value(true)
@@ -51,7 +54,18 @@ fn main() {
             .unwrap_or(mitre::config::DEFAULT_CONFIG_FILE),
     );
 
-    let config = config::from_file(config_file).expect("cannot read config");
+    let config = match config::from_file(config_file) {
+        Ok(c) => c,
+        Err(e) => {
+            error!(
+                "Problem reading configuration file {}: {}",
+                config_file.display(),
+                e
+            );
+            std::process::exit(1);
+        }
+    };
+
     debug!("Config is {:#?}", config);
 
     // Validate config contains a mitre runner
@@ -69,9 +83,8 @@ fn main() {
                         println!("Created Mitre config at {}", config_path);
                     }
                     Err(e) => {
-                        let err =
-                            format!("Could not create Mitre config at {}: {}", config_path, e);
-                        panic!(err)
+                        error!("Could not create Mitre config at {}: {}", config_path, e);
+                        std::process::exit(1);
                     }
                 }
             } else {
@@ -84,11 +97,11 @@ fn main() {
                         println!("Created Mitre migrations directory at {}", migrations_dir);
                     }
                     Err(e) => {
-                        let err = format!(
+                        error!(
                             "Could not create Mitre migrations directory at {}: {}",
                             migrations_dir, e
                         );
-                        panic!(err)
+                        std::process::exit(1);
                     }
                 }
 
@@ -117,8 +130,8 @@ mitre --help
                         );
                     }
                     Err(e) => {
-                        let err = format!("Could not create README in Mitres migrations directory at {}/README.md: {}", migrations_dir, e);
-                        panic!(err)
+                        error!("Could not create README in migrations directory at {}/README.md: {}", migrations_dir, e);
+                        std::process::exit(1);
                     }
                 }
             } else {
