@@ -1,6 +1,12 @@
+use crate::config;
+use crate::config::Configuration;
 use crate::migrations::Migration;
+use crate::runner::mariadb::MariaDb;
+use crate::runner::Runner;
+
 use actix_web::{web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
+use std::path::Path;
 use std::sync::Mutex;
 
 use webbrowser;
@@ -22,17 +28,19 @@ struct MigrationsTemplate<'a> {
 
 struct AppData {
     migrations: Mutex<Vec<Migration>>,
+    runner: Mutex<MariaDb>,
 }
 
 async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
-    let migrations = &mut data.migrations.lock().unwrap();
+    let migrations = data.migrations.lock().unwrap();
+    let mut runner = data.runner.lock().unwrap();
 
     let mut v: Vec<MigrationTableRow> = Vec::new();
 
-    for m in migrations.iter() {
+    for (migration_state, m) in runner.diff(migrations.to_vec()).expect("boom") {
         m.clone().steps.into_iter().for_each(|(direction, s)| {
             v.push(MigrationTableRow {
-                state: String::from("N/A"),
+                state: format!("{:?}", migration_state),
                 built_in: m.built_in,
                 date_time: String::from(format!("{:?}", m.date_time)),
                 path: format!("{:?}", s.path),
@@ -49,13 +57,21 @@ async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
 }
 
 #[actix_web::main]
-pub async fn start_web_ui(migrations: Vec<Migration>, open: bool) -> std::io::Result<()> {
+pub async fn start_web_ui(
+    config_file: &'static Path,
+    migrations: Vec<Migration>,
+    open: bool,
+) -> std::io::Result<()> {
     info!("mig {:?}", migrations);
     let url = "127.0.0.1:8000";
     let server = HttpServer::new(move || {
         App::new()
             .data(AppData {
                 migrations: Mutex::new(migrations.clone()),
+                runner: Mutex::new(
+                    MariaDb::new(config::from_file(config_file).expect("cannot read config"))
+                        .expect("must be able to instance mariadb runner"),
+                ),
             })
             .route("/", web::get().to(index))
     })
