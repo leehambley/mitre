@@ -7,3 +7,4 @@ pub mod migrations;
 pub mod reserved;
 pub mod runner;
 pub mod state_store;
+pub mod ui;

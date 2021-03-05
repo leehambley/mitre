@@ -8,7 +8,8 @@ use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
 use mitre::runner::mariadb::MariaDb;
-use mitre::runner::StateStore;
+use mitre::runner::Runner;
+use mitre::ui::start_web_ui;
 
 fn main() {
     env_logger::Builder::new()
@@ -43,6 +44,7 @@ fn main() {
                 .about("utilties for reserved words")
                 .subcommand(App::new("ls").about("list reserved words")),
         )
+        .subcommand(App::new("ui").about("starts the web-based UI"))
         .subcommand(App::new("ls").about("list all migrations and their status"))
         .subcommand(App::new("up").about("run migrations up to the current timestamp"))
         .subcommand(App::new("show-config").about("for showing config file"))
@@ -325,6 +327,26 @@ mitre --help
             //     });
             //     table.printstd();
             // }
+        }
+        Some("ui") => {
+            info!("Starting webserver");
+            match migrations::migrations(Path::new(migrations_dir)) {
+                Ok(migrations) => {
+                    info!("Opening webserver");
+                    // TODO: Add a flag to enable / disable open
+                    match start_web_ui(migrations, true) {
+                        Ok(_) => {
+                            info!("Closing webserver")
+                        }
+                        Err(err) => {
+                            info!("Error starting webserver {}", err)
+                        }
+                    }
+                }
+                Err(_) => {
+                    info!("Error finding migrations")
+                }
+            }
         }
         Some("down") => {} // down was used
         Some("redo") => {} // redo was used
