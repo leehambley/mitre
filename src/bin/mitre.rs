@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use log::{debug, error, trace, warn};
+use log::{debug, error, info, trace, warn};
 use prettytable::{row, *};
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
@@ -8,7 +8,7 @@ use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
 use mitre::runner::mariadb::MariaDb;
-use mitre::runner::Runner;
+use mitre::runner::StateStore;
 use mitre::ui::start_web_ui;
 
 fn main() {
@@ -31,13 +31,14 @@ fn main() {
                 .value_name("CONFIG FILE")
                 .about("The configuration file to use"),
         )
-        .subcommand(App::new("init").about("creates configuration and migrations directory")).arg(
-          Arg::new("directory")
-              .long("directory")
-              .short('d')
-              .takes_value(true)
-              .value_name("MIGRATION DIR")
-              .about("The directory to use"),
+        .subcommand(App::new("init").about("creates configuration and migrations directory"))
+        .arg(
+            Arg::new("directory")
+                .long("directory")
+                .short('d')
+                .takes_value(true)
+                .value_name("MIGRATION DIR")
+                .about("The directory to use"),
         )
         .subcommand(
             App::new("reserved-words")
@@ -132,7 +133,10 @@ mitre --help
                         );
                     }
                     Err(e) => {
-                        error!("Could not create README in migrations directory at {}/README.md: {}", migrations_dir, e);
+                        error!(
+                            "Could not create README in migrations directory at {}/README.md: {}",
+                            migrations_dir, e
+                        );
                         std::process::exit(1);
                     }
                 }
@@ -330,7 +334,7 @@ mitre --help
         }
         Some("ui") => {
             info!("Starting webserver");
-            match migrations::migrations(Path::new(migrations_dir)) {
+            match migrations::migrations(&config) {
                 Ok(migrations) => {
                     info!("Opening webserver");
                     // TODO: Add a flag to enable / disable open

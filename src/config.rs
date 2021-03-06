@@ -6,7 +6,6 @@ extern crate yaml_rust;
 
 use super::reserved;
 use std::collections::HashMap;
-use std::error;
 use std::fmt;
 use std::io;
 use std::path::Path;
@@ -382,10 +381,10 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs::File;
     use std::io::Write;
     use tempdir::TempDir;
+    use tempfile::tempdir;
     use yaml_rust::YamlLoader;
 
     // -> fn validate_on_config_structs
