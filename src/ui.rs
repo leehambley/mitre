@@ -3,6 +3,7 @@ use crate::config::Configuration;
 use crate::migrations::Migration;
 use crate::runner::mariadb::MariaDb;
 use crate::runner::Runner;
+use std::path::PathBuf;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
@@ -58,7 +59,7 @@ async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
 
 #[actix_web::main]
 pub async fn start_web_ui(
-    config_file: &'static Path,
+    config_file: PathBuf,
     migrations: Vec<Migration>,
     open: bool,
 ) -> std::io::Result<()> {
@@ -69,8 +70,8 @@ pub async fn start_web_ui(
             .data(AppData {
                 migrations: Mutex::new(migrations.clone()),
                 runner: Mutex::new(
-                    MariaDb::new(config::from_file(config_file).expect("cannot read config"))
-                        .expect("must be able to instance mariadb runner"),
+                    MariaDb::new(config::from_file(&config_file).expect("cannot read config"))
+                        .expect("must be able to instance mariad  b runner"),
                 ),
             })
             .route("/", web::get().to(index))

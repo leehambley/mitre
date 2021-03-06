@@ -334,14 +334,7 @@ mitre --help
                 Ok(migrations) => {
                     info!("Opening webserver");
                     // TODO: Add a flag to enable / disable open
-                    match start_web_ui(
-                        Path::new(
-                            m.value_of("config_file")
-                                .unwrap_or(mitre::DEFAULT_CONFIG_FILE),
-                        ),
-                        migrations,
-                        true,
-                    ) {
+                    match start_web_ui(config_file.to_path_buf(), migrations, true) {
                         Ok(_) => {
                             info!("Closing webserver")
                         }
