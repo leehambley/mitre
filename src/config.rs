@@ -71,23 +71,6 @@ impl fmt::Display for ConfigError {
     }
 }
 
-impl error::Error for ConfigError {
-    fn cause(&self) -> Option<&dyn error::Error> {
-        match *self {
-            // N.B. implicitly cast `err` from their concrete
-            // types (either `&io::Error` or `&num::ParseIntError`)
-            // to a trait object `&Error`. This works because both error types
-            // implement `Error`.
-            ConfigError::Io(ref err) => Some(err),
-            ConfigError::Yaml(ref err) => Some(err),
-            ConfigError::NoYamlHash => None {},
-            ConfigError::NoRunnerSpecified => None {},
-            ConfigError::GetStringError => None {},
-            ConfigError::IntegerOutOfRange { value: _, max: _ } => None {},
-        }
-    }
-}
-
 impl From<io::Error> for ConfigError {
     fn from(err: io::Error) -> ConfigError {
         ConfigError::Io(err)
