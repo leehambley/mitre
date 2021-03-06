@@ -372,11 +372,6 @@ impl<'a> MigrationFinder<'a> {
         config_name: &str,
         ext: &str,
     ) -> Result<RunnerAndConfiguration, String> {
-        trace!(
-            "{} config name is, configured runners is {:#?}",
-            config_name,
-            self.config.configured_runners
-        );
         match self.config.configured_runners.get(config_name) {
             Some(config) => match runner_by_name(&config._runner) {
                 Some(runner) => match runner.exts.iter().find(|e| e == &&ext) {
