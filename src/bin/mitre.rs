@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use log::{info, trace};
+use log::{debug, error, trace, warn};
 use prettytable::{row, *};
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
@@ -8,10 +8,13 @@ use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
 use mitre::runner::mariadb::MariaDb;
-use mitre::runner::Runner;
+use mitre::runner::StateStore;
 
 fn main() {
-    env_logger::init();
+    env_logger::Builder::new()
+        .filter(None, log::LevelFilter::Info)
+        .parse_env("MITRE_LOG")
+        .init();
 
     trace!("starting");
 
@@ -20,22 +23,21 @@ fn main() {
         .author("Lee Hambley <lee.hambley@gmail.com>")
         .about("CLI runner for migrations")
         .arg(
-            Arg::with_name("config_file")
+            Arg::new("config_file")
                 .long("config")
                 .short('c')
                 .takes_value(true)
                 .value_name("CONFIG FILE")
                 .about("The configuration file to use"),
         )
-        .arg(
-            Arg::with_name("directory")
-                .long("directory")
-                .short('d')
-                .takes_value(true)
-                .value_name("MIGRATION DIR")
-                .about("The directory to use"),
+        .subcommand(App::new("init").about("creates configuration and migrations directory")).arg(
+          Arg::new("directory")
+              .long("directory")
+              .short('d')
+              .takes_value(true)
+              .value_name("MIGRATION DIR")
+              .about("The directory to use"),
         )
-        .subcommand(App::new("init").about("creates configuration and migrations directory"))
         .subcommand(
             App::new("reserved-words")
                 .about("utilties for reserved words")
@@ -47,17 +49,24 @@ fn main() {
         .subcommand(App::new("show-migrations").about("for migrations"))
         .get_matches();
 
-    let migrations_dir = Path::new(
-        m.value_of("directory")
-            .unwrap_or(mitre::DEFAULT_MIGRATIONS_DIR),
-    );
-
     let config_file = Path::new(
         m.value_of("config_file")
-            .unwrap_or(mitre::DEFAULT_CONFIG_FILE),
+            .unwrap_or(mitre::config::DEFAULT_CONFIG_FILE),
     );
 
-    let config = config::from_file(config_file).expect("cannot read config");
+    let config = match config::from_file(config_file) {
+        Ok(c) => c,
+        Err(e) => {
+            error!(
+                "Problem reading configuration file {}: {}",
+                config_file.display(),
+                e
+            );
+            std::process::exit(1);
+        }
+    };
+
+    debug!("Config is {:#?}", config);
 
     // Validate config contains a mitre runner
 
@@ -65,7 +74,7 @@ fn main() {
         Some("init") => {
             let config_path = m
                 .value_of("config_file")
-                .unwrap_or(mitre::DEFAULT_CONFIG_FILE);
+                .unwrap_or(mitre::config::DEFAULT_CONFIG_FILE);
             let migrations_dir = m.value_of("directory").unwrap_or("./migrations");
 
             if !Path::new(config_path).is_file() {
@@ -74,9 +83,8 @@ fn main() {
                         println!("Created Mitre config at {}", config_path);
                     }
                     Err(e) => {
-                        let err =
-                            format!("Could not create Mitre config at {}: {}", config_path, e);
-                        panic!(err)
+                        error!("Could not create Mitre config at {}: {}", config_path, e);
+                        std::process::exit(1);
                     }
                 }
             } else {
@@ -89,11 +97,11 @@ fn main() {
                         println!("Created Mitre migrations directory at {}", migrations_dir);
                     }
                     Err(e) => {
-                        let err = format!(
+                        error!(
                             "Could not create Mitre migrations directory at {}: {}",
                             migrations_dir, e
                         );
-                        panic!(err)
+                        std::process::exit(1);
                     }
                 }
 
@@ -122,8 +130,8 @@ mitre --help
                         );
                     }
                     Err(e) => {
-                        let err = format!("Could not create README in Mitres migrations directory at {}/README.md: {}", migrations_dir, e);
-                        panic!(err)
+                        error!("Could not create README in migrations directory at {}/README.md: {}", migrations_dir, e);
+                        std::process::exit(1);
                     }
                 }
             } else {
@@ -154,7 +162,8 @@ mitre --help
         }
 
         Some("show-config") => {
-            let _mdb = MariaDb::new(config).expect("must be able to instance mariadb runner");
+            let _mdb = MariaDb::new_state_store(&config)
+                .expect("must be able to instance mariadb state store");
         }
 
         Some("ls") => {
@@ -168,13 +177,19 @@ mitre --help
                 "Directions"
             ]);
 
-            let mut mdb = MariaDb::new(config).expect("must be able to instance mariadb runner");
+            let mut mdb = match MariaDb::new_state_store(&config) {
+                Ok(mdb) => Ok(mdb),
+                Err(reason) => {
+                    warn!("Error instantiating mdb {:?}", reason);
+                    Err(reason)
+                }
+            }
+            .expect("must be able to instance mariadb state store");
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow
-            info!("cool dude, no more warnings");
-            match migrations::migrations(migrations_dir) {
-                Err(e) => panic!("Error: {:?}", e),
+            match migrations::migrations(&config) {
+                Err(e) => error!("Error: {:?}", e),
                 Ok(migrations) => {
                     for (migration_state, m) in mdb.diff(migrations).expect("boom") {
                         m.clone().steps.into_iter().for_each(|(direction, s)| {
@@ -184,7 +199,7 @@ mitre --help
                                 Cell::new(format!("{:?}", m.built_in).as_str()).style_spec("bFy"),
                                 Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
                                 Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
-                                Cell::new(s.runner.name).style_spec("fB"),
+                                Cell::new(m.runner_and_config.0.name).style_spec("fB"),
                                 Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
                             ]));
                         });
@@ -195,11 +210,11 @@ mitre --help
         }
 
         Some("up") => {
-            match migrations::migrations(Path::new(migrations_dir)) {
+            match migrations::migrations(&config) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
-                    let mut mdb =
-                        MariaDb::new(config).expect("must be able to instance mariadb runner");
+                    let mut mdb = MariaDb::new_state_store(&config)
+                        .expect("must be able to instance mariadb state store");
                     match mdb.up(migrations) {
                         Ok(_r) => println!("Ran up() successfully"),
                         Err(e) => println!("up() had an error {:?}", e),
@@ -247,7 +262,7 @@ mitre --help
         //         _ => {}
         //     }
 
-        //     let mdb = match MariaDb::new(mitre_config) {
+        //     let mdb = match MariaDb::new_state_store(mitre_config) {
         //         Ok(mut mdb) => {
         //             println!("bootstrap {:?}", mdb.bootstrap());
         //             mdb
@@ -259,7 +274,7 @@ mitre --help
         //     };
         // }
         // let mitre_config = c.get("mitre").expect("must provide mitre config");
-        // let mdb = MariaDb::new(mitre_config);
+        // let mdb = MariaDb::new_state_store(mitre_config);
         //           // let runner: &dyn runner::Runner<Error = mariadb::Error> = mdb.clone();
         //           // let store: &dyn migration_state_store::MigrationStateStore = mdb;
         //           match mdb {

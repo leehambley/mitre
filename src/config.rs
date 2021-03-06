@@ -1,3 +1,7 @@
+//! Contains configuration loading, validation and parsing code
+//! Relies on [`yaml rust`] for parsing because `serde_yaml` does not support
+//! [YAML anchors & tags](https://yaml.org/spec/1.2/spec.html#id2765878).
+
 extern crate yaml_rust;
 
 use super::reserved;
@@ -6,18 +10,40 @@ use std::error;
 use std::fmt;
 use std::io;
 use std::path::Path;
-use std::process::Command;
+use std::path::PathBuf;
 use yaml_rust::{Yaml, YamlLoader};
 
+// This is evaluated relative to the configuration file, so the file makes sense
+// in context of itself and doesn't depend so much on the runner's effective CWD.
+pub const DEFAULT_MIGRATIONS_DIR: &str = ".";
+
+// Most examples are using config.yml, but let's be honest, in a complicated
+// polyglot project, we're probably not the only ones looking for that name!
+pub const DEFAULT_CONFIG_FILE: &str = "mitre.yml";
+
 #[derive(Debug)]
+/// Describe problems with the loading, parsing and general processing
+/// of the config. A valid YAML file may still produce an invalid config,
+/// however those problems will be reported using [`fn.Configuration.validate`].
 pub enum ConfigError {
     Io(io::Error),
     Yaml(yaml_rust::ScanError),
-    NoYamlHash(),
-    // ValueForKeyIsNotString(String),
-    // ValueForKeyIsNotInteger(String),
-    GetStringError(),
-    IntegerOutOfRange { value: u64, max: u64 }, // value, max value
+    NoYamlHash,
+    GetStringError,
+    /// If we would parse with `serde_yaml` all fields on the [`RunnerConfiguration`] would be [`Option<T>`], however
+    /// we parse by hand, and we can specify that `_runner` is mandatory, which it is. Failing to provide it
+    /// will cause an error. If a language binding is used, and the language provides the config, we may not have a parsing-time
+    /// opportunity to notice this problem in the config file, so the [`ConfigProblem::UnsupportedRunnerSpecified`] may manifest
+    /// (e.g if the language binding provides an empty string for the runner).
+    NoRunnerSpecified,
+    /// YAML supports ["arbitrarily sized finite mathematical integers"](https://yaml.org/type/int.html) however we may not need or want that.
+    /// Parsing a port number which is typically the range `(2^16)-1`, therefore we can constrain what we accept.
+    ///
+    /// The permitted range differs for example between [`struct.RunnerConfiguration.port`] and [`struct.RunnerConfiguration.ip_or_hostname`].
+    IntegerOutOfRange {
+        value: u64,
+        max: u64,
+    }, // value, max value
 }
 
 impl fmt::Display for ConfigError {
@@ -25,47 +51,22 @@ impl fmt::Display for ConfigError {
         match *self {
             // Underlying errors already impl `Display`, so we defer to
             // their implementations.
-            ConfigError::Io(ref err) => write!(f, "MITRE: IO error: {}", err),
-            ConfigError::Yaml(ref err) => write!(f, "MITRE: YAML error: {}", err),
-            ConfigError::NoYamlHash() => write!(
-                f,
-                "MITRE: YAML error: the top level doc in the yaml wasn't a hash"
-            ),
-            // ConfigError::ValueForKeyIsNotString(ref s) => {
-            //     write!(f, "Mitre: YAML error: value at key '{}' is not a string", s)
-            // }
-            // ConfigError::ValueForKeyIsNotInteger(ref s) => write!(
-            //     f,
-            //     "Mitre: YAML error: value at key '{}' is not an integer",
-            //     s
-            // ),
+            ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
+            ConfigError::Yaml(ref err) => write!(f, "YAML error: {}", err),
+            ConfigError::NoYamlHash => {
+                write!(f, "YAML error: the top level doc in the yaml wasn't a hash")
+            }
+            ConfigError::NoRunnerSpecified => {
+                write!(f, "No runner specified in config block")
+            }
             ConfigError::IntegerOutOfRange { value, max } => write!(
                 f,
-                "Mitre: YAML error: value '{}' is out of range, max is '{}'",
+                "YAML error: value '{}' is out of range, max is '{}'",
                 value, max
             ),
-            ConfigError::GetStringError() => write!(
-                f,
-                "Mitre: YAML error: get_string() passed-thru without match"
-            ),
-        }
-    }
-}
-
-impl error::Error for ConfigError {
-    fn cause(&self) -> Option<&dyn error::Error> {
-        match *self {
-            // N.B. implicitly cast `err` from their concrete
-            // types (either `&io::Error` or `&num::ParseIntError`)
-            // to a trait object `&Error`. This works because both error types
-            // implement `Error`.
-            ConfigError::Io(ref err) => Some(err),
-            ConfigError::Yaml(ref err) => Some(err),
-            ConfigError::NoYamlHash() => None {},
-            // ConfigError::ValueForKeyIsNotString(_) => None {},
-            // ConfigError::ValueForKeyIsNotInteger(_) => None {},
-            ConfigError::GetStringError() => None {},
-            ConfigError::IntegerOutOfRange { value: _, max: _ } => None {},
+            ConfigError::GetStringError => {
+                write!(f, "YAML error: get_string() passed-thru without match")
+            }
         }
     }
 }
@@ -76,12 +77,6 @@ impl From<io::Error> for ConfigError {
     }
 }
 
-// impl From<serde_yaml::Error> for ConfigError {
-//   fn from(err: serde_yaml::Error) -> ConfigError {
-//     ConfigError::Yaml(err)
-//   }
-// }
-
 impl From<yaml_rust::ScanError> for ConfigError {
     fn from(err: yaml_rust::ScanError) -> ConfigError {
         ConfigError::Yaml(err)
@@ -90,27 +85,51 @@ impl From<yaml_rust::ScanError> for ConfigError {
 
 // Inexhaustive list for now
 #[derive(Debug, PartialEq)]
+/// Describe problems with the configuration, may be useful in performing pre-flight
+/// sanity checks on the configuration before trying to run things up.
 pub enum ConfigProblem {
+    /// All configurations are expected to specify a mitre: key. This mitre key
+    /// is used to select the runner for the state store so that the library and tool
+    /// can set-up a correct working environment. It is recommeneded to use YAML's
+    /// "Anchors and Aliases" functions to specify a `mitre:\n<<: *myappdb` block when
+    /// Mitre should store state in the same database to which we are applying migrations.
     NoMitreConfiguration,
-    NoRunnerSpecified,
+    /// Unsupported runner specified. See [crate::reserved] for supported runners.
     UnsupportedRunnerSpecified,
+    /// Certain databases (e.g ElasticSearch) have a concept of an index. This configuration option
+    /// is exposed as `{indexName}` within the templates of migrations targeting a runner where this
+    /// concept applies.
     NoIndexSpecified,
+    /// Certain databases (e.g Redis) number their databases. This configuration option is exposed
+    /// as `{databaseNumber}` within the templates of migrations targeting a runner where this concept
+    /// applies.
     NoDatabaseNumberSpecified,
+    /// Most all databases expect to be connected over a network or unix domain socket. If nothing is specified
+    /// the underlying libraries may fall-back to a default such as `127.0.0.1` or similar. Prefer not to rely on
+    /// any such behaviour and specify a proper hostname and port.
     NoIpOrHostnameSpecified,
+    /// It is good practice to specify usernames. From development environments in increasing confusing
+    /// contemporary network topologies, through cloud-based and shared (e.g public) environments. If not
+    /// specified, libraries may default to connecting as the effective system user name of the process running
+    /// Mitre which may lead to situations where Mitre works sometimes but not others, depending on who, and how it
+    /// is called.
     NoUsernameSpecified,
+    /// It is good practice to specify passwords. From development environments in increasing confusing
+    /// contemporary network topologies, through cloud-based and shared (e.g public) environments.
     NoPasswordSpecified,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Configuration {
+    pub migrations_directory: PathBuf,
     pub configured_runners: HashMap<String, RunnerConfiguration>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub struct RunnerConfiguration {
     // Runner is not optional, but we need to option it here to maintain
     // serde::Deserialize compatibility
-    pub _runner: Option<String>,
+    pub _runner: String,
 
     pub database: Option<String>, // used by MariaDB, MySQL, PostgreSQL runners
 
@@ -131,6 +150,13 @@ pub struct RunnerConfiguration {
 }
 
 impl Configuration {
+    pub fn new(p: Option<PathBuf>) -> Configuration {
+        Configuration {
+            migrations_directory: p.unwrap_or(PathBuf::from(DEFAULT_MIGRATIONS_DIR)),
+            configured_runners: HashMap::new(),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         // TODO: write tests
         let mut problems = vec![];
@@ -154,20 +180,11 @@ impl RunnerConfiguration {
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         let mut vec = Vec::new();
 
-        if self._runner.is_none() {
-            vec.push(ConfigProblem::NoRunnerSpecified);
-            return Err(vec);
-        }
-
-        if reserved::runner_by_name(self._runner.as_ref()).is_none() {
+        if reserved::runner_by_name(&self._runner).is_none() {
             vec.push(ConfigProblem::UnsupportedRunnerSpecified);
         }
 
-        if self
-            ._runner
-            .clone()
-            .map(|r| r.to_lowercase() == reserved::REDIS.to_lowercase())
-            .is_some()
+        if self._runner.to_lowercase() == reserved::REDIS.to_lowercase()
             && self.database_number.is_none()
         {
             vec.push(ConfigProblem::NoDatabaseNumberSpecified)
@@ -181,42 +198,6 @@ impl RunnerConfiguration {
     }
 }
 
-/// Reads patterns to exclude from the .gitignore file, an excludesfile
-/// if configured locally or globally. Requires `git` to be on the Path
-/// which is a safe bet.
-///
-/// https://docs.github.com/en/github/using-git/ignoring-files
-//
-// TODO Ensure this works on Windows?
-// TODO extract in a library?
-pub fn ignore_patterns() -> Result<Vec<String>, io::Error> {
-    let unshared_excludesfile = String::from(".git/info/exclude");
-    let default_excludesfile = String::from(".gitignore");
-    let local_excludesfile = Command::new("git")
-        .arg("config")
-        .arg("core.excludesfile")
-        .output()
-        .expect("failed to execute process");
-    let global_excludesfile = Command::new("git")
-        .arg("config")
-        .arg("core.excludesfile")
-        .output()
-        .expect("failed to execute process");
-
-    let global_excludes = String::from_utf8(global_excludesfile.stdout)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-    let local_excludes = String::from_utf8(local_excludesfile.stdout)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-
-    //.filter_map( |s| s.map(|s| Path::from(s) )).collect()
-    Ok(vec![
-        global_excludes,
-        default_excludesfile,
-        local_excludes,
-        unshared_excludesfile,
-    ])
-}
-
 fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &str) -> Result<yaml_rust::Yaml, ConfigError> {
     match yaml {
         Yaml::Hash(ref map) => {
@@ -226,9 +207,9 @@ fn dig_yaml_value(yaml: &yaml_rust::Yaml, key: &str) -> Result<yaml_rust::Yaml, 
                 }
             }
         }
-        _ => return Err(ConfigError::NoYamlHash()),
+        _ => return Err(ConfigError::NoYamlHash),
     };
-    Err(ConfigError::GetStringError())
+    Err(ConfigError::GetStringError)
 }
 
 fn dig_string(yaml: &yaml_rust::Yaml, key: &str) -> Option<String> {
@@ -278,8 +259,11 @@ fn as_string(yaml: &yaml_rust::Yaml) -> String {
 pub fn from_file(p: &Path) -> Result<Configuration, ConfigError> {
     let s = std::fs::read_to_string(p)?;
     let yaml_docs = YamlLoader::load_from_str(&s)?;
-    Ok(Configuration {
-        configured_runners: from_yaml(yaml_docs)?,
+    from_yaml(yaml_docs).and_then(|mut c| {
+        if c.migrations_directory.is_relative() {
+            c.migrations_directory = p.parent().unwrap().join(c.migrations_directory);
+        }
+        Ok(c)
     })
 }
 
@@ -316,10 +300,9 @@ mitre:
     std::fs::write(p, default_config).map_err(|err| ConfigError::Io(err))
 }
 
-fn from_yaml(
-    yaml_docs: Vec<yaml_rust::Yaml>,
-) -> Result<HashMap<String, RunnerConfiguration>, ConfigError> {
+fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigError> {
     let mut hm: HashMap<String, RunnerConfiguration> = HashMap::new();
+    let mut mig_dir = DEFAULT_MIGRATIONS_DIR;
     match yaml_docs
         .iter()
         .filter_map(|yaml| {
@@ -331,22 +314,46 @@ fn from_yaml(
         })
         .flat_map(|map| map.iter())
         .filter_map(|(k, v)| {
-            if let Yaml::Hash(value) = v {
-                let is_anchor = value.keys().find(|key| as_string(key).eq("<<"));
-                if is_anchor == None {
-                    Some((k, v))
-                } else {
-                    let anchor_element = value.iter().next(); // shows up as <<
-                    let referenced_value = anchor_element.unwrap().1;
-                    Some((k, referenced_value))
+            match k {
+                Yaml::String(key) => match key.as_str() {
+                    "migrations_directory" => {
+                        trace!(
+                            "setting migrations dir from entry in config file {:?} to {:?}",
+                            key,
+                            v
+                        );
+                        mig_dir = match v {
+                            Yaml::String(value) => value,
+                            _ => panic!("must be a string value for migrations_directory"),
+                        }
+                    }
+                    _ => (),
+                },
+                _ => (),
+            };
+            match v {
+                Yaml::Hash(value) => {
+                    let is_anchor = value.keys().find(|key| as_string(key).eq("<<"));
+                    if is_anchor == None {
+                        Some((k, v))
+                    } else {
+                        let anchor_element = value.iter().next(); // shows up as <<
+                        let referenced_value = anchor_element.unwrap().1;
+                        Some((k, referenced_value))
+                    }
                 }
-            } else {
-                None
+                _ => {
+                    trace!("key {:?} ignored in config file", k);
+                    None {}
+                }
             }
         })
         .try_for_each(|(k, config_value)| {
             let c = RunnerConfiguration {
-                _runner: dig_string(config_value, &String::from("_runner")),
+                _runner: match dig_string(config_value, &String::from("_runner")) {
+                    Some(s) => s,
+                    None => return Err(ConfigError::NoRunnerSpecified),
+                },
                 database: dig_string(config_value, &String::from("database")),
                 index: dig_string(config_value, &String::from("index")),
                 database_number: match dig_u8(config_value, &String::from("database_number")) {
@@ -365,7 +372,10 @@ fn from_yaml(
             Ok(())
         }) {
         Err(e) => Err(e),
-        Ok(_) => Ok(hm),
+        Ok(_) => Ok(Configuration {
+            migrations_directory: PathBuf::from(mig_dir),
+            configured_runners: hm,
+        }),
     }
 }
 
@@ -373,6 +383,9 @@ fn from_yaml(
 mod tests {
     use super::*;
     use tempfile::tempdir;
+    use std::fs::File;
+    use std::io::Write;
+    use tempdir::TempDir;
     use yaml_rust::YamlLoader;
 
     // -> fn validate_on_config_structs
@@ -453,8 +466,9 @@ key: 2550000
         let yaml_docs = match YamlLoader::load_from_str(
             r#"
 ---
+migrations_dir: "./migrations/here"
 a:
-  _runner: mysql
+  _runner: mariadb
   database: mitre
   ip_or_hostname: 127.0.0.1
   logLevel: debug
@@ -467,13 +481,13 @@ a:
             _ => return Err("doc didn't parse"),
         };
 
-        let configs = match from_yaml(yaml_docs) {
+        let config = match from_yaml(yaml_docs) {
             Err(_) => return Err("failed to load doc"),
-            Ok(configs) => configs,
+            Ok(config) => config,
         };
 
-        let c = RunnerConfiguration {
-            _runner: Some(String::from("mysql")),
+        let rc_config_a = RunnerConfiguration {
+            _runner: String::from("mariadb"),
             database: Some(String::from("mitre")),
             ip_or_hostname: Some(String::from("127.0.0.1")),
             // log_level: Some(String::from("debug")),
@@ -484,10 +498,65 @@ a:
             index: None {},
         };
 
-        assert_eq!(1, configs.keys().len());
-        assert_eq!(c, configs["a"]);
+        assert_eq!(1, config.configured_runners.keys().len());
+        assert_eq!(rc_config_a, config.configured_runners["a"]);
+        assert_eq!(
+            PathBuf::from(DEFAULT_MIGRATIONS_DIR),
+            config.migrations_directory
+        );
 
         Ok(())
+    }
+
+    #[test]
+    fn test_has_a_default_migrations_dir() -> Result<(), &'static str> {
+        let yaml_docs = match YamlLoader::load_from_str(
+            r#"
+---
+a:
+  _runner: foobarbaz
+"#,
+        ) {
+            Ok(docs) => docs,
+            _ => return Err("doc didn't parse"),
+        };
+
+        let config = match from_yaml(yaml_docs) {
+            Err(_) => return Err("failed to load doc"),
+            Ok(config) => config,
+        };
+
+        assert_eq!(
+            PathBuf::from(DEFAULT_MIGRATIONS_DIR),
+            config.migrations_directory
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn defaults_the_migrations_directory_relative_to_the_file_directory() -> Result<(), String> {
+        let example_config = r#"
+---
+# migrations_directory: "." # is implied here because of the default value
+mitre:
+  _runner: mariadb
+      "#;
+
+        let tmp_dir = TempDir::new("example").expect("must be able to make tmpdir");
+        let path = tmp_dir.path().join("config.yml").clone();
+
+        let mut file = File::create(&path).expect("couldn't create tmpfile");
+        file.write_all(example_config.as_bytes())
+            .expect("coulnd't write file");
+
+        match from_file(&path) {
+            Ok(c) => {
+                assert_eq!(&c.migrations_directory, tmp_dir.path());
+                Ok(())
+            }
+            Err(e) => Err(format!("error is {}", e)),
+        }
     }
 
     #[test]
@@ -503,13 +572,13 @@ a:
             _ => return Err("doc didn't parse"),
         };
 
-        let configs = match from_yaml(yaml_docs) {
+        let config = match from_yaml(yaml_docs) {
             Err(_) => return Err("failed to load doc"),
-            Ok(configs) => configs,
+            Ok(config) => config,
         };
 
         let c = RunnerConfiguration {
-            _runner: Some(String::from("foobarbaz")),
+            _runner: String::from("foobarbaz"),
             database: None {},
             ip_or_hostname: None {},
             password: None {},
@@ -519,8 +588,8 @@ a:
             index: None {},
         };
 
-        assert_eq!(1, configs.keys().len());
-        assert_eq!(c, configs["a"]);
+        assert_eq!(1, config.configured_runners.keys().len());
+        assert_eq!(c, config.configured_runners["a"]);
 
         match c.validate() {
             Ok(_) => return Err("expected not-ok from validate"),

@@ -15,69 +15,75 @@ runner engine and configuration.
 
 ```
 ./config/example.yml
-./anylevelofnesting/example/202030303033_do_some_migration_with_our_data_models.
-rails
-
-^^^^^ runner type, if the runner
-
-      needs configuration, this
-
-      must be provided in
-
-      ./config/example.yml
-
-                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-arbitrary name for
-
-human readability
-
-                            ^^^^^^^^^^^^ Datestamp for ordering across all
-files, is
-                                         used to determine run-order for all
-migrations
-
-                    ^^^^^^^ Uses the configuration in config/example.yml which
-may
-                            contain configuration for multiple runners
-
-  ^^^^^^^^^^^^^^^^^ Arbitrary, may also just be ./ - useful if you compose
-                    your mitre migrations directory from many Git repositories
-                    (see below for example)
-
+./a/b/c/202030303033_create_table.mydb.sql
+ ^^^^^^ ➊ 
+        ^^^^^^^^^^^^ ➋
+                     ^^^^^^^^^^^^ ➌
+                                  ^^^^ ➍
+                                       ^^^ ➎
 ```
 
-## Example Directory Structure
+1. Arbitrary nesting, ideal for composing projects using your SCM's submodule concept.
+2. Ordinal integers (datetime stamps) to help run migrations in order. UTC is assumed.
+3. Helpful name to give a clue what the migration does.
+4. A configuration name, something specifying connection params in the configuration.
+5. A runner extension name hint, for example `.sql` expects a configuration for either PostgreSQL, MariaDB or MySQL in the configuration with the name `mydb` and `mydb._runner = "mariadb"`.
 
-For example:
+## Example Configuration & Directory Structure
 
 ```
-config/
-  ./elasticsearch.yml
-  ./postgres.yml
-  ./redis.yml
-elasticsearch/
-  202004102151_create_index.curl
-  202006102151_update_index_mapping.curl
-postgres/
-  202030303033_create_some_table.sql
-  202020202020_modify_some_data/
-    up.sql.postgres
-    down.curl.postgres
-my-project/
-  202030303033_do_some_migration_with_our_data_models.rails
+$ cat config.yml
+---
+migrations_directory: "."
+appdb: &mitre
+  _runner: "mariadb"
+  database: "my-awesome-app"
+  ip_or_hostname: 127.0.0.1
+  port: 3306
+  username: "myawesome"
+  password: "example"
+searchdb:
+  _runner: "elasticsearch"
+  ip_or_hostname: 127.0.0.1
+  port: 9200
+  index_name: "my-awesome-app"
+
+mitre:
+  <<: *mitre
+  database: "mitre" # optional
+```
+
+This configuration defines two application databases, and the **required** configuration for `mitre` itself. A core design decision of Mitre is flexibility, so overwriting the name `database` of the mitre configuration would create and maintain the migrations state tables in a database called `mitre` on the same server as `appdb`.
+
+Mitre can run migrations against ElasticSearch, but it cannot store state there, so across the two application database configurations migrations can be applied in both, and the results will be stored in the (shared) configuration `mitre`.
+
+```
+$ tree
+./
+./config.yml
+./migrations/
+    \- ./202004102151_create_index.searchdb.curl
+    \- ./202006102151_update_index_mapping.searchdb.es
+    \- ./202030303033_create_some_table.appdb.sql
+    \- ./202020202020_modify_some_data.appdb/
+              \- up.sql
+              \- down.sql
+./some-submodule-of-my-project/
+    \- ./202030303033_do_some_migration_with_our_data_models.data.appdb.sql
   ...
 ```
 
-In this example `.rails` is executed as a Ruby script using the `bin/rails
-runner` as an entrypoint using the configuration from `./config/my-project.yml`.
+Single files are considered to be "change" migrations, irreversible, and simply applied one-way. Directories with an `up` or `down` file are expected both to be runnable by the same runner defined in their configuration (i.e `.sql` is an allowed extension of the `mariadb` specified between the `.appdb` suffix on the directory name, and the `_runner: "mariadb` in the configuration.). Migrations are searched in the entire project directory thanks to the `migrations_directory` in the configuration. This allows composition with sub-modules for deploying microliths.
 
-Various file extensions carry special meanings; `.curl` files are expected to
-contain command line flags to complete a `curl ...` command, e.g:
+The anatomy of the file and directory names is specified above.
 
-```
-# cat 202004102151_create_index.curl
--X POST -d '{...giant data thing here...}'
-```
+It is vitally important to understand the relationship between the ends of filenames such as `.data.appdb.sql` which can be read as:
+
+- This is a data migration (a kind of tag, applications may permit booting with data migrations un-applied).
+- This is migration uses the `appdb` configuration which knows how to handle `.sql` files.
+
+Whether `appdb` is MariaDB, MySQL, PostgreSQL or something else, is defined by the `_runner` in the config.
+
 
 ## Bidirectional migrations
 
@@ -85,16 +91,15 @@ Mitre supports separate up-and-down migrations, by replacing the following with
 a directory, and two scripts, e.g :
 
 ```
-rails/
-  202030303033_do_some_migration_with_our_data_models.rails
-  ...
+202030303033_do_some_migration_with_our_data_models.someconf.rails
+...
 ```
 
 becomes:
 
 ```
 rails/
-  202030303033_do_some_migration_with_our_data_models/
+  202030303033_do_some_migration_with_our_data_models.someconf/
     up.rails
     down.rails
   ...
@@ -102,9 +107,9 @@ rails/
 
 ## Templating
 
-Migration files are passed once through the Handlebars library which grants access
+Migration files are passed once through the Mustache library which grants access
 to the configuration and some handful of useful variables. This can be useful for
-doing runtime reflection.  Handlebars was selected rather than liquid, or similar 
+doing runtime reflection.  Mustache was selected rather than liquid, or similar 
 because it is so limited, and is essentially interpolation without too much magic, 
 migrations probably shouldn't be Turing-complete.
 
@@ -155,7 +160,7 @@ complete list run:
 - config contains config files that correlate with the directories
 elasticsearch.yml correlates to 'elasticsearch/'
 
-- the file extension indicates how to run the script
+- the (last) file extension indicates how to run the script
 
 - a .curl extension indicates that the file in question contains params to pass
 to an invocation of curl, with connection params as described in the
@@ -163,15 +168,15 @@ elasticsearch.yml
 
 - across all directories things run in time order
 
-- configuration has a concept of environments, so each of those .yml files has
-a `development`, `prodctuon` or whatever inside, heavily rails inspired
+- ~~configuration has a concept of environments, so each of those .yml files has
+a `development`, `production` or whatever inside, heavily rails inspired~~
 
 - You could easily do something like .risky.curl to indicate that this
 migration is risky, and the default mode is maybe not to run risky migrations
 :shrug: but you could force that
 
 - You could support up/down migrations by making a directory
-`10101010101_something_reversible/{up/down}.sql`
+`10101010101_something_reversible.someconf/{up/down}.sql`
 
 ## The Trouble With Rails Migrations
 

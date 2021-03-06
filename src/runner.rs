@@ -1,19 +1,15 @@
 pub mod mariadb;
-use crate::config::Configuration;
+use crate::config::{Configuration, RunnerConfiguration};
 
-pub trait Runner {
+pub trait StateStore {
     type Error;
     type Migration;
-    type MigrationStep;
-
     type MigrationStateTuple;
     type MigrationResultTuple;
 
-    fn new(config: Configuration) -> Result<Self, Self::Error>
+    fn new_state_store(config: &Configuration) -> Result<Self, Self::Error>
     where
         Self: Sized;
-
-    fn apply(&mut self, _: &Self::MigrationStep) -> Result<(), Self::Error>;
 
     fn up(
         &mut self,
@@ -24,4 +20,16 @@ pub trait Runner {
         &mut self,
         _: Vec<Self::Migration>,
     ) -> Result<Vec<Self::MigrationStateTuple>, Self::Error>;
+}
+
+pub trait Runner {
+    type Error;
+    type Migration;
+    type MigrationStep;
+
+    fn new_runner(config: RunnerConfiguration) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
+
+    fn apply(&mut self, _: &Self::MigrationStep) -> Result<(), Self::Error>;
 }
