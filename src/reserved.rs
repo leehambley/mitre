@@ -13,7 +13,7 @@ pub struct Runner {
     pub exts: Vec<&'static str>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// Flags contain no logic, simply a meaning and a name. The supported flags are `[risky, long, data]`
 pub struct Flag {
     pub name: &'static str,
@@ -86,7 +86,7 @@ ReservedWord::Runner(Runner {
     ReservedWord::Runner(Runner {
       name: POSTGRESQL,
       desc: "PostgreSQL",
-      exts: vec![".sql"],
+      exts: vec!["sql"],
     }),
     ReservedWord::Runner(Runner {
       name: BASH_4,
@@ -108,6 +108,11 @@ ReservedWord::Runner(Runner {
       desc: "Kafka",
       exts: vec!["kafka"],
     }),
+    ReservedWord::Runner(Runner {
+      name: POSTGRESQL,
+      desc: "PostgreSQL",
+      exts: vec!["sql"],
+    }),
     ReservedWord::Flag(Flag{
       name: "data",
       meaning: "This is a data migration affecting data only, not structure." 
@@ -121,6 +126,13 @@ ReservedWord::Runner(Runner {
       meaning: "This is a risky migration, maybe should be run outside peak times with more human observation" 
     })
   ]
+}
+
+pub fn flags() -> impl Iterator<Item = Flag> {
+    words().into_iter().filter_map(|word| match word {
+        ReservedWord::Flag(f) => Some(f),
+        _ => None {},
+    })
 }
 
 /// Filters the reserved words to return only the runner [`words`].

@@ -180,6 +180,7 @@ mitre --help
                 "Timestamp",
                 "Path",
                 "Runner",
+                "Flags",
                 "Directions"
             ]);
 
@@ -206,6 +207,17 @@ mitre --help
                                 Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
                                 Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
                                 Cell::new(m.runner_and_config.0.name).style_spec("fB"),
+                                Cell::new(
+                                    format!(
+                                        "{}",
+                                        m.flags
+                                            .iter()
+                                            .map(|f| String::from(f.name))
+                                            .collect::<Vec<String>>()
+                                            .join(", ")
+                                    )
+                                    .as_str(),
+                                ),
                                 Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
                             ]));
                         });

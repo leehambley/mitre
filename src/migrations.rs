@@ -1,7 +1,7 @@
 use crate::config::{Configuration, RunnerConfiguration};
 /// Migration look-up functions. Explore the filesystem looking for
 /// files matching the migration naming rules.
-use crate::reserved::{runner_by_name, Runner};
+use crate::reserved::{flags, runner_by_name, Flag, Runner};
 use core::cmp::Ordering;
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
@@ -85,6 +85,7 @@ pub struct Migration {
     pub date_time: chrono::NaiveDateTime,
     pub steps: MigrationSteps,
     pub built_in: bool,
+    pub flags: Vec<Flag>,
     pub runner_and_config: RunnerAndConfiguration, // runners are compiled-in
 }
 impl<'a> PartialOrd for Migration {
@@ -104,10 +105,12 @@ impl<'a> Ord for Migration {
 /// anything ignored by git's local or global ignores and some other
 /// rules as described [here](https://docs.rs/ignore/0.4.17/ignore/struct.WalkBuilder.html#ignore-rules).
 ///
-/// Order of the returned migrations is guaranteed by sorting the YYYYMMDDHHMMSS timestamp in ascending order (ordinal).AsRef
+/// Order of the returned migrations is guaranteed by sorting the YYYYMMDDHHMMSS timestamp in ascending order (ordinal).
 ///
 /// Runners must *run* these in chronological order to maintain the library
-/// guarantees.
+/// guarantees. Concurrency probably isn't super wise, either. Although we can always
+/// revisit that later with a possible flag on the filenames that a migration is concurrency safe
+/// if we ever need to.
 ///
 /// Ideally provide an absolute path. When giving a relative path in the config (e.g ".") the relative
 /// path should be appended to the (ideally) absolute path.
@@ -185,6 +188,19 @@ impl<'a> MigrationFinder<'a> {
         Ok(hm)
     }
 
+    //
+    fn flags_from_filename(&self, p: &Path) -> Vec<Flag> {
+        match p
+            .to_str()
+            .map(|s| s.split(|x| x == std::path::MAIN_SEPARATOR || x == '.'))
+        {
+            Some(parts) => parts
+                .filter_map(|p| flags().find(|r| r.name == p))
+                .collect(),
+            None => vec![],
+        }
+    }
+
     // This is used when a directory is expected to contain "up" or "down" migrations
     // lots of overlap with migration_from_file.
     // Path will always be a dirname
@@ -212,30 +228,78 @@ impl<'a> MigrationFinder<'a> {
         //                            ^^^ ext
         //
         // files in the directory will be checked right after
-        let _date_time = extract_timestamp(dir).ok();
-        let _config_name = dir.extension().map(|ext| ext.to_str());
+        let date_time = match extract_timestamp(dir) {
+            Ok(dt) => dt,
+            Err(_) => {
+                return Ok(vec![]);
+            }
+        };
+        let config_name = dir.extension().map(|ext| ext.to_str()).flatten();
 
         // We're not interested in recursing here, simple dir read is fine
-        let dir_files: Vec<PathBuf> = fs::read_dir(dir)?
+        let mut steps: MigrationSteps = HashMap::new();
+        let mut runner_and_config: Option<RunnerAndConfiguration> = None;
+        let _ = fs::read_dir(dir)?
             .into_iter()
             .filter_map(|r| r.ok())
             .map(|entry| entry.path())
             .filter(|path| path.is_file())
-            .filter_map(|path| match (path.file_stem(), path.extension()) {
-                (Some(stem), Some(_)) => match stem.to_str()? {
-                    "up" => Some(path),
-                    "down" => Some(path),
+            .filter_map(|path| {
+                match (
+                    path.file_stem(),
+                    path.extension().map(|e| e.to_str()).flatten(),
+                    config_name,
+                ) {
+                    (Some(stem), Some(ext), Some(cn)) => match stem.to_str()? {
+                        "up" => match self.is_configured_runner(cn, ext) {
+                            Ok(rac) => {
+                                runner_and_config = Some(rac);
+                                Some((path.clone(), Direction::Up))
+                            }
+                            Err(e) => {
+                                warn!("No runner configured for {:?}: {}", path, e);
+                                None {}
+                            }
+                        },
+                        "down" => Some((path.clone(), Direction::Down)),
+                        _ => None,
+                    },
                     _ => None,
-                },
-                _ => None,
+                }
             })
-            .collect();
+            .filter_map(|(path, direction)| {
+                let source = {
+                    let mut file = File::open(path.clone()).ok()?;
+                    let mut buffer = String::new();
+                    file.read_to_string(&mut buffer).ok()?;
+                    buffer
+                };
+                let content = mustache::compile_str(&source).ok()?;
 
-        if dir_files.len() > 0 {
-            error!("dir files {:?}", dir_files);
+                steps.insert(
+                    direction,
+                    MigrationStep {
+                        content,
+                        source,
+                        path: path.clone(),
+                    },
+                );
+                Some(()) // redundant, just for filter_map and ? above
+            })
+            .collect::<()>(); // force us to do the work, else is lazy
+
+        // TODO: check up and down have the *same* extension
+
+        match runner_and_config {
+            Some(rac) => Ok(vec![Migration {
+                built_in: true,
+                date_time,
+                runner_and_config: rac,
+                flags: self.flags_from_filename(&dir),
+                steps,
+            }]),
+            None => Ok(vec![]),
         }
-
-        Ok(vec![])
     }
 
     fn built_in_migrations(&self) -> Result<Vec<Migration>, MigrationsError> {
@@ -289,13 +353,14 @@ impl<'a> MigrationFinder<'a> {
                                     MigrationStep {
                                         content,
                                         source,
-                                        path: path,
+                                        path: path.clone(),
                                     },
                                 );
                                 Some(Migration {
                                     built_in: true,
                                     date_time,
                                     runner_and_config,
+                                    flags: self.flags_from_filename(&path),
                                     steps,
                                 })
                             }
@@ -346,6 +411,7 @@ impl<'a> MigrationFinder<'a> {
                                 built_in: false,
                                 date_time,
                                 runner_and_config,
+                                flags: self.flags_from_filename(&p),
                                 steps,
                             }]),
                             Err(e) => Err(e),
@@ -372,6 +438,7 @@ impl<'a> MigrationFinder<'a> {
         config_name: &str,
         ext: &str,
     ) -> Result<RunnerAndConfiguration, String> {
+        trace!("checking for runner {:?} {:?}", config_name, ext);
         match self.config.configured_runners.get(config_name) {
             Some(config) => match runner_by_name(&config._runner) {
                 Some(runner) => match runner.exts.iter().find(|e| e == &&ext) {
