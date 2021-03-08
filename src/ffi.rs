@@ -1,5 +1,8 @@
 use std::ffi::{c_void, CString};
 use std::os::raw::c_char;
+use std::sync::mpsc::channel;
+use std::sync::mpsc::Sender;
+use std::thread;
 
 type LoggingFunction = unsafe extern "C" fn(*mut c_char, *mut c_char) -> c_void;
 unsafe extern "C" fn default_logger(_lvl: *mut c_char, _msg: *mut c_char) -> c_void {
@@ -11,7 +14,10 @@ unsafe extern "C" fn default_logger(_lvl: *mut c_char, _msg: *mut c_char) -> c_v
 static mut LOGGER: LoggingFunction = default_logger;
 
 /// https://docs.rs/flexi_logger/0.17.1/flexi_logger/struct.Record.html
-struct CLIAndFFILogger;
+struct CLIAndFFILogger {
+    sender: Sender<log::Record>, // TODO: have a handle to the thread
+}
+
 impl log::Log for CLIAndFFILogger {
     fn enabled(&self, _metadata: &log::Metadata) -> bool {
         println!("in enabled");
@@ -24,19 +30,12 @@ impl log::Log for CLIAndFFILogger {
         // }
 
         let r_msg = format!(
-            "{}:{} -- {}",
+            "{} : {} -- {}",
             record.level(),
             record.target(),
             record.args()
         );
-        let ffi_lvl = CString::new(format!("{}", record.level()))
-            .expect("lvl should be convertable to CString");
-        let ffi_msg =
-            CString::new(format!("{}", record.args())).expect("msg should convertable to CString");
         println!("{}", r_msg);
-        unsafe {
-            LOGGER(ffi_lvl.into_raw(), ffi_msg.into_raw());
-        }
     }
     fn flush(&self) {
         println!("in flush");
@@ -57,9 +56,18 @@ pub unsafe fn set_log_level(lvl: *mut c_char) {
 pub unsafe fn set_logger_fn(func: LoggingFunction) {
     // https://docs.rs/env_logger/0.8.3/src/env_logger/lib.rs.html#799-802
     LOGGER = func;
-    let _ = log::set_boxed_logger(Box::new(CLIAndFFILogger {}));
+    let (sender, receiver) = channel();
+    let _ = log::set_boxed_logger(Box::new(CLIAndFFILogger { sender }));
+    thread::spawn(move || loop {
+        let record = receiver.recv().expect("Unable to receive from channel");
+        let ffi_lvl = CString::new(format!("{}", record.level()))
+            .expect("lvl should be convertable to CString");
+        let ffi_msg =
+            CString::new(format!("{}", record.args())).expect("msg should convertable to CString");
+        LOGGER(ffi_lvl.into_raw(), ffi_msg.into_raw());
+    });
     log!(log::Level::Error, "Received errors");
-    println!("Hey")
+    println!("Hey");
 }
 
 #[no_mangle]
