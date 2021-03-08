@@ -3,25 +3,14 @@ var ref = require("ref-napi");
 var StructType = require("ref-struct-di")(ref);
 var ArrayType = require("ref-array-di")(ref);
 
-// define the "timeval" struct type
-var ReservedWord = StructType({
-  word: ref.refType("string"),
-  reason: ref.refType("string"),
-  kind: ref.refType("string"),
+var libmitre = ffi.Library("./target/debug/libmitre.dylib", {
+  set_report_status_callback: ["void", ["pointer"]],
 });
 
-var ReservedWords = StructType({
-  lenn: ref.refType("uint8"),
-  words: ref.refType("pointer"),
+var callback = ffi.Callback("void", ["string"], function (msg) {
+  console.log("This came from Rust?!?!?!: ", msg);
 });
 
-var libmitre = ffi.Library("./target/debug/libmitre.so", {
-  reserved_words: [ReservedWords, []],
-  free_reserved_words: ["void", [ReservedWords]],
-});
+console.log("registering the callback");
 
-debugger;
-
-console.log(ReservedWords.size);
-
-console.log(libmitre.reserved_words().lenn);
+libmitre.set_report_status_callback(callback);
