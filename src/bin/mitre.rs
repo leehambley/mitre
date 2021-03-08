@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use log::{debug, error, trace, warn};
+use log::{debug, error, info, trace, warn};
 use prettytable::{row, *};
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
@@ -9,6 +9,7 @@ use mitre::migrations;
 use mitre::reserved;
 use mitre::runner::mariadb::MariaDb;
 use mitre::runner::StateStore;
+use mitre::ui::start_web_ui;
 
 fn main() {
     env_logger::Builder::new()
@@ -30,19 +31,21 @@ fn main() {
                 .value_name("CONFIG FILE")
                 .about("The configuration file to use"),
         )
-        .subcommand(App::new("init").about("creates configuration and migrations directory")).arg(
-          Arg::new("directory")
-              .long("directory")
-              .short('d')
-              .takes_value(true)
-              .value_name("MIGRATION DIR")
-              .about("The directory to use"),
+        .subcommand(App::new("init").about("creates configuration and migrations directory"))
+        .arg(
+            Arg::new("directory")
+                .long("directory")
+                .short('d')
+                .takes_value(true)
+                .value_name("MIGRATION DIR")
+                .about("The directory to use"),
         )
         .subcommand(
             App::new("reserved-words")
                 .about("utilties for reserved words")
                 .subcommand(App::new("ls").about("list reserved words")),
         )
+        .subcommand(App::new("ui").about("starts the web-based UI"))
         .subcommand(App::new("ls").about("list all migrations and their status"))
         .subcommand(App::new("up").about("run migrations up to the current timestamp"))
         .subcommand(App::new("show-config").about("for showing config file"))
@@ -130,7 +133,10 @@ mitre --help
                         );
                     }
                     Err(e) => {
-                        error!("Could not create README in migrations directory at {}/README.md: {}", migrations_dir, e);
+                        error!(
+                            "Could not create README in migrations directory at {}/README.md: {}",
+                            migrations_dir, e
+                        );
                         std::process::exit(1);
                     }
                 }
@@ -174,6 +180,7 @@ mitre --help
                 "Timestamp",
                 "Path",
                 "Runner",
+                "Flags",
                 "Directions"
             ]);
 
@@ -200,6 +207,17 @@ mitre --help
                                 Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
                                 Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
                                 Cell::new(m.runner_and_config.0.name).style_spec("fB"),
+                                Cell::new(
+                                    format!(
+                                        "{}",
+                                        m.flags
+                                            .iter()
+                                            .map(|f| String::from(f.name))
+                                            .collect::<Vec<String>>()
+                                            .join(", ")
+                                    )
+                                    .as_str(),
+                                ),
                                 Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
                             ]));
                         });
@@ -325,6 +343,26 @@ mitre --help
             //     });
             //     table.printstd();
             // }
+        }
+        Some("ui") => {
+            info!("Starting webserver");
+            match migrations::migrations(&config) {
+                Ok(migrations) => {
+                    info!("Opening webserver");
+                    // TODO: Add a flag to enable / disable open
+                    match start_web_ui(config_file.to_path_buf(), migrations, true) {
+                        Ok(_) => {
+                            info!("Closing webserver")
+                        }
+                        Err(err) => {
+                            info!("Error starting webserver {}", err)
+                        }
+                    }
+                }
+                Err(_) => {
+                    info!("Error finding migrations")
+                }
+            }
         }
         Some("down") => {} // down was used
         Some("redo") => {} // redo was used
