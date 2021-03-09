@@ -438,7 +438,12 @@ impl<'a> MigrationFinder<'a> {
         config_name: &str,
         ext: &str,
     ) -> Result<RunnerAndConfiguration, String> {
-        trace!("checking for runner {:?} {:?}", config_name, ext);
+        trace!(
+            "checking for runner {:?} {:?} in {:?}",
+            config_name,
+            ext,
+            self.config.configured_runners
+        );
         match self.config.configured_runners.get(config_name) {
             Some(config) => match runner_by_name(&config._runner) {
                 Some(runner) => match runner.exts.iter().find(|e| e == &&ext) {
@@ -535,67 +540,13 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn test_step_from_migration_file() -> Result<(), String> {
-    //     // requires a real file or directory, will try to
-    //     // build the template after reading the file
-    //     let path = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20200904205000_get_es_health.es-docker.curl");
-    //     let mut f = File::open(&path).map_err(|e| format!("Could not open path {:?}", e))?;
-    //     let mut buffer = String::new();
-    //     f.read_to_string(&mut buffer)
-    //         .map_err(|e| format!("Could not read path {:?}", e))?;
-
-    //     match part_from_migration_file(path.clone(), &buffer) {
-    //         Err(e) => Err(format!("Error: {:?}", e)),
-    //         Ok(part) => match part {
-    //             None => Err("no matches".to_string()),
-    //             Some(p) => match p.get(&Direction::Change) {
-    //                 None => Err("steps doesn't have a Change direction step".to_string()),
-    //                 Some(change) => {
-    //                     assert_eq!(change.runner.name, "cURL");
-    //                     assert_eq!(change.path, path);
-    //                     // TODO: no test here for the Mustache contents, probably OK
-    //                     Ok(())
-    //                 }
-    //             },
-    //         },
-    //     }
-    // }
-
-    // #[test]
-    // fn test_steps_in_migration_dir() -> Result<(), String> {
-    //     let path = PathBuf::from("test/fixtures/example-1-simple-mixed-migrations/migrations/20210119200000_new_year_new_migration.es-postgres");
-    //     match parts_in_migration_dir(path.clone()) {
-    //         Err(e) => Err(format!("Error: {:?}", e)),
-    //         Ok(part) => match part {
-    //             None => Err("no matches".to_string()),
-    //             Some(p) => {
-    //                 match p.get(&Direction::Up) {
-    //                     None => Err("steps doesn't have an Up direction step".to_string()),
-    //                     Some(up) => {
-    //                         assert_eq!(up.runner.name, "MariaDB");
-    //                         assert_eq!(up.path, path.join("up.sql"));
-    //                         // TODO: no test here for the Mustache contents, probably OK
-    //                         Ok(())
-    //                     }
-    //                 }
-    //             }
-    //         },
-    //     }
-    // }
-
-    // #[test]
-    // fn test_the_new_thing_finds_all_the_fixtures_correctly() -> Result<(), String> {
-    //     let path = PathBuf::from("./test/fixtures/example-1-simple-mixed-migrations");
-    //     let config = Configuration::new(Some(path));
-    //     MigrationFinder::new(&config).migrations_in_migrations_dir();
-    //     Ok(())
-    // }
-
     #[test]
     fn test_the_fixture_returns_correct_results() -> Result<(), String> {
-        let path = PathBuf::from("./test/fixtures/example-1-simple-mixed-migrations");
-        let config = Configuration::new(Some(path));
+        let path = PathBuf::from("./test/fixtures/example-1-simple-mixed-migrations/mitre.yml");
+        let config = match Configuration::from_file(&path) {
+            Ok(config) => config,
+            Err(e) => Err(format!("couldn't make config {}", e))?,
+        };
 
         match migrations(&config) {
             Err(e) => Err(format!("Error: {:?}", e)),
@@ -605,11 +556,4 @@ mod tests {
             }
         }
     }
-
-    // #[test]
-    // fn test_build_in_migrations() -> Result<(), String> {
-    //     let migrations = built_in_migrations();
-    //     assert_eq!(migrations.len(), 1);
-    //     Ok(())
-    // }
 }

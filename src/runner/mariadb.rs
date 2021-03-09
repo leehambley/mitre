@@ -1,7 +1,8 @@
 use crate::config::{Configuration, RunnerConfiguration};
 use crate::migrations::{Direction, Migration, MigrationStep};
 use crate::reserved::Runner as RunnerReservedWord;
-use crate::runner::Runner;
+use crate::runner::{MigrationResult, MigrationState, Runner};
+use crate::state_store::StateStore;
 use mustache::MapBuilder;
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};
@@ -10,9 +11,10 @@ use std::convert::From;
 
 const MARIADB_MIGRATION_STATE_TABLE_NAME: &str = "mitre_migration_state";
 
-type BoxedRunner =
+// TODO: move these two to the state_store module somehow.
+pub type BoxedRunner =
     Box<dyn Runner<Error = Error, Migration = Migration, MigrationStep = MigrationStep>>;
-type RunnersHashMap = HashMap<RunnerReservedWord, BoxedRunner>;
+pub type RunnersHashMap = HashMap<RunnerReservedWord, BoxedRunner>;
 
 /// MariaDb is both a StateStore and a runner. The bootstrapping phase
 /// means that when no migrations have yet been run, the StateStore may
@@ -38,20 +40,6 @@ pub struct MariaDb {
     runners: RunnersHashMap,
 }
 
-#[derive(PartialEq, Debug)]
-pub enum MigrationState {
-    Pending,
-    Applied,
-}
-
-#[derive(PartialEq, Debug)]
-pub enum MigrationResult {
-    AlreadyApplied,
-    Success,
-    Failure(String),
-    NothingToDo,
-}
-
 #[derive(Debug)]
 pub enum Error {
     /// Shadowing the errors from the mysql crate to have them type-safely in our scope.
@@ -71,7 +59,10 @@ pub enum Error {
     CouldNotSelectDatabase,
     NoStateStoreDatabaseNameProvided,
     // (reason, the template)
-    TemplateError(String, mustache::Template),
+    TemplateError {
+        reason: String,
+        template: mustache::Template,
+    },
     ErrorRunningMigration(String),
     MigrationHasFailed(String, Migration),
 
@@ -175,13 +166,14 @@ impl MariaDb {
     }
 }
 
-impl crate::runner::StateStore for MariaDb {
+impl StateStore for MariaDb {
     type Error = Error;
     type Migration = Migration;
     type MigrationStateTuple = (MigrationState, Migration);
     type MigrationResultTuple = (MigrationResult, Migration);
 
     fn new_state_store(config: &Configuration) -> Result<MariaDb, Error> {
+        // Ensure this is a proper config for this runner
         let runner_name = String::from(crate::reserved::MARIA_DB).to_lowercase();
         let mariadb_config = match config.get("mitre") {
             None => {
@@ -341,7 +333,7 @@ impl crate::runner::StateStore for MariaDb {
     }
 }
 
-impl crate::runner::Runner for MariaDb {
+impl Runner for MariaDb {
     type Error = Error;
     type Migration = Migration;
     type MigrationStep = MigrationStep;
@@ -389,7 +381,10 @@ impl crate::runner::Runner for MariaDb {
         trace!("rendering template to string");
         let parsed = match ms.content.render_data_to_string(&template_ctx) {
             Ok(str) => Ok(str),
-            Err(e) => Err(Error::TemplateError(e.to_string(), ms.content.clone())),
+            Err(e) => Err(Error::TemplateError {
+                reason: e.to_string(),
+                template: ms.content.clone(),
+            }),
         }?;
         trace!("template rendered to string successfully: {:?}", parsed);
 
@@ -423,15 +418,6 @@ impl crate::runner::Runner for MariaDb {
 }
 
 #[cfg(test)]
-#[ctor::ctor]
-fn init() {
-    env_logger::Builder::new()
-        .filter_level(log::LevelFilter::Trace)
-        .init();
-    // env_logger::init();
-}
-
-#[cfg(test)]
 mod tests {
 
     extern crate rand;
@@ -439,7 +425,7 @@ mod tests {
 
     use super::*;
     use crate::migrations::migrations;
-    use crate::runner::StateStore;
+    use indoc::indoc;
     use maplit::hashmap;
     use rand::Rng;
     use std::path::PathBuf;
@@ -617,7 +603,16 @@ mod tests {
     fn it_returns_all_migrations_pending_if_migrations_table_does_not_exist() -> Result<(), String>
     {
         let test_db = helper_create_test_db()?;
-        let config = Configuration::new(Some(PathBuf::from("/tmp/any/path/here")));
+        let config = match Configuration::load_from_str(indoc! {r"
+          ---
+          migrations_directory: /tmp/must/not/exist
+          mitre:
+            _runner: mariadb
+        "})
+        {
+            Ok(c) => c,
+            Err(e) => Err(format!("error generating config: {}", e))?,
+        };
 
         let mut runner = MariaDb::new_state_store(&test_db.config)
             .map_err(|e| format!("Could not create state store {:?}", e))?;
@@ -640,7 +635,16 @@ mod tests {
     #[test]
     fn migrating_up_just_the_built_in_migrations() -> Result<(), String> {
         let test_db = helper_create_test_db()?;
-        let config = Configuration::new(Some(PathBuf::from("/tmp/any/path/here")));
+        let config = match Configuration::load_from_str(indoc! {r"
+        ---
+        migrations_directory: /tmp/must/not/exist
+        mitre:
+          _runner: mariadb
+      "})
+        {
+            Ok(c) => c,
+            Err(e) => Err(format!("error generating config: {}", e))?,
+        };
 
         let mut runner = MariaDb::new_state_store(&test_db.config)
             .map_err(|e| format!("Could not create state store {:?}", e))?;

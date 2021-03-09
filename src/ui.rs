@@ -1,7 +1,7 @@
 use crate::config;
 use crate::migrations::Migration;
 use crate::runner::mariadb::MariaDb;
-use crate::runner::StateStore;
+use crate::state_store::StateStore;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
 use std::path::PathBuf;

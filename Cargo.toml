@@ -11,6 +11,7 @@ crate-type = ["rlib", "dylib"]
 ctor = "0.1.19"
 rand = "0.8.0"
 tempdir = "0.3.7"
+indoc = "1.0"
 tempfile = "3"
 maplit = "1.0.2"
 
@@ -22,11 +23,15 @@ clap = "3.0.0-beta.1"
 env_logger = "0.8.3"
 envsubst = "0.2.0"
 ignore = "0.4.17"
+kafka = "0.8.0"
 log = "0.4"
 mustache = "0.9.0"
 mysql = "20.1.0"
+postgres = "0.19.0"
 prettytable-rs = "^0.8"
+redis = "0.20.0"
 regex = "1.4.3"
+reqwest = "0.11.2"
 rust-embed = {version ="5.9.0", features = ["debug-embed"] }
 serde = { version = "1.0" }
 serde_yaml = "0.8"

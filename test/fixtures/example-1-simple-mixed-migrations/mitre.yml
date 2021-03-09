@@ -1,25 +1,25 @@
 ---
 
-migrations_directory: "/tmp"
+migrations_directory: "migrations/"
 
-# Each entry here is a "runner" configuration. If a
-# migration is named like ???_foo_bar.es-docker.curl
-# then there must be an entry `runner: curl` with the
-# name `es-docker` to host it.
 es-mariadb: &es-mariadb
   _runner: mariadb
   database: mitre
   ip_or_hostname: 127.0.0.1
-  logLevel: debug
   password: example
   port: 3306
   username: root
 
 es-docker:
-  _runner: curl
+  _runner: http
   ip_or_hostname: es
-  protocol: http
-  logLevel: debug
+
+es-postgres:
+  _runner: postgres
+  ip_or_hostname: postgres
+  username: root
+  password: example
+  port: 5432
 
 # # Please manage your own configs above this line for consistency # #
 
@@ -33,4 +33,4 @@ es-docker:
 #
 # [1]: https://yaml.org/spec/1.2/spec.html#id2765878
 mitre:
- <<: *es-mariadb
+ *es-mariadb

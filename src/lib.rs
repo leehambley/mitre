@@ -8,3 +8,12 @@ pub mod reserved;
 pub mod runner;
 pub mod state_store;
 pub mod ui;
+
+#[cfg(test)]
+#[ctor::ctor]
+fn init() {
+    env_logger::Builder::new()
+        .filter(None, log::LevelFilter::Info)
+        .parse_env("MITRE_TEST_LOG")
+        .init();
+}

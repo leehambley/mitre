@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use log::{debug, error, info, trace, warn};
+use log::{error, info, trace, warn};
 use prettytable::{row, *};
 use prettytable::{Cell, Row, Table};
 use std::path::Path;
@@ -8,7 +8,7 @@ use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
 use mitre::runner::mariadb::MariaDb;
-use mitre::runner::StateStore;
+use mitre::state_store::StateStore;
 use mitre::ui::start_web_ui;
 
 fn main() {
@@ -68,8 +68,6 @@ fn main() {
             std::process::exit(1);
         }
     };
-
-    debug!("Config is {:#?}", config);
 
     // Validate config contains a mitre runner
 

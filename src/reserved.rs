@@ -38,8 +38,8 @@ pub enum ReservedWord {
 pub const BASH_3: &str = "Bash3";
 /// Const GNU "Bash4". **Currently not supported.**
 pub const BASH_4: &str = "Bash4";
-/// Const "cURL". Copyright <https://curl.se/>. **Currently not supported.**
-pub const CURL: &str = "cURL";
+/// Const "HTTP".
+pub const HTTP: &str = "HTTP";
 /// Const "Elasticsearch". **Currently not supported.**
 pub const ELASTICSEARCH: &str = "Elasticsearch";
 /// Const "Kafka". **Currently not supported.**
@@ -69,9 +69,9 @@ pub fn words() -> Vec<ReservedWord> {
       exts: vec!["redis"],
   }),
   ReservedWord::Runner(Runner {
-    name: CURL,
-    desc: "cURL",
-    exts: vec!["curl"],
+    name: HTTP,
+    desc: "HTTP",
+    exts: vec!["get", "post", "delete", "patch"],
 }),
 ReservedWord::Runner(Runner {
   name: ELASTICSEARCH,
@@ -155,6 +155,6 @@ mod tests {
 
     #[test]
     fn test_words() {
-        assert!(runners().any(|v| v.name == "cURL"));
+        assert!(runners().any(|v| v.name == "HTTP"));
     }
 }

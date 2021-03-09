@@ -34,7 +34,9 @@ pub enum ConfigError {
     /// will cause an error. If a language binding is used, and the language provides the config, we may not have a parsing-time
     /// opportunity to notice this problem in the config file, so the [`ConfigProblem::UnsupportedRunnerSpecified`] may manifest
     /// (e.g if the language binding provides an empty string for the runner).
-    NoRunnerSpecified,
+    NoRunnerSpecified {
+        config_name: String,
+    },
     /// YAML supports ["arbitrarily sized finite mathematical integers"](https://yaml.org/type/int.html) however we may not need or want that.
     /// Parsing a port number which is typically the range `(2^16)-1`, therefore we can constrain what we accept.
     ///
@@ -47,7 +49,7 @@ pub enum ConfigError {
 
 impl fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
+        match &*self {
             // Underlying errors already impl `Display`, so we defer to
             // their implementations.
             ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
@@ -55,8 +57,8 @@ impl fmt::Display for ConfigError {
             ConfigError::NoYamlHash => {
                 write!(f, "YAML error: the top level doc in the yaml wasn't a hash")
             }
-            ConfigError::NoRunnerSpecified => {
-                write!(f, "No runner specified in config block")
+            ConfigError::NoRunnerSpecified { config_name } => {
+                write!(f, "No runner specified in config block `{}'", config_name)
             }
             ConfigError::IntegerOutOfRange { value, max } => write!(
                 f,
@@ -149,11 +151,12 @@ pub struct RunnerConfiguration {
 }
 
 impl Configuration {
-    pub fn new(p: Option<PathBuf>) -> Configuration {
-        Configuration {
-            migrations_directory: p.unwrap_or(PathBuf::from(DEFAULT_MIGRATIONS_DIR)),
-            configured_runners: HashMap::new(),
-        }
+    pub fn from_file(p: &Path) -> Result<Configuration, ConfigError> {
+        from_file(p)
+    }
+    pub fn load_from_str(s: &str) -> Result<Configuration, ConfigError> {
+        let yaml_docs = YamlLoader::load_from_str(s)?;
+        from_yaml(yaml_docs)
     }
 
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
@@ -342,7 +345,12 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
                     }
                 }
                 _ => {
-                    trace!("key {:?} ignored in config file", k);
+                    // conditional prevents trace logging something misleading
+                    // about the migrations_directory key, which we _do_ handle
+                    // above.
+                    if &Yaml::String(String::from("migrations_directory")) != k {
+                        trace!("key {:?} ignored in config file", k);
+                    }
                     None {}
                 }
             }
@@ -351,7 +359,11 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
             let c = RunnerConfiguration {
                 _runner: match dig_string(config_value, &String::from("_runner")) {
                     Some(s) => s,
-                    None => return Err(ConfigError::NoRunnerSpecified),
+                    None => {
+                        return Err(ConfigError::NoRunnerSpecified {
+                            config_name: as_string(k),
+                        })
+                    }
                 },
                 database: dig_string(config_value, &String::from("database")),
                 index: dig_string(config_value, &String::from("index")),
@@ -381,6 +393,7 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use indoc::indoc;
     use std::fs::File;
     use std::io::Write;
     use tempdir::TempDir;
@@ -394,12 +407,11 @@ mod tests {
 
     #[test]
     fn dig_string_gets_string() -> Result<(), &'static str> {
-        let yaml_docs = match YamlLoader::load_from_str(
-            r#"
----
-key: bestValue
-      "#,
-        ) {
+        let yaml_docs = match YamlLoader::load_from_str(indoc! {r#"
+          ---
+          key: bestValue
+        "#})
+        {
             Ok(docs) => docs,
             _ => return Err("doc didn't parse"),
         };
@@ -413,12 +425,11 @@ key: bestValue
 
     #[test]
     fn dig_u8_gets_u8() -> Result<(), &'static str> {
-        let yaml_docs = match YamlLoader::load_from_str(
-            r#"
----
-key: 255
-      "#,
-        ) {
+        let yaml_docs = match YamlLoader::load_from_str(indoc! {r#"
+          ---
+          key: 255
+        "#})
+        {
             Ok(docs) => docs,
             _ => return Err("doc didn't parse"),
         };
@@ -435,12 +446,11 @@ key: 255
 
     #[test]
     fn dig_u8_gets_returns_integer_error_on_overflow() -> Result<(), &'static str> {
-        let yaml_docs = match YamlLoader::load_from_str(
-            r#"
----
-key: 2550000
-      "#,
-        ) {
+        let yaml_docs = match YamlLoader::load_from_str(indoc! {r#"
+          ---
+          key: 2550000
+        "#})
+        {
             Ok(docs) => docs,
             _ => return Err("doc didn't parse"),
         };
@@ -462,20 +472,19 @@ key: 2550000
 
     #[test]
     fn loads_a_complete_config() -> Result<(), &'static str> {
-        let yaml_docs = match YamlLoader::load_from_str(
-            r#"
----
-migrations_dir: "./migrations/here"
-a:
-  _runner: mariadb
-  database: mitre
-  ip_or_hostname: 127.0.0.1
-  logLevel: debug
-  password: example
-  port: 3306
-  username: root
-"#,
-        ) {
+        let yaml_docs = match YamlLoader::load_from_str(indoc! {r#"
+          ---
+          migrations_dir: "./migrations/here"
+          a:
+            _runner: mariadb
+            database: mitre
+            ip_or_hostname: 127.0.0.1
+            logLevel: debug
+            password: example
+            port: 3306
+            username: root
+        "#})
+        {
             Ok(docs) => docs,
             _ => return Err("doc didn't parse"),
         };
@@ -509,13 +518,12 @@ a:
 
     #[test]
     fn test_has_a_default_migrations_dir() -> Result<(), &'static str> {
-        let yaml_docs = match YamlLoader::load_from_str(
-            r#"
----
-a:
-  _runner: foobarbaz
-"#,
-        ) {
+        let yaml_docs = match YamlLoader::load_from_str(indoc! {r#"
+          ---
+          a:
+            _runner: foobarbaz
+        "#})
+        {
             Ok(docs) => docs,
             _ => return Err("doc didn't parse"),
         };
@@ -535,12 +543,12 @@ a:
 
     #[test]
     fn defaults_the_migrations_directory_relative_to_the_file_directory() -> Result<(), String> {
-        let example_config = r#"
----
-# migrations_directory: "." # is implied here because of the default value
-mitre:
-  _runner: mariadb
-      "#;
+        let example_config = indoc! {r#"
+          ---
+          # migrations_directory: "." # is implied here because of the default value
+          mitre:
+            _runner: mariadb
+        "#};
 
         let tmp_dir = TempDir::new("example").expect("must be able to make tmpdir");
         let path = tmp_dir.path().join("config.yml").clone();
@@ -560,13 +568,12 @@ mitre:
 
     #[test]
     fn validates_presense_of_a_supported_runner() -> Result<(), &'static str> {
-        let yaml_docs = match YamlLoader::load_from_str(
-            r#"
----
-a:
-  _runner: foobarbaz
-"#,
-        ) {
+        let yaml_docs = match YamlLoader::load_from_str(indoc! {r#"
+        ---
+        a:
+          _runner: foobarbaz
+        "#})
+        {
             Ok(docs) => docs,
             _ => return Err("doc didn't parse"),
         };
