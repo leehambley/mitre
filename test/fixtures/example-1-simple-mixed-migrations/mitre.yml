@@ -33,4 +33,4 @@ es-postgres:
 #
 # [1]: https://yaml.org/spec/1.2/spec.html#id2765878
 mitre:
- *es-mariadb
+ <<: *es-mariadb

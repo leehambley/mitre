@@ -11,6 +11,16 @@ Mitre extends this concept with orthogonal naming of the migration files
 (`.curl`, `.sql`, `.pgsql`, etc) which are used to look-up the corresponding
 runner engine and configuration.
 
+## Prior Art
+
+You may be familiar with the general concept of migrations from frameworks such as Rails (ActiveRecord), Entity Framework Core, Liquibase, FlywayDB, Phinx, typeorm and others.
+
+Mitre is a cross-platform (stand-alone CLI tool, and bindings for Ruby, Node.js) tool to bring the concept in a more portable, more flexible way to ecosystems which may not otherwise overlap.
+
+## Pronunciation
+
+/ˈmaɪtə(r)/, or "my-tuh". In wood-working a mitre is typically a 90⁰ precision cut for joining two pieces. The name feels appropriate for precision work in your database too.
+
 ## Filename Anatomy
 
 ```
