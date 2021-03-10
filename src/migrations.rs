@@ -292,7 +292,7 @@ impl<'a> MigrationFinder<'a> {
 
         match runner_and_config {
             Some(rac) => Ok(vec![Migration {
-                built_in: true,
+                built_in: false,
                 date_time,
                 runner_and_config: rac,
                 flags: self.flags_from_filename(&dir),

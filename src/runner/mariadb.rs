@@ -136,6 +136,28 @@ impl MariaDb {
         }
     }
 
+    fn apply_migration_step(
+        &mut self,
+        m: Migration,
+        ms: &MigrationStep,
+    ) -> (MigrationResult, Migration) {
+        let start = std::time::Instant::now();
+
+        match self.get_runner(&m) {
+            Err(e) => (
+                MigrationResult::Failure(format!("error setting up runner for change step{:?}", e)),
+                m,
+            ),
+            Ok(runner) => match runner.apply(ms) {
+                Ok(_) => match self.record_success(&m, ms, start.elapsed()) {
+                    Ok(_) => (MigrationResult::Success, m),
+                    Err(e) => (MigrationResult::Failure(format!("{:?}", e)), m),
+                },
+                Err(e) => (MigrationResult::Failure(format!("{:?}", e)), m),
+            },
+        }
+    }
+
     /// We do not record failures,
     fn record_success(
         &mut self,
@@ -218,53 +240,25 @@ impl StateStore for MariaDb {
         Ok(self
             .diff(migrations)?
             .into_iter()
-            .map(|(migration_state, migration)| {
-                match migration_state {
-                    // TODO: check mgiation_state is pending
-                    // TODO: blow-up (mayne not here?) if we have up+change, only up+down makes sense.migration
-                    MigrationState::Pending => match migration.steps.get(&Direction::Change) {
-                        Some(change_step) => {
-                            let start = std::time::Instant::now();
-                            trace!("starting apply");
-
-                            match self.get_runner(&migration) {
-                                Err(e) => (
-                                    MigrationResult::Failure(format!(
-                                        "error setting up runner for change step{:?}",
-                                        e
-                                    )),
-                                    migration,
-                                ),
-                                Ok(runner) => match runner.apply(change_step) {
-                                    Ok(_) => {
-                                        trace!("apply ok");
-                                        match self.record_success(
-                                            &migration,
-                                            change_step,
-                                            start.elapsed(),
-                                        ) {
-                                            Ok(_) => (MigrationResult::Success, migration),
-                                            Err(e) => (
-                                                MigrationResult::Failure(format!("{:?}", e)),
-                                                migration,
-                                            ),
-                                        }
-                                    }
-                                    Err(e) => {
-                                        trace!("apply not ok");
-                                        (MigrationResult::Failure(format!("{:?}", e)), migration)
-                                    }
-                                },
-                            }
-                        }
-                        None => (MigrationResult::NothingToDo, migration),
-                    },
-                    MigrationState::Applied => {
-                        info!("already applied {}", migration.date_time);
-
-                        (MigrationResult::AlreadyApplied, migration)
+            .map(|(migration_state, migration)| match migration_state {
+                MigrationState::Pending => match (
+                    migration.steps.get(&Direction::Change),
+                    migration.steps.get(&Direction::Up),
+                ) {
+                    (Some(_up_step), Some(_change_step)) => (
+                        MigrationResult::Failure(format!(
+                            "Migration has both up, and change parts. This is forbidden {:?}",
+                            migration,
+                        )),
+                        migration,
+                    ),
+                    (Some(up_step), None) => self.apply_migration_step(migration.clone(), up_step),
+                    (None, Some(change_step)) => {
+                        self.apply_migration_step(migration.clone(), change_step)
                     }
-                }
+                    (None, None) => (MigrationResult::NothingToDo, migration),
+                },
+                MigrationState::Applied => (MigrationResult::AlreadyApplied, migration),
             })
             .collect())
     }
@@ -315,7 +309,6 @@ impl StateStore for MariaDb {
             Ok(stored_migration_versions) =>
                Ok(migrations.into_iter().map(move |m| {
                 let migration_version = format!("{}", m.date_time.format(crate::migrations::FORMAT_STR));
-                trace!("applied migrations {:?}", stored_migration_versions );
                 match stored_migration_versions.clone().into_iter().find(|stored_m| &migration_version == stored_m ) {
                     Some(_) => { trace!("found applied"); (MigrationState::Applied, m)},
                     None => { trace!("found pending"); (MigrationState::Pending, m)}
