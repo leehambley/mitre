@@ -1,40 +1,13 @@
 use crate::config::RunnerConfiguration;
-use crate::migrations::{Migration, MigrationStep};
-use crate::runner::Runner;
+use crate::migrations::MigrationStep;
+use crate::runner::{Error, Runner};
 use mustache::MapBuilder;
 
 pub struct PostgreSQL {
     client: postgres::Client,
 }
 
-#[derive(Debug)]
-pub enum Error {
-    /// Shadowing errors from the underlying postgresql library
-    PostgreSQL(postgres::error::Error),
-
-    // (reason, the template)
-    TemplateError {
-        reason: String,
-        template: mustache::Template,
-    },
-
-    RunnerNameMismatch {
-        expected: String,
-        found: String,
-    }, // TODO: this is the same as the MariaDB one
-}
-
-impl From<postgres::error::Error> for Error {
-    fn from(err: postgres::error::Error) -> Error {
-        Error::PostgreSQL(err)
-    }
-}
-
 impl Runner for PostgreSQL {
-    type Error = Error;
-    type Migration = Migration;
-    type MigrationStep = MigrationStep;
-
     fn new_runner(config: RunnerConfiguration) -> Result<PostgreSQL, Error> {
         // Ensure this is a proper config for this runner
         let runner_name = String::from(crate::reserved::POSTGRESQL).to_lowercase();

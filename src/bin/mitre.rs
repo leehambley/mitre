@@ -47,7 +47,8 @@ fn main() {
         )
         .subcommand(App::new("ui").about("starts the web-based UI"))
         .subcommand(App::new("ls").about("list all migrations and their status"))
-        .subcommand(App::new("up").about("run migrations up to the current timestamp"))
+        .subcommand(App::new("up").about("deprecated, use migrate"))
+        .subcommand(App::new("migrate").about("run all outstanding migrations"))
         .subcommand(App::new("show-config").about("for showing config file"))
         .subcommand(App::new("show-migrations").about("for migrations"))
         .get_matches();
@@ -226,6 +227,11 @@ mitre --help
         }
 
         Some("up") => {
+            error!("the 'up' command has become the 'migrate' command, please use that now");
+            std::process::exit(1);
+        }
+
+        Some("migrate") => {
             match migrations::migrations(&config) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {

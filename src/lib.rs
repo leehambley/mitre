@@ -1,5 +1,7 @@
+#![feature(associated_type_defaults)]
+
 #[macro_use]
-extern crate log;
+extern crate log; // TODO: replace this with a use() statement?
 
 pub mod config;
 pub mod exit_code;
