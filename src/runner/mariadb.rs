@@ -521,7 +521,7 @@ mod tests {
         let x = match runner.diff(migrations) {
             Ok(_) => Err(String::from("expected an error about missing dbname")),
             Err(e) => match e {
-                Error::NoStateStoreDatabaseNameProvided => Ok(()),
+                StateStoreError::NoStateStoreDatabaseNameProvided => Ok(()),
                 _ => Err(format!("did not expect error {:?}", e)),
             },
         };
