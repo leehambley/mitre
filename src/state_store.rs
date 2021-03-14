@@ -47,6 +47,12 @@ impl From<RunnerError> for Error {
     }
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "State Store Error {:?}", self)
+    }
+}
+
 pub type MigrationStateTuple = (MigrationState, Migration);
 pub type MigrationResultTuple = (MigrationResult, Migration);
 

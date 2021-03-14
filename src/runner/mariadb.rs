@@ -62,15 +62,27 @@ impl MariaDb {
 
         match self.get_runner(&m) {
             Err(e) => (
-                MigrationResult::Failure(format!("error setting up runner for change step{:?}", e)),
+                MigrationResult::Failure {
+                    reason: format!("{:?}", e),
+                },
                 m,
             ),
             Ok(runner) => match runner.apply(ms) {
                 Ok(_) => match self.record_success(&m, ms, start.elapsed()) {
                     Ok(_) => (MigrationResult::Success, m),
-                    Err(e) => (MigrationResult::Failure(format!("{:?}", e)), m),
+                    Err(e) => (
+                        MigrationResult::Failure {
+                            reason: e.to_string(),
+                        },
+                        m,
+                    ),
                 },
-                Err(e) => (MigrationResult::Failure(format!("{:?}", e)), m),
+                Err(e) => (
+                    MigrationResult::Failure {
+                        reason: e.to_string(),
+                    },
+                    m,
+                ),
             },
         }
     }
@@ -208,10 +220,9 @@ impl StateStore for MariaDb {
                     migration.steps.get(&Direction::Up),
                 ) {
                     (Some(_up_step), Some(_change_step)) => (
-                        MigrationResult::Failure(format!(
-                            "Migration has both up, and change parts. This is forbidden {:?}",
-                            migration,
-                        )),
+                        MigrationResult::Failure {
+                            reason: String::from("contains both up and down parts"),
+                        },
                         migration,
                     ),
                     (Some(up_step), None) => self.apply_migration_step(migration.clone(), up_step),
@@ -329,7 +340,7 @@ impl Runner for MariaDb {
             )
             .build();
 
-        trace!("rendering template to string");
+        trace!("rendering template to string from {:?}", ms.path);
         let parsed = match ms.content.render_data_to_string(&template_ctx) {
             Ok(str) => Ok(str),
             Err(e) => Err(RunnerError::TemplateError {
@@ -362,7 +373,9 @@ impl Runner for MariaDb {
             }
             Err(e) => {
                 trace!("applying parsed query failed {:?}", e);
-                Err(RunnerError::ErrorRunningMigration { cause: e })
+                Err(RunnerError::ErrorRunningMigration {
+                    cause: e.to_string(),
+                })
             }
         }
     }
@@ -397,7 +410,7 @@ mod tests {
             for (_, rc) in &self.config.configured_runners {
                 match helper_delete_test_db(&mut self.conn, &rc) {
                     Ok(_) => debug!("success cleaning up db {:?} text database", rc.database),
-                    Err(e) => warn!(
+                    Err(e) => info!(
                         "error, there may be some clean-up to do for {:?}: {:?}",
                         rc, e
                     ),
@@ -554,13 +567,13 @@ mod tests {
     fn it_returns_all_migrations_pending_if_migrations_table_does_not_exist() -> Result<(), String>
     {
         let test_db = helper_create_test_db()?;
-        let config = match Configuration::load_from_str(indoc! {r"
+        let config = match Configuration::load_from_str(indoc!(
+            r"
           ---
-          migrations_directory: /tmp/must/not/exist
           mitre:
             _runner: mariadb
-        "})
-        {
+        "
+        )) {
             Ok(c) => c,
             Err(e) => Err(format!("error generating config: {}", e))?,
         };
@@ -585,25 +598,35 @@ mod tests {
 
     #[test]
     fn migrating_up_just_the_built_in_migrations() -> Result<(), String> {
-        let test_db = helper_create_test_db()?;
-        let config = match Configuration::load_from_str(indoc! {r"
-        ---
-        migrations_directory: /tmp/must/not/exist
-        mitre:
-          _runner: mariadb
-      "})
-        {
-            Ok(c) => c,
-            Err(e) => Err(format!("error generating config: {}", e))?,
-        };
+        let config = helper_create_runner_config(Some(""));
 
-        let mut runner = MariaDb::new_state_store(&test_db.config)
+        //   let _ = std::fs::remove_dir_all("/tmp/migrating_up_just_the_built_in_migrations");
+
+        //   match std::fs::create_dir("/tmp/migrating_up_just_the_built_in_migrations") {
+        //     Err(e) => return Err(format!("cannot create tempdir: {}", e)),
+        //     _ => {},
+        //   };
+
+        //   let config = match Configuration::load_from_str(indoc! {r"
+        //   ---
+        //   migrations_directory: /tmp/migrating_up_just_the_built_in_migrations
+        //   mitre:
+        //     _runner: mariadb
+        // "})
+        // {
+        //     Ok(c) => c,
+        //     Err(e) => Err(format!("error generating config: {}", e))?,
+        // };
+
+        let mut runner = MariaDb::new_state_store(&config)
             .map_err(|e| format!("Could not create state store {:?}", e))?;
         let migrations = migrations(&config).expect("should make at least default migrations");
 
-        // Arrange: Run up (only built-in, because tmp dir
+        // Arrange: Run up (only built-in, because tmp dir)
         match runner.up(migrations.clone()) {
             Ok(migration_results) => {
+                print!("{:#?}", migration_results);
+
                 let v = migration_results;
                 assert_eq!(1, v.len());
 

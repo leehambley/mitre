@@ -28,6 +28,11 @@ pub enum Error {
     /// but cannot.
     CouldNotSelectDatabase,
 
+    /// Could not get a runner
+    CouldNotGetRunner {
+        reason: String,
+    },
+
     /// Template error such as a syntax error.
     TemplateError {
         reason: String,
@@ -36,8 +41,17 @@ pub enum Error {
 
     /// TODO: Describe these
     ErrorRunningMigration {
-        cause: mysql::Error,
+        cause: String,
     },
+
+    /// We successfully ran the migration, but we didn't succeed in
+    /// recording the status
+    ErrorRecordingMigrationResult {
+        cause: String,
+    },
+
+    /// Migrations may not contain both "up" and "change"
+    MigrationContainsBothUpAndChange(Migration),
 
     MigrationHasFailed(String, Migration),
 }
@@ -54,6 +68,12 @@ impl From<postgres::error::Error> for Error {
     }
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Runner Error {:?}", self)
+    }
+}
+
 pub type BoxedRunner = Box<dyn Runner>;
 pub type RunnersHashMap = HashMap<crate::reserved::Runner, BoxedRunner>;
 
@@ -64,12 +84,13 @@ pub enum MigrationState {
     // TODO: Orphaned (switched branch?)
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 pub enum MigrationResult {
     AlreadyApplied,
     Success,
-    Failure(String),
+    Failure { reason: String },
     NothingToDo,
+    SkippedDueToEarlierError, // not implemented yet, should be
 }
 
 pub trait Runner {

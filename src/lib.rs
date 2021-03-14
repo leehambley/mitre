@@ -15,7 +15,7 @@ pub mod ui;
 #[ctor::ctor]
 fn init() {
     env_logger::Builder::new()
-        .filter(None, log::LevelFilter::Info)
+        .filter(None, log::LevelFilter::Off)
         .parse_env("MITRE_TEST_LOG")
         .init();
 }

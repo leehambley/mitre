@@ -541,7 +541,7 @@ mod tests {
     }
 
     #[test]
-    fn test_the_fixture_returns_correct_results() -> Result<(), String> {
+    fn test_fixture_1_returns_correct_results() -> Result<(), String> {
         let path = PathBuf::from("./test/fixtures/example-1-simple-mixed-migrations/mitre.yml");
         let config = match Configuration::from_file(&path) {
             Ok(config) => config,
