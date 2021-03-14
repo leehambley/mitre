@@ -1,8 +1,7 @@
 use clap::{App, Arg};
 use log::{error, info, trace, warn};
-use prettytable::{row, *};
-use prettytable::{Cell, Row, Table};
 use std::path::Path;
+use tabular::{Row, Table};
 
 use mitre::config;
 use mitre::migrations;
@@ -145,25 +144,26 @@ mitre --help
         }
 
         Some("reserved-words") => {
-            let mut table = Table::new();
-            table.add_row(row!["Word", "Kind", "Reason", "(extensions)"]);
+            let mut table = Table::new("{:<} {:<} {:<} {:<}");
             reserved::words().iter().for_each(|word| {
                 match word {
-                    reserved::ReservedWord::Runner(r) => table.add_row(Row::new(vec![
-                        Cell::new(r.name).style_spec("bFy"),
-                        Cell::new("runner").style_spec("Fb"),
-                        Cell::new(r.desc),
-                        Cell::new(&r.exts.join(", ")),
-                    ])),
-                    reserved::ReservedWord::Flag(f) => table.add_row(Row::new(vec![
-                        Cell::new(f.name).style_spec("bFy"),
-                        Cell::new("flag").style_spec("Fb"),
-                        Cell::new(f.meaning),
-                        Cell::new("-"),
-                    ])),
+                    reserved::ReservedWord::Runner(r) => table.add_row(
+                        Row::new()
+                            .with_cell(r.name)
+                            .with_cell("runner")
+                            .with_cell(r.desc)
+                            .with_cell(&r.exts.join(", ")),
+                    ),
+                    reserved::ReservedWord::Flag(f) => table.add_row(
+                        Row::new()
+                            .with_cell(f.name)
+                            .with_cell("flag")
+                            .with_cell(f.meaning)
+                            .with_cell("-"),
+                    ),
                 };
             });
-            table.printstd();
+            print!("{}", table);
         }
 
         Some("show-config") => {
@@ -172,16 +172,7 @@ mitre --help
         }
 
         Some("ls") => {
-            let mut table = Table::new();
-            table.add_row(row![
-                "Status",
-                "Built-In",
-                "Timestamp",
-                "Path",
-                "Runner",
-                "Flags",
-                "Directions"
-            ]);
+            let mut table = Table::new("{:<} {:<} {:<} {:<} {:<} {:<} {:<}");
 
             let mut mdb = match MariaDb::new_state_store(&config) {
                 Ok(mdb) => Ok(mdb),
@@ -199,31 +190,31 @@ mitre --help
                 Ok(migrations) => {
                     for (migration_state, m) in mdb.diff(migrations).expect("boom") {
                         m.clone().steps.into_iter().for_each(|(direction, s)| {
-                            table.add_row(Row::new(vec![
-                                Cell::new(format!("{:?}", migration_state).as_str())
-                                    .style_spec("bFy"),
-                                Cell::new(format!("{:?}", m.built_in).as_str()).style_spec("bFy"),
-                                Cell::new(format!("{:?}", m.date_time).as_str()).style_spec("bFy"),
-                                Cell::new(format!("{:?}", s.path).as_str()).style_spec("fB"),
-                                Cell::new(m.runner_and_config.0.name).style_spec("fB"),
-                                Cell::new(
-                                    format!(
-                                        "{}",
-                                        m.flags
-                                            .iter()
-                                            .map(|f| String::from(f.name))
-                                            .collect::<Vec<String>>()
-                                            .join(", ")
+                            table.add_row(
+                                Row::new()
+                                    .with_cell(format!("{:?}", migration_state).as_str())
+                                    .with_cell(format!("{:?}", m.built_in).as_str())
+                                    .with_cell(format!("{:?}", m.date_time).as_str())
+                                    .with_cell(format!("{:?}", s.path).as_str())
+                                    .with_cell(m.runner_and_config.0.name)
+                                    .with_cell(
+                                        format!(
+                                            "{}",
+                                            m.flags
+                                                .iter()
+                                                .map(|f| String::from(f.name))
+                                                .collect::<Vec<String>>()
+                                                .join(", ")
+                                        )
+                                        .as_str(),
                                     )
-                                    .as_str(),
-                                ),
-                                Cell::new(format!("{:?}", direction).as_str()).style_spec("fB"),
-                            ]));
+                                    .with_cell(format!("{:?}", direction).as_str()),
+                            );
                         });
                     }
                 }
             };
-            table.printstd();
+            print!("{}", table);
         }
 
         Some("up") => {
@@ -238,116 +229,23 @@ mitre --help
                     let mut mdb = MariaDb::new_state_store(&config)
                         .expect("must be able to instance mariadb state store");
                     match mdb.up(migrations) {
-                        Ok(_r) => println!("Ran up() successfully"),
+                        Ok(r) => {
+                            let mut table = Table::new("{:>}  {:<}");
+                            for (result, migration) in r {
+                                table.add_row(
+                                    Row::new()
+                                        .with_cell(format!("{:?}", result))
+                                        .with_cell(format!("{}", migration.date_time)),
+                                );
+                            }
+                            print!("{}", table);
+                        }
                         Err(e) => println!("up() had an error {:?}", e),
                     }
                 }
             };
         }
 
-        // Some("ls") => {
-        //   let migrations = match migrations::migrations(Path::new(
-        //     m.value_of("directory").unwrap_or(DEFAULT_MIGRATIONS_DIR),
-        //   )) {
-        //         Ok(m) => m
-        //         Err(_) => {
-        //             println!("there was a problem enumerating migrations in that dir");
-        //             exit(MIGRATION_DIR_PROBLEM_CODE as i32);
-        //         }
-        //     };
-
-        //     let config = match config::from_file(Path::new(
-        //         m.value_of("config_file").unwrap_or(DEFAULT_CONFIG_FILE),
-        //     )) {
-        //         Ok(c) => c,
-        //         Err(e) => {
-        //             println!("error loading config: {:?}", e);
-        //             exit(CONFIG_PROBLEM_EXIT_CODE as i32);
-        //         }
-        //     };
-
-        //     let mitre_config = match config.get("mitre") {
-        //         Some(mc) => mc,
-        //         None => {
-        //             println!("no config found for mitre");
-        //             exit(NO_MITRE_CONFIG_SPECIFIED_EXIT_CODE as i32);
-        //         }
-        //     };
-
-        //     match mitre_config.validate() {
-        //         Err(problems) => {
-        //             for problem in problems.iter() {
-        //                 println!("Config Problem: {:?}", problem);
-        //                 exit(MITRE_CONFIG_PROBLEM_EXIT_CODE as i32);
-        //             }
-        //         }
-        //         _ => {}
-        //     }
-
-        //     let mdb = match MariaDb::new_state_store(mitre_config) {
-        //         Ok(mut mdb) => {
-        //             println!("bootstrap {:?}", mdb.bootstrap());
-        //             mdb
-        //         }
-        //         Err(e) => {
-        //             println!("error connecting/reading config for mariadb {:?}", e);
-        //             std::process::exit(MITRE_STATE_STORE_PROBLEM_EXIT_CODE as i32);
-        //         }
-        //     };
-        // }
-        // let mitre_config = c.get("mitre").expect("must provide mitre config");
-        // let mdb = MariaDb::new_state_store(mitre_config);
-        //           // let runner: &dyn runner::Runner<Error = mariadb::Error> = mdb.clone();
-        //           // let store: &dyn migration_state_store::MigrationStateStore = mdb;
-        //           match mdb {
-        //               Ok(mut mdb) => {
-        //                   println!("bootstrap {:?}", mdb.bootstrap());
-
-        //                   // get list of migrations
-        //                   // let migrations = match migrations::migrations(path) {
-        //                   //   Ok(m) => m,
-        //                   //   Err(_) => panic!("something happen"),
-        //                   // };
-
-        //                   let migrations: Vec<migrations::Migration> = Vec::new();
-
-        //                   // let mss: &dyn migration_state_store::MigrationStateStore = mdb;
-        //                   match mdb.diff(migrations) {
-        //                     Ok(_) => println!("migrations diff'ed ok"),
-        //                     Err(e) => println!("migrations not diffed ok: {:?}", e)
-        //                   }
-
-        //               }
-        //               Err(e) => {
-        //                   println!("error connecting/reading config for mariadb {:?}", e);
-        //                   std::process::exit(123);
-        //               }
-        //           }
-        //       }
-        Some("show-migrations") => {
-            // info!("showing migrations");
-            // if let Some(ref matches) = m.subcommand_matches("show-migrations") {
-            //     assert!(matches.is_present("directory"));
-            //     let path = Path::new(matches.value_of("directory").unwrap());
-            //     let migrations = match migrations::migrations(path) {
-            //         Ok(m) => m,
-            //         Err(_) => panic!("something happen"),
-            //     };
-
-            //     let mut table = Table::new();
-            //     table.add_row(row!["Filename", "Date/Time", "Flags"]);
-            //     migrations.iter().for_each(|migration| {
-            //         eprintln!("{:?}", migration);
-            //         table.add_row(Row::new(vec![
-            //             Cell::new(migration.parsed.path.to_str().unwrap()).style_spec("bFy"),
-            //             Cell::new(&format!("{}", migration.parsed.date_time.timestamp())[..])
-            //                 .style_spec("Fb"),
-            //             Cell::new(&format!("{:?}", migration.parsed.flags)[..]),
-            //         ]));
-            //     });
-            //     table.printstd();
-            // }
-        }
         Some("ui") => {
             info!("Starting webserver");
             match migrations::migrations(&config) {
