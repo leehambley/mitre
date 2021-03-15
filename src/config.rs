@@ -261,11 +261,11 @@ fn as_string(yaml: &yaml_rust::Yaml) -> String {
 pub fn from_file(p: &Path) -> Result<Configuration, ConfigError> {
     let s = std::fs::read_to_string(p)?;
     let yaml_docs = YamlLoader::load_from_str(&s)?;
-    from_yaml(yaml_docs).and_then(|mut c| {
+    from_yaml(yaml_docs).map(|mut c| {
         if c.migrations_directory.is_relative() {
             c.migrations_directory = p.parent().unwrap().join(c.migrations_directory);
         }
-        Ok(c)
+        c
     })
 }
 
@@ -299,7 +299,7 @@ mitre:
   <<: *my-mysql-db # using YAML anchors is optional but encouraged so no duplication is necessary
 ";
 
-    std::fs::write(p, default_config).map_err(|err| ConfigError::Io(err))
+    std::fs::write(p, default_config).map_err(ConfigError::Io)
 }
 
 fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigError> {
@@ -316,22 +316,18 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
         })
         .flat_map(|map| map.iter())
         .filter_map(|(k, v)| {
-            match k {
-                Yaml::String(key) => match key.as_str() {
-                    "migrations_directory" => {
-                        trace!(
-                            "setting migrations dir from entry in config file {:?} to {:?}",
-                            key,
-                            v
-                        );
-                        mig_dir = match v {
-                            Yaml::String(value) => value,
-                            _ => panic!("must be a string value for migrations_directory"),
-                        }
+            if let Yaml::String(key) = k {
+                if key.as_str() == "migrations_directory" {
+                    trace!(
+                        "setting migrations dir from entry in config file {:?} to {:?}",
+                        key,
+                        v
+                    );
+                    mig_dir = match v {
+                        Yaml::String(value) => value,
+                        _ => panic!("must be a string value for migrations_directory"),
                     }
-                    _ => (),
-                },
-                _ => (),
+                }
             };
             match v {
                 Yaml::Hash(value) => {

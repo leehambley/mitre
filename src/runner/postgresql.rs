@@ -3,12 +3,12 @@ use crate::migrations::MigrationStep;
 use crate::runner::{Error, Runner};
 use mustache::MapBuilder;
 
-pub struct PostgreSQL {
+pub struct PostgreSql {
     client: postgres::Client,
 }
 
-impl Runner for PostgreSQL {
-    fn new_runner(config: RunnerConfiguration) -> Result<PostgreSQL, Error> {
+impl Runner for PostgreSql {
+    fn new_runner(config: RunnerConfiguration) -> Result<PostgreSql, Error> {
         // Ensure this is a proper config for this runner
         let runner_name = String::from(crate::reserved::POSTGRESQL).to_lowercase();
         if config._runner.to_lowercase() != runner_name {
@@ -36,7 +36,7 @@ impl Runner for PostgreSQL {
             _ => c,
         };
 
-        Ok(PostgreSQL {
+        Ok(PostgreSql {
             client: c.connect(postgres::NoTls)?,
         })
     }
@@ -52,7 +52,7 @@ impl Runner for PostgreSQL {
         }?;
         match self.client.simple_query(&parsed) {
             Ok(_) => Ok(()),
-            Err(e) => Err(Error::PostgreSQL(e)),
+            Err(e) => Err(Error::PostgreSql(e)),
         }
     }
 }
@@ -87,7 +87,7 @@ mod tests {
     #[test]
     fn test_creating_postgresql() -> Result<(), String> {
         let rc = helper_create_runner_config();
-        match PostgreSQL::new_runner(rc) {
+        match PostgreSql::new_runner(rc) {
             Ok(_psql) => Ok(()),
             Err(e) => Err(format!("Error: {:?}", e)),
         }

@@ -7,8 +7,6 @@ use askama::Template;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use webbrowser;
-
 struct MigrationTableRow {
     state: String,
     date_time: String,
@@ -40,7 +38,7 @@ async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
             v.push(MigrationTableRow {
                 state: format!("{:?}", migration_state),
                 built_in: m.built_in,
-                date_time: String::from(format!("{:?}", m.date_time)),
+                date_time: format!("{:?}", m.date_time),
                 path: format!("{:?}", s.path),
                 runner_name: m.runner_and_config.1._runner.clone(),
                 direction: format!("{:?}", direction),

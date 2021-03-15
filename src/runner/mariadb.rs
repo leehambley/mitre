@@ -1,6 +1,6 @@
 use crate::config::{Configuration, RunnerConfiguration};
 use crate::migrations::{Direction, Migration, MigrationStep};
-use crate::runner::postgresql::PostgreSQL;
+use crate::runner::postgresql::PostgreSql;
 use crate::runner::BoxedRunner;
 use crate::runner::RunnersHashMap;
 use crate::runner::{Error as RunnerError, MigrationResult, MigrationState, Runner};
@@ -142,7 +142,7 @@ impl StateStore for MariaDb {
                     Box::new(MariaDb::new_runner(m.runner_and_config.1.clone())?)
                 }
                 crate::reserved::POSTGRESQL => {
-                    Box::new(PostgreSQL::new_runner(m.runner_and_config.1.clone())?)
+                    Box::new(PostgreSql::new_runner(m.runner_and_config.1.clone())?)
                 }
                 _ => return Err(StateStoreError::CouldNotFindOrCreateRunner),
             };

@@ -116,7 +116,7 @@ impl<'a> Ord for Migration {
 /// path should be appended to the (ideally) absolute path.
 pub fn migrations(c: &Configuration) -> Result<Vec<Migration>, MigrationsError> {
     let mf = MigrationFinder::new(c);
-    let mut m = mf.built_in_migrations()?;
+    let mut m = mf.built_in_migrations();
     m.extend(mf.migrations_in_dir(&c.migrations_directory)?);
     Ok(m)
 }
@@ -127,7 +127,7 @@ struct MigrationFinder<'a> {
 
 impl<'a> MigrationFinder<'a> {
     fn new(c: &'a Configuration) -> MigrationFinder {
-        return MigrationFinder { config: c };
+        MigrationFinder { config: c }
     }
 
     fn migrations_in_dir<P: AsRef<Path> + std::fmt::Debug>(
@@ -281,7 +281,7 @@ impl<'a> MigrationFinder<'a> {
                     MigrationStep {
                         content,
                         source,
-                        path: path.clone(),
+                        path,
                     },
                 );
                 Some(()) // redundant, just for filter_map and ? above
@@ -302,8 +302,8 @@ impl<'a> MigrationFinder<'a> {
         }
     }
 
-    fn built_in_migrations(&self) -> Result<Vec<Migration>, MigrationsError> {
-        Ok(BuiltInMigrations::iter()
+    fn built_in_migrations(&self) -> Vec<Migration> {
+        BuiltInMigrations::iter()
             .filter_map(|file: Cow<'static, str>| {
                 // Reminder the .ok()? here is because we are in filter_map
                 // it has to return Option<T> to _filter_.
@@ -332,7 +332,7 @@ impl<'a> MigrationFinder<'a> {
                 //                ^^^^^^^^^^^^^^^ stem
                 //                                ^^^ ext
                 //                            ^^^ config name
-                let stem = path.file_stem().map(|s| PathBuf::from(s));
+                let stem = path.file_stem().map(PathBuf::from);
                 let ext = path.extension().map(|ext| ext.to_str()).flatten();
                 let config_name = match &stem {
                     Some(stem) => stem.extension().map(|ext| ext.to_str()).flatten(),
@@ -376,7 +376,7 @@ impl<'a> MigrationFinder<'a> {
                     }
                 }
             })
-            .collect())
+            .collect()
     }
 
     // Vec may be empty if we didn't find anything. We may have good filename candidates
@@ -391,7 +391,7 @@ impl<'a> MigrationFinder<'a> {
         //                                ^^^ ext
         //                            ^^^ config name
         let date_time = extract_timestamp(p).ok();
-        let stem = p.file_stem().map(|s| PathBuf::from(s));
+        let stem = p.file_stem().map(PathBuf::from);
         let ext = p.extension().map(|ext| ext.to_str()).flatten();
         let config_name = match &stem {
             Some(stem) => stem.extension().map(|ext| ext.to_str()).flatten(),

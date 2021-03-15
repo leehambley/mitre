@@ -194,19 +194,21 @@ mitre --help
                                 Row::new()
                                     .with_cell(format!("{:?}", migration_state).as_str())
                                     .with_cell(format!("{:?}", m.built_in).as_str())
-                                    .with_cell(format!("{:?}", m.date_time).as_str())
+                                    .with_cell(
+                                        format!(
+                                            "{:?}",
+                                            m.date_time.format(crate::migrations::FORMAT_STR)
+                                        )
+                                        .as_str(),
+                                    )
                                     .with_cell(format!("{:?}", s.path).as_str())
                                     .with_cell(m.runner_and_config.0.name)
                                     .with_cell(
-                                        format!(
-                                            "{}",
-                                            m.flags
-                                                .iter()
-                                                .map(|f| String::from(f.name))
-                                                .collect::<Vec<String>>()
-                                                .join(", ")
-                                        )
-                                        .as_str(),
+                                        m.flags
+                                            .iter()
+                                            .map(|f| String::from(f.name))
+                                            .collect::<Vec<String>>()
+                                            .join(", "),
                                     )
                                     .with_cell(format!("{:?}", direction).as_str()),
                             );
@@ -233,9 +235,14 @@ mitre --help
                             let mut table = Table::new("{:>}  {:<}");
                             for (result, migration) in r {
                                 table.add_row(
-                                    Row::new()
-                                        .with_cell(format!("{:?}", result))
-                                        .with_cell(format!("{}", migration.date_time)),
+                                    Row::new().with_cell(format!("{:?}", result)).with_cell(
+                                        format!(
+                                            "{}",
+                                            migration
+                                                .date_time
+                                                .format(crate::migrations::FORMAT_STR)
+                                        ),
+                                    ),
                                 );
                             }
                             print!("{}", table);

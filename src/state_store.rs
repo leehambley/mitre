@@ -28,7 +28,7 @@ pub enum Error {
 
     /// Some kind of error, most likely bad config, or lost connection, usually
     RunnerError {
-        reason: RunnerError,
+        reason: Box<RunnerError>,
     },
 
     /// This meand the runner look-up failed and is very serious, not the same as a regular RunnerError
@@ -43,7 +43,9 @@ impl From<mysql::Error> for Error {
 
 impl From<RunnerError> for Error {
     fn from(err: RunnerError) -> Error {
-        Error::RunnerError { reason: err }
+        Error::RunnerError {
+            reason: Box::new(err),
+        }
     }
 }
 

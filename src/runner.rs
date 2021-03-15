@@ -9,7 +9,7 @@ pub mod postgresql;
 #[derive(Debug)]
 pub enum Error {
     MariaDb(mysql::Error),
-    PostgreSQL(postgres::error::Error),
+    PostgreSql(postgres::error::Error),
 
     /// No configuration provided for the runner, which is a problem
     NoConfigForRunner {
@@ -64,7 +64,7 @@ impl From<mysql::Error> for Error {
 
 impl From<postgres::error::Error> for Error {
     fn from(err: postgres::error::Error) -> Error {
-        Error::PostgreSQL(err)
+        Error::PostgreSql(err)
     }
 }
 
