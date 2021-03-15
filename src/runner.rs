@@ -1,6 +1,7 @@
 use crate::config::RunnerConfiguration;
 use crate::migrations::Migration;
 use crate::migrations::MigrationStep;
+use colored::*;
 use std::collections::HashMap;
 
 pub mod mariadb;
@@ -82,6 +83,15 @@ pub enum MigrationState {
     Pending,
     Applied,
     // TODO: Orphaned (switched branch?)
+}
+
+impl std::fmt::Display for MigrationState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            MigrationState::Pending => write!(f, "{}", "Pending".yellow()),
+            MigrationState::Applied => write!(f, "{}", "Applied".green()),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]

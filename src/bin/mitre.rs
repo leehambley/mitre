@@ -174,6 +174,17 @@ mitre --help
         Some("ls") => {
             let mut table = Table::new("{:<} {:<} {:<} {:<} {:<} {:<} {:<}");
 
+            table.add_row(
+                Row::new()
+                    .with_cell("Status")
+                    .with_cell("Built-in")
+                    .with_cell("Timestamp")
+                    .with_cell("Filename")
+                    .with_cell("Runner")
+                    .with_cell("Tags")
+                    .with_cell("Direction"),
+            );
+
             let mut mdb = match MariaDb::new_state_store(&config) {
                 Ok(mdb) => Ok(mdb),
                 Err(reason) => {
@@ -192,21 +203,19 @@ mitre --help
                         m.clone().steps.into_iter().for_each(|(direction, s)| {
                             table.add_row(
                                 Row::new()
-                                    .with_cell(format!("{:?}", migration_state).as_str())
+                                    .with_cell(format!("{}", migration_state))
                                     .with_cell(format!("{:?}", m.built_in).as_str())
                                     .with_cell(
-                                        format!(
-                                            "{:?}",
-                                            m.date_time.format(crate::migrations::FORMAT_STR)
-                                        )
-                                        .as_str(),
+                                        m.date_time
+                                            .format(crate::migrations::FORMAT_STR)
+                                            .to_string(),
                                     )
-                                    .with_cell(format!("{:?}", s.path).as_str())
+                                    .with_cell(s.path.into_os_string().into_string().unwrap())
                                     .with_cell(m.runner_and_config.0.name)
                                     .with_cell(
                                         m.flags
                                             .iter()
-                                            .map(|f| String::from(f.name))
+                                            .map(|f| format!("{}", f))
                                             .collect::<Vec<String>>()
                                             .join(", "),
                                     )
@@ -236,12 +245,10 @@ mitre --help
                             for (result, migration) in r {
                                 table.add_row(
                                     Row::new().with_cell(format!("{:?}", result)).with_cell(
-                                        format!(
-                                            "{}",
-                                            migration
-                                                .date_time
-                                                .format(crate::migrations::FORMAT_STR)
-                                        ),
+                                        migration
+                                            .date_time
+                                            .format(crate::migrations::FORMAT_STR)
+                                            .to_string(),
                                     ),
                                 );
                             }

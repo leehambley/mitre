@@ -3,6 +3,8 @@
 //! case insensitive comparisons on runner names, the configuration file for example
 //! is not required to be capitalized any particular way.
 
+use colored::*;
+
 #[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
 /// Runners contain a name and a list of file extensions which they know how to handle. Multiple runners
 /// may support the same file-names, the selecting factor is whether a [`crate::config::RunnerConfiguration`] exists
@@ -18,6 +20,17 @@ pub struct Runner {
 pub struct Flag {
     pub name: &'static str,
     pub meaning: &'static str,
+}
+
+impl std::fmt::Display for Flag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.name {
+            "data" => write!(f, "{}", "data".blue()),
+            "risky" => write!(f, "{}", "risky".bright_red().on_white()),
+            "long" => write!(f, "{}", "long".white().bold().on_red()),
+            name => write!(f, "{}", name),
+        }
+    }
 }
 
 /// Reserved words are either of type [Runner] or [Flag]
