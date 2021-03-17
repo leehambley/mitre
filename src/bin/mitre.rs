@@ -7,8 +7,8 @@ use tabular::{Row, Table};
 use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
+use mitre::runner::from_config as runner_from_config;
 use mitre::runner::mariadb::MariaDb;
-use mitre::runner::Runner;
 use mitre::state_store::StateStore;
 use mitre::ui::start_web_ui;
 
@@ -325,7 +325,7 @@ mitre --help
             let config = config::from_file(config_file).expect("cannot read config");
 
             match config.get(key) {
-                Some(runnerConfig) => {
+                Some(runner_config) => {
                     let timestamp = Local::now().format(crate::migrations::FORMAT_STR);
                     // TODO: Use runner config (once we have more than one runner) to make path and content
                     let target_path = migrations_dir
@@ -337,8 +337,8 @@ mitre --help
                             .to_str()
                             .expect("could not transform target_path to string")
                     );
-                    let runner = Runner::new_runner(runnerConfig.clone()).expect("foo");
-                    let template = Runner::migration_template(runner);
+                    let runner = runner_from_config(runner_config).expect("foo");
+                    let _template = runner.migration_template();
                 }
                 None => {
                     panic!("Could not find key {} in config", key)

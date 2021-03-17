@@ -87,7 +87,7 @@ impl Runner for MariaDb {
         }
     }
 
-    fn migration_template(&mut self) -> String {
+    fn migration_template(&self) -> String {
         String::from(
             "
 # Put your migration here

@@ -51,6 +51,9 @@ pub enum Error {
         cause: String,
     },
 
+    // Couldn't make a runner from the config
+    CouldNotFindOrCreateRunner,
+
     /// Migrations may not contain both "up" and "change"
     MigrationContainsBothUpAndChange(Migration),
 
@@ -103,6 +106,16 @@ pub enum MigrationResult {
     SkippedDueToEarlierError, // not implemented yet, should be
 }
 
+pub fn from_config(rc: &RunnerConfiguration) -> Result<BoxedRunner, Error> {
+    match rc._runner.as_str() {
+        crate::reserved::MARIA_DB => Ok(Box::new(mariadb::MariaDb::new_runner(rc.clone())?)),
+        crate::reserved::POSTGRESQL => {
+            Ok(Box::new(postgresql::PostgreSql::new_runner(rc.clone())?))
+        }
+        _ => Err(Error::CouldNotFindOrCreateRunner),
+    }
+}
+
 pub trait Runner {
     fn new_runner(config: RunnerConfiguration) -> Result<Self, Error>
     where
@@ -110,5 +123,5 @@ pub trait Runner {
 
     fn apply(&mut self, _: &MigrationStep) -> Result<(), Error>;
 
-    fn migration_template(&mut self) -> String;
+    fn migration_template(&self) -> String;
 }

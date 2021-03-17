@@ -87,12 +87,12 @@ impl Runner for Redis {
         }
     }
 
-    fn migration_template(&mut self) -> String {
+    fn migration_template(&self) -> String {
         String::from(
             "
-# Put your migration here
-${hostname}/_cluster/health?wait_for_status=yellow&timeout=50s   
-",
+      # Put your migration here
+      ${hostname}/_cluster/health?wait_for_status=yellow&timeout=50s   
+      ",
         )
     }
 }

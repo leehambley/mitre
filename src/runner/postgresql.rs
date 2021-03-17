@@ -56,12 +56,12 @@ impl Runner for PostgreSql {
         }
     }
 
-    fn migration_template(&mut self) -> String {
+    fn migration_template(&self) -> String {
         String::from(
             "
-# Put your migration here
-CREATE DATABASE your_database;
-",
+      # Put your migration here
+      CREATE DATABASE your_database;
+      ",
         )
     }
 }
