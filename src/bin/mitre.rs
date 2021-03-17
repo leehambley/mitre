@@ -330,29 +330,42 @@ mitre --help
 
                     let runner =
                         runner_from_config(runner_config).expect("could not create runner");
-                    let (template, extension) = runner.migration_template();
+                    let (up_template, down_template, extension) = runner.migration_template();
                     let target_path = migrations_dir.join(
                         format!(
-                            "{}_{}.{}.{}",
+                            "{}_{}.{}",
                             timestamp,
                             inflections::case::to_snake_case(name),
-                            key,
-                            extension
+                            key
                         )
                         .as_str(),
                     );
+                    let up_target_path = target_path.join(format!("up.{}", extension).as_str());
+
+                    let down_target_path = target_path.join(format!("down.{}", extension).as_str());
                     info!(
                         "Generating migration into {}",
                         target_path
                             .to_str()
                             .expect("could not transform target_path to string")
                     );
-                    match std::fs::write(target_path, template) {
-                        Ok(_) => {
-                            info!("Generation done")
-                        }
+
+                    match std::fs::create_dir(target_path) {
+                        Ok(_) => match std::fs::write(up_target_path, up_template) {
+                            Ok(_) => match std::fs::write(down_target_path, down_template) {
+                                Ok(_) => {
+                                    info!("Generation done")
+                                }
+                                Err(e) => {
+                                    panic!("Could not write file: {}", e)
+                                }
+                            },
+                            Err(e) => {
+                                panic!("Could not write file: {}", e)
+                            }
+                        },
                         Err(e) => {
-                            panic!("Could not write file: {}", e)
+                            panic!("Could create dir: {}", e)
                         }
                     }
                 }

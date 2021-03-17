@@ -128,5 +128,6 @@ pub trait Runner {
 
     fn apply(&mut self, _: &MigrationStep) -> Result<(), Error>;
 
-    fn migration_template(&self) -> (MigrationTemplate, MigrationFileExtension);
+    /// Returns tuple with up, down and file extension for the migration
+    fn migration_template(&self) -> (MigrationTemplate, MigrationTemplate, MigrationFileExtension);
 }

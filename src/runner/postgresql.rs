@@ -57,14 +57,15 @@ impl Runner for PostgreSql {
         }
     }
 
-    fn migration_template(&self) -> (MigrationTemplate, MigrationFileExtension) {
+    fn migration_template(&self) -> (MigrationTemplate, MigrationTemplate, MigrationFileExtension) {
         (
             indoc!(
                 "
           # Put your migration here
-          CREATE DATABASE your_database;
+          CREATE TABLE your_table;
           "
             ),
+            indoc!("DROP TABLE your_table"),
             "sql",
         )
     }

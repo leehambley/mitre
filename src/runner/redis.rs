@@ -38,7 +38,6 @@ impl From<redis_raw::RedisError> for Error {
 }
 
 impl Runner for Redis {
-
     fn new_runner(config: RunnerConfiguration) -> Result<Redis, Error> {
         // Ensure this is a proper config for this runner
         let runner_name = String::from(crate::reserved::REDIS).to_lowercase();
@@ -84,12 +83,15 @@ impl Runner for Redis {
         }
     }
 
-    fn migration_template(&self) -> (MigrationTemplate, MigrationFileExtension) {
-        (indoc!("
-          # Put your migration here
-          ${hostname}/_cluster/health?wait_for_status=yellow&timeout=50s   
-        "),
-        "redis")
+    fn migration_template(&self) -> (MigrationTemplate, MigrationTemplate, MigrationFileExtension) {
+        (
+            indoc!(
+                "
+          SET foo bar
+        "
+            ), indoc!("DEL foo"),
+            "redis",
+        )
     }
 }
 

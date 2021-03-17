@@ -90,7 +90,7 @@ impl Runner for MariaDb {
         }
     }
 
-    fn migration_template(&self) -> (MigrationTemplate, MigrationFileExtension) {
+    fn migration_template(&self) -> (MigrationTemplate, MigrationTemplate, MigrationFileExtension) {
         (
             indoc!(
                 "
@@ -99,6 +99,11 @@ impl Runner for MariaDb {
               column_one VARCHAR(255) NOT NULL
           )
         "
+            ),
+            indoc!(
+                "
+              DROP TABLE your_table;
+            "
             ),
             "sql",
         )
