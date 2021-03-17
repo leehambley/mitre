@@ -1,4 +1,5 @@
-use clap::{App, Arg};
+use chrono::Local;
+use clap::{crate_authors, App, Arg};
 use log::{error, info, trace, warn};
 use std::path::Path;
 use tabular::{Row, Table};
@@ -6,6 +7,7 @@ use tabular::{Row, Table};
 use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
+use mitre::runner::from_config as runner_from_config;
 use mitre::runner::mariadb::MariaDb;
 use mitre::state_store::StateStore;
 use mitre::ui::start_web_ui;
@@ -20,7 +22,7 @@ fn main() {
 
     let m = App::new("mitre")
         .version("0.1")
-        .author("Lee Hambley <lee.hambley@gmail.com>")
+        .author(crate_authors!("\n"))
         .about("CLI runner for migrations")
         .arg(
             Arg::new("config_file")
@@ -50,6 +52,26 @@ fn main() {
         .subcommand(App::new("migrate").about("run all outstanding migrations"))
         .subcommand(App::new("show-config").about("for showing config file"))
         .subcommand(App::new("show-migrations").about("for migrations"))
+        .subcommand(
+            App::new("generate-migration")
+                .about("generates a boilerplate migration for you")
+                .arg(
+                    Arg::new("name")
+                        .long("name")
+                        .takes_value(true)
+                        .value_name("MIGRATION NAME")
+                        .required(true)
+                        .about("Name of the migration"),
+                )
+                .arg(
+                    Arg::new("config")
+                        .long("config-name")
+                        .takes_value(true)
+                        .value_name("CONFIG NAME")
+                        .required(true)
+                        .about("The configuration name (key) you want to generate the migration for from the configured runners"),
+                ),
+        )
         .get_matches();
 
     let config_file = Path::new(
@@ -282,7 +304,77 @@ mitre --help
         }
         Some("down") => {} // down was used
         Some("redo") => {} // redo was used
-        _ => {}            // Either no subcommand or one not tested for...
+        Some("generate-migration") => {
+            info!("generating migration");
+            let sub_m = m
+                .subcommand_matches("generate-migration")
+                .expect("expected to match subcommand");
+            let name = sub_m.value_of("name").expect("expected name argument");
+            let key = sub_m.value_of("config").expect("expected config argument");
+
+            let migrations_dir = Path::new(
+                m.value_of("directory")
+                    .unwrap_or(mitre::config::DEFAULT_MIGRATIONS_DIR),
+            );
+
+            let config_file = Path::new(
+                m.value_of("config_file")
+                    .unwrap_or(mitre::config::DEFAULT_CONFIG_FILE),
+            );
+
+            let config = config::from_file(config_file).expect("cannot read config");
+
+            match config.get(key) {
+                Some(runner_config) => {
+                    let timestamp = Local::now().format(crate::migrations::FORMAT_STR);
+
+                    let runner =
+                        runner_from_config(runner_config).expect("could not create runner");
+                    let (up_template, down_template, extension) = runner.migration_template();
+                    let target_path = migrations_dir.join(
+                        format!(
+                            "{}_{}.{}",
+                            timestamp,
+                            inflections::case::to_snake_case(name),
+                            key
+                        )
+                        .as_str(),
+                    );
+                    let up_target_path = target_path.join(format!("up.{}", extension).as_str());
+
+                    let down_target_path = target_path.join(format!("down.{}", extension).as_str());
+                    info!(
+                        "Generating migration into {}",
+                        target_path
+                            .to_str()
+                            .expect("could not transform target_path to string")
+                    );
+
+                    match std::fs::create_dir(target_path) {
+                        Ok(_) => match std::fs::write(up_target_path, up_template) {
+                            Ok(_) => match std::fs::write(down_target_path, down_template) {
+                                Ok(_) => {
+                                    info!("Generation done")
+                                }
+                                Err(e) => {
+                                    panic!("Could not write file: {}", e)
+                                }
+                            },
+                            Err(e) => {
+                                panic!("Could not write file: {}", e)
+                            }
+                        },
+                        Err(e) => {
+                            panic!("Could create dir: {}", e)
+                        }
+                    }
+                }
+                None => {
+                    panic!("Could not find key {} in config", key)
+                }
+            }
+        }
+        _ => {} // Either no subcommand or one not tested for...
     }
 }
 

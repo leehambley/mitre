@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 pub mod mariadb;
 pub mod postgresql;
+// pub mod redis;
 
 #[derive(Debug)]
 pub enum Error {
@@ -50,6 +51,9 @@ pub enum Error {
     ErrorRecordingMigrationResult {
         cause: String,
     },
+
+    // Couldn't make a runner from the config
+    CouldNotFindOrCreateRunner,
 
     /// Migrations may not contain both "up" and "change"
     MigrationContainsBothUpAndChange(Migration),
@@ -103,10 +107,27 @@ pub enum MigrationResult {
     SkippedDueToEarlierError, // not implemented yet, should be
 }
 
+pub fn from_config(rc: &RunnerConfiguration) -> Result<BoxedRunner, Error> {
+    trace!("Getting runner from config {:?}", rc);
+    match rc._runner.as_str() {
+        crate::reserved::MARIA_DB => Ok(Box::new(mariadb::MariaDb::new_runner(rc.clone())?)),
+        crate::reserved::POSTGRESQL => {
+            Ok(Box::new(postgresql::PostgreSql::new_runner(rc.clone())?))
+        }
+        _ => Err(Error::CouldNotFindOrCreateRunner),
+    }
+}
+
+pub type MigrationTemplate = &'static str;
+pub type MigrationFileExtension = &'static str;
+
 pub trait Runner {
     fn new_runner(config: RunnerConfiguration) -> Result<Self, Error>
     where
         Self: Sized;
 
     fn apply(&mut self, _: &MigrationStep) -> Result<(), Error>;
+
+    /// Returns tuple with up, down and file extension for the migration
+    fn migration_template(&self) -> (MigrationTemplate, MigrationTemplate, MigrationFileExtension);
 }

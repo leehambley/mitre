@@ -1,9 +1,7 @@
 use super::{MariaDb, MARIADB_MIGRATION_STATE_TABLE_NAME};
 use crate::config::Configuration;
 use crate::migrations::{Direction, Migration, MigrationStep};
-use crate::runner::{
-    postgresql::PostgreSql, BoxedRunner, MigrationResult, MigrationState, Runner, RunnersHashMap,
-};
+use crate::runner::{BoxedRunner, MigrationResult, MigrationState, RunnersHashMap};
 use crate::state_store::{
     Error as StateStoreError, MigrationResultTuple, MigrationStateTuple, StateStore,
 };
@@ -102,22 +100,15 @@ impl StateStore for MariaDb {
             // I feel like this check is _entirely_ redundant, the `runner_and_config`
             // tuple we get here has already done the mapping, and the migrations finder
             // raises an error if we have no suitable config
-            let _ = match &self.config {
+            let rc = match &self.config {
                 Some(c) => c.configured_runners.iter().find(|(_name, cr)| {
                     cr._runner.to_lowercase() == m.runner_and_config.0.name.to_lowercase()
                 }),
                 None => None,
-            };
+            }
+            .ok_or_else(|| crate::state_store::Error::CouldNotFindOrCreateRunner)?;
 
-            let new_runner: BoxedRunner = match m.runner_and_config.0.name {
-                crate::reserved::MARIA_DB => {
-                    Box::new(MariaDb::new_runner(m.runner_and_config.1.clone())?)
-                }
-                crate::reserved::POSTGRESQL => {
-                    Box::new(PostgreSql::new_runner(m.runner_and_config.1.clone())?)
-                }
-                _ => return Err(StateStoreError::CouldNotFindOrCreateRunner),
-            };
+            let new_runner = crate::runner::from_config(rc.1)?;
 
             match self
                 .runners

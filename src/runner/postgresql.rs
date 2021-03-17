@@ -1,6 +1,7 @@
 use crate::config::RunnerConfiguration;
 use crate::migrations::MigrationStep;
-use crate::runner::{Error, Runner};
+use crate::runner::{Error, MigrationFileExtension, MigrationTemplate, Runner};
+use indoc::indoc;
 use mustache::MapBuilder;
 
 pub struct PostgreSql {
@@ -54,6 +55,19 @@ impl Runner for PostgreSql {
             Ok(_) => Ok(()),
             Err(e) => Err(Error::PostgreSql(e)),
         }
+    }
+
+    fn migration_template(&self) -> (MigrationTemplate, MigrationTemplate, MigrationFileExtension) {
+        (
+            indoc!(
+                "
+          # Put your migration here
+          CREATE TABLE your_table;
+          "
+            ),
+            indoc!("DROP TABLE your_table"),
+            "sql",
+        )
     }
 }
 

@@ -38,10 +38,6 @@ impl From<redis_raw::RedisError> for Error {
 }
 
 impl Runner for Redis {
-    type Error = Error;
-    type Migration = Migration;
-    type MigrationStep = MigrationStep;
-
     fn new_runner(config: RunnerConfiguration) -> Result<Redis, Error> {
         // Ensure this is a proper config for this runner
         let runner_name = String::from(crate::reserved::REDIS).to_lowercase();
@@ -85,6 +81,17 @@ impl Runner for Redis {
             Ok(_) => Ok(()),
             Err(e) => Err(Error::PostgreSQL(e)),
         }
+    }
+
+    fn migration_template(&self) -> (MigrationTemplate, MigrationTemplate, MigrationFileExtension) {
+        (
+            indoc!(
+                "
+          SET foo bar
+        "
+            ), indoc!("DEL foo"),
+            "redis",
+        )
     }
 }
 
