@@ -1,7 +1,10 @@
 use super::{MariaDb, MARIADB_MIGRATION_STATE_TABLE_NAME};
 use crate::config::RunnerConfiguration;
 use crate::migrations::MigrationStep;
-use crate::runner::{Error as RunnerError, Runner, RunnersHashMap};
+use crate::runner::{
+    Error as RunnerError, MigrationFileExtension, MigrationTemplate, Runner, RunnersHashMap,
+};
+use indoc::indoc;
 use mustache::MapBuilder;
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};
@@ -87,14 +90,17 @@ impl Runner for MariaDb {
         }
     }
 
-    fn migration_template(&self) -> String {
-        String::from(
-            "
-# Put your migration here
-CREATE TABLE your_table (
-    column_one VARCHAR(255) NOT NULL
-)    
-",
+    fn migration_template(&self) -> (MigrationTemplate, MigrationFileExtension) {
+        (
+            indoc!(
+                "
+          # Put your migration here
+          CREATE TABLE your_table (
+              column_one VARCHAR(255) NOT NULL
+          )
+        "
+            ),
+            "sql",
         )
     }
 }

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 pub mod mariadb;
 pub mod postgresql;
+// pub mod redis;
 
 #[derive(Debug)]
 pub enum Error {
@@ -107,6 +108,7 @@ pub enum MigrationResult {
 }
 
 pub fn from_config(rc: &RunnerConfiguration) -> Result<BoxedRunner, Error> {
+    trace!("Getting runner from config {:?}", rc);
     match rc._runner.as_str() {
         crate::reserved::MARIA_DB => Ok(Box::new(mariadb::MariaDb::new_runner(rc.clone())?)),
         crate::reserved::POSTGRESQL => {
@@ -116,6 +118,9 @@ pub fn from_config(rc: &RunnerConfiguration) -> Result<BoxedRunner, Error> {
     }
 }
 
+pub type MigrationTemplate = &'static str;
+pub type MigrationFileExtension = &'static str;
+
 pub trait Runner {
     fn new_runner(config: RunnerConfiguration) -> Result<Self, Error>
     where
@@ -123,5 +128,5 @@ pub trait Runner {
 
     fn apply(&mut self, _: &MigrationStep) -> Result<(), Error>;
 
-    fn migration_template(&self) -> String;
+    fn migration_template(&self) -> (MigrationTemplate, MigrationFileExtension);
 }

@@ -1,5 +1,5 @@
 [package]
-authors = ["Lee Hambley <lee.hambley@gmail.com>"]
+authors = ["Lee Hambley <lee.hambley@gmail.com>", "Daniel Schmidt <danielmschmidt92@gmail.com>"]
 edition = "2018"
 name = "mitre"
 version = "0.1.0"
@@ -11,19 +11,20 @@ crate-type = ["rlib", "dylib"]
 ctor = "0.1.19"
 rand = "0.8.0"
 tempdir = "0.3.7"
-indoc = "1.0"
 tempfile = "3"
 maplit = "1.0.2"
 
 [dependencies]
 actix-web = "4.0.0-beta.3"
-colored = "2.0.0"
 askama = "0.10.5"
 chrono = "0.4.13"
 clap = "3.0.0-beta.1"
+colored = "2.0.0"
 env_logger = "0.8.3"
 envsubst = "0.2.0"
 ignore = "0.4.17"
+indoc = "1.0"
+inflections = "1.1.1"
 kafka = "0.8.0"
 log = "0.4"
 mustache = "0.9.0"

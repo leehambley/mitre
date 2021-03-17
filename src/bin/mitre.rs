@@ -1,5 +1,5 @@
 use chrono::Local;
-use clap::{App, Arg};
+use clap::{crate_authors, App, Arg};
 use log::{error, info, trace, warn};
 use std::path::Path;
 use tabular::{Row, Table};
@@ -22,7 +22,7 @@ fn main() {
 
     let m = App::new("mitre")
         .version("0.1")
-        .author("Lee Hambley <lee.hambley@gmail.com>")
+        .author(crate_authors!("\n"))
         .about("CLI runner for migrations")
         .arg(
             Arg::new("config_file")
@@ -59,17 +59,17 @@ fn main() {
                     Arg::new("name")
                         .long("name")
                         .takes_value(true)
-                        .value_name("NAME")
+                        .value_name("MIGRATION NAME")
                         .required(true)
                         .about("Name of the migration"),
                 )
                 .arg(
-                    Arg::new("key")
-                        .long("key")
+                    Arg::new("config")
+                        .long("config-name")
                         .takes_value(true)
-                        .value_name("CONFIG KEY")
+                        .value_name("CONFIG NAME")
                         .required(true)
-                        .about("The data source config you want to generate the migration for"),
+                        .about("The configuration name (key) you want to generate the migration for from the configured runners"),
                 ),
         )
         .get_matches();
@@ -310,7 +310,7 @@ mitre --help
                 .subcommand_matches("generate-migration")
                 .expect("expected to match subcommand");
             let name = sub_m.value_of("name").expect("expected name argument");
-            let key = sub_m.value_of("key").expect("expected key argument");
+            let key = sub_m.value_of("config").expect("expected config argument");
 
             let migrations_dir = Path::new(
                 m.value_of("directory")
@@ -327,18 +327,34 @@ mitre --help
             match config.get(key) {
                 Some(runner_config) => {
                     let timestamp = Local::now().format(crate::migrations::FORMAT_STR);
-                    // TODO: Use runner config (once we have more than one runner) to make path and content
-                    let target_path = migrations_dir
-                        .join(key)
-                        .join(format!("{}_{}.sql", timestamp, name));
+
+                    let runner =
+                        runner_from_config(runner_config).expect("could not create runner");
+                    let (template, extension) = runner.migration_template();
+                    let target_path = migrations_dir.join(
+                        format!(
+                            "{}_{}.{}.{}",
+                            timestamp,
+                            inflections::case::to_snake_case(name),
+                            key,
+                            extension
+                        )
+                        .as_str(),
+                    );
                     info!(
                         "Generating migration into {}",
                         target_path
                             .to_str()
                             .expect("could not transform target_path to string")
                     );
-                    let runner = runner_from_config(runner_config).expect("foo");
-                    let _template = runner.migration_template();
+                    match std::fs::write(target_path, template) {
+                        Ok(_) => {
+                            info!("Generation done")
+                        }
+                        Err(e) => {
+                            panic!("Could not write file: {}", e)
+                        }
+                    }
                 }
                 None => {
                     panic!("Could not find key {} in config", key)

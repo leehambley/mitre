@@ -1,6 +1,7 @@
 use crate::config::RunnerConfiguration;
 use crate::migrations::MigrationStep;
-use crate::runner::{Error, Runner};
+use crate::runner::{Error, MigrationFileExtension, MigrationTemplate, Runner};
+use indoc::indoc;
 use mustache::MapBuilder;
 
 pub struct PostgreSql {
@@ -56,12 +57,15 @@ impl Runner for PostgreSql {
         }
     }
 
-    fn migration_template(&self) -> String {
-        String::from(
-            "
-      # Put your migration here
-      CREATE DATABASE your_database;
-      ",
+    fn migration_template(&self) -> (MigrationTemplate, MigrationFileExtension) {
+        (
+            indoc!(
+                "
+          # Put your migration here
+          CREATE DATABASE your_database;
+          "
+            ),
+            "sql",
         )
     }
 }

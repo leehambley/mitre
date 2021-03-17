@@ -38,9 +38,6 @@ impl From<redis_raw::RedisError> for Error {
 }
 
 impl Runner for Redis {
-    type Error = Error;
-    type Migration = Migration;
-    type MigrationStep = MigrationStep;
 
     fn new_runner(config: RunnerConfiguration) -> Result<Redis, Error> {
         // Ensure this is a proper config for this runner
@@ -87,13 +84,12 @@ impl Runner for Redis {
         }
     }
 
-    fn migration_template(&self) -> String {
-        String::from(
-            "
-      # Put your migration here
-      ${hostname}/_cluster/health?wait_for_status=yellow&timeout=50s   
-      ",
-        )
+    fn migration_template(&self) -> (MigrationTemplate, MigrationFileExtension) {
+        (indoc!("
+          # Put your migration here
+          ${hostname}/_cluster/health?wait_for_status=yellow&timeout=50s   
+        "),
+        "redis")
     }
 }
 
