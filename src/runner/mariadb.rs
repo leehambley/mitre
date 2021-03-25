@@ -1,4 +1,4 @@
-use crate::config::{Configuration, RunnerConfiguration};
+use crate::config::RunnerConfiguration;
 use crate::runner::RunnersHashMap;
 use mysql::Conn;
 
@@ -18,12 +18,6 @@ mod state_store;
 pub struct MariaDb {
     conn: Conn,
 
-    // All configurations because as a state-store MariaDb also
-    // has to be able to look-up the correct implementation for.
-    // Option<T> because we may simply be a runner (if someone uses
-    // another store, and MariaDb is only used for running)
-    config: Option<Configuration>,
-
     // Configuration in case we are a runner not a state store
     runner_config: RunnerConfiguration,
 
@@ -38,11 +32,15 @@ mod tests {
     extern crate tempdir;
 
     use super::*;
-    use crate::migrations::migrations;
-    use crate::runner::MigrationState;
+
+    use crate::config::Configuration;
+    use crate::migrations::{migrations, Migration};
+    use crate::runner::{MigrationResult, MigrationState};
+    use crate::state_store::{Error as StateStoreError, StateStore};
     use indoc::indoc;
     use maplit::hashmap;
-    use mysql::OptsBuilder;
+    use mysql::prelude::Queryable;
+    use mysql::{Conn, OptsBuilder};
     use rand::Rng;
     use std::path::PathBuf;
     use tempdir::TempDir;

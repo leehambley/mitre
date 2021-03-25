@@ -13,6 +13,11 @@ pub enum Error {
     /// even though the type is Option<String>.
     NoStateStoreDatabaseNameProvided,
 
+    /// Could not record success
+    CouldNotRecordSuccess {
+        reason: String,
+    },
+
     /// An attempt was made to instantiate a runner or state store
     /// with a runner name that did not match the implementation's expected name.
     /// e.g starting a PostgreSQL state store with a value of "curl" in the runner name.

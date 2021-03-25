@@ -10,16 +10,25 @@ use mysql::{prelude::Queryable, Conn, OptsBuilder};
 /// Helper methods for MariaDb (non-public) used in the context
 /// of fulfilling the implementation of the runner::Runner trait.
 impl MariaDb {
-    fn select_db(&mut self) {
+    fn select_db(&mut self) -> bool {
         match &self.runner_config.database {
             Some(database) => {
                 trace!("select_db database name is {}", database);
                 match &self.conn.select_db(&database) {
-                    true => trace!("select_db successfully using {}", database),
-                    false => trace!("could not switch to {} (may not exist yet?)", database),
+                    true => {
+                        trace!("select_db successfully using {}", database);
+                        true
+                    }
+                    false => {
+                        trace!("could not switch to {} (may not exist yet?)", database);
+                        false
+                    }
                 }
             }
-            None => trace!("select_db no database name provided"),
+            None => {
+                trace!("select_db no database name provided");
+                false
+            }
         }
     }
 
@@ -64,7 +73,14 @@ impl MariaDb {
         _ms: &MigrationStep,
         d: std::time::Duration,
     ) -> Result<(), StateStoreError> {
-        self.select_db(); // TODO: maybe move select_db inside .conn -> .conn()
+        if !self.select_db() {
+            return Err(StateStoreError::CouldNotRecordSuccess {
+                reason: String::from(
+                    "could not select db, that means the bootstrap migrations are not run",
+                ),
+            });
+        }
+
         match self.conn.prep(format!("INSERT INTO {} (`version`, `up`, `down`, `change`, `applied_at_utc`, `apply_time_ms`, `built_in`, `environment`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);", MARIADB_MIGRATION_STATE_TABLE_NAME)) {
         Ok(stmt) => match self.conn.exec_iter(stmt, (
             m.date_time,
@@ -92,40 +108,36 @@ impl StateStore for MariaDb {
     /// try to create a
     fn get_runner(&mut self, m: &Migration) -> Result<&mut BoxedRunner, StateStoreError> {
         // If we have a cached runner miss, let's
-        trace!("looking up runner for {}", m.runner_and_config.0.name);
-        if self.runners.get(&m.runner_and_config.0).is_none() {
-            // Here we are checking that c.configured_runners contains a config for
-            // the suitable runner.
-            //
-            // I feel like this check is _entirely_ redundant, the `runner_and_config`
-            // tuple we get here has already done the mapping, and the migrations finder
-            // raises an error if we have no suitable config
-            let rc = match &self.config {
-                Some(c) => c.configured_runners.iter().find(|(_name, cr)| {
-                    cr._runner.to_lowercase() == m.runner_and_config.0.name.to_lowercase()
-                }),
-                None => None,
-            }
-            .ok_or_else(|| crate::state_store::Error::CouldNotFindOrCreateRunner)?;
-
-            let new_runner = crate::runner::from_config(rc.1)?;
+        trace!(
+            "looking up runner for {} in MariaDB StateStore",
+            m.runner_and_config.configuration_name
+        );
+        if self
+            .runners
+            .get(&m.runner_and_config.configuration_name)
+            .is_none()
+        {
+            let new_runner = crate::runner::from_config(&m.runner_and_config.runner_configuration)?;
 
             match self
                 .runners
-                .insert(m.runner_and_config.0.clone(), new_runner)
+                .insert(m.runner_and_config.configuration_name.clone(), new_runner)
             {
                 None => trace!(
                     "clean insert of {} into runners map, no old value",
-                    m.runner_and_config.0.name
+                    m.runner_and_config.runner.name
                 ),
                 Some(_) => warn!(
                     "insert of {} into runners map overwrote a previous value, race condition?",
-                    m.runner_and_config.0.name
+                    m.runner_and_config.runner.name
                 ),
             };
         }
 
-        match self.runners.get_mut(&m.runner_and_config.0) {
+        match self
+            .runners
+            .get_mut(&m.runner_and_config.configuration_name)
+        {
             Some(r) => Ok(r),
             None => Err(StateStoreError::CouldNotFindOrCreateRunner),
         }
@@ -164,7 +176,6 @@ impl StateStore for MariaDb {
         );
         Ok(MariaDb {
             conn: Conn::new(opts)?,
-            config: None {}, // we are a runner
             runner_config: mariadb_config,
             runners: RunnersHashMap::new(),
         })
@@ -203,6 +214,9 @@ impl StateStore for MariaDb {
         &mut self,
         migrations: Vec<Migration>,
     ) -> Result<Vec<MigrationStateTuple>, StateStoreError> {
+        // Try and select the DB here, don't worry about the result
+        // a valid result for diff is "no database, even, so no data"
+        // selectdb is used other places where we *require* a positive result.
         self.select_db();
 
         let database = match &self.runner_config.database {

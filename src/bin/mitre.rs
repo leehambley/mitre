@@ -233,7 +233,7 @@ mitre --help
                                             .to_string(),
                                     )
                                     .with_cell(s.path.into_os_string().into_string().unwrap())
-                                    .with_cell(m.runner_and_config.0.name)
+                                    .with_cell(m.runner_and_config.runner.name)
                                     .with_cell(
                                         m.flags
                                             .iter()

@@ -31,7 +31,6 @@ impl Runner for MariaDb {
         );
         Ok(MariaDb {
             conn: Conn::new(opts)?,
-            config: None {}, // we are a runner
             runner_config: config,
             runners: RunnersHashMap::new(),
         })

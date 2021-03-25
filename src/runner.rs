@@ -80,7 +80,7 @@ impl std::fmt::Display for Error {
 }
 
 pub type BoxedRunner = Box<dyn Runner>;
-pub type RunnersHashMap = HashMap<crate::reserved::Runner, BoxedRunner>;
+pub type RunnersHashMap = HashMap<crate::config::ConfigurationName, BoxedRunner>;
 
 #[derive(PartialEq, Debug)]
 pub enum MigrationState {
@@ -109,13 +109,13 @@ pub enum MigrationResult {
 
 pub fn from_config(rc: &RunnerConfiguration) -> Result<BoxedRunner, Error> {
     trace!("Getting runner from config {:?}", rc);
-    match rc._runner.as_str() {
-        crate::reserved::MARIA_DB => Ok(Box::new(mariadb::MariaDb::new_runner(rc.clone())?)),
-        crate::reserved::POSTGRESQL => {
-            Ok(Box::new(postgresql::PostgreSql::new_runner(rc.clone())?))
-        }
-        _ => Err(Error::CouldNotFindOrCreateRunner),
+    if rc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
+        return Ok(Box::new(mariadb::MariaDb::new_runner(rc.clone())?));
     }
+    if rc._runner.to_lowercase() == crate::reserved::POSTGRESQL.to_lowercase() {
+        return Ok(Box::new(postgresql::PostgreSql::new_runner(rc.clone())?));
+    }
+    Err(Error::CouldNotFindOrCreateRunner)
 }
 
 pub type MigrationTemplate = &'static str;

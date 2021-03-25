@@ -78,7 +78,12 @@ impl<'a> PartialOrd for MigrationStep {
 
 type MigrationSteps = HashMap<Direction, MigrationStep>;
 
-type RunnerAndConfiguration = (Runner, RunnerConfiguration);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunnerAndConfiguration {
+    pub runner: Runner,
+    pub runner_configuration: RunnerConfiguration,
+    pub configuration_name: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Migration {
@@ -447,7 +452,11 @@ impl<'a> MigrationFinder<'a> {
         match self.config.configured_runners.get(config_name) {
             Some(config) => match runner_by_name(&config._runner) {
                 Some(runner) => match runner.exts.iter().find(|e| e == &&ext) {
-                    Some(_) => Ok((runner, config.clone())),
+                    Some(_) => Ok(RunnerAndConfiguration {
+                        runner,
+                        runner_configuration: config.clone(),
+                        configuration_name: String::from(config_name),
+                    }),
                     None => Err(format!(
                         "runner {} does not support ext {}",
                         runner.name, ext

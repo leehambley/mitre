@@ -40,7 +40,7 @@ async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
                 built_in: m.built_in,
                 date_time: format!("{:?}", m.date_time),
                 path: format!("{:?}", s.path),
-                runner_name: m.runner_and_config.1._runner.clone(),
+                runner_name: m.runner_and_config.runner.name.to_string(),
                 direction: format!("{:?}", direction),
             })
         })
