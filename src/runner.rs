@@ -131,3 +131,60 @@ pub trait Runner {
     /// Returns tuple with up, down and file extension for the migration
     fn migration_template(&self) -> (MigrationTemplate, MigrationTemplate, MigrationFileExtension);
 }
+
+#[cfg(test)]
+mod tests {
+
+    // extern crate rand;
+    // extern crate tempdir;
+
+    // use super::*;
+    // use crate::migrations::migrations;
+    // use crate::runner::MigrationState;
+    // use indoc::indoc;
+    // use maplit::hashmap;
+    // use mysql::OptsBuilder;
+    // use rand::Rng;
+    // use std::path::PathBuf;
+    // use tempdir::TempDir;
+
+    use super::mariadb::MariaDb;
+    use super::MigrationResult;
+    use crate::config::Configuration;
+    use crate::migrations::migrations;
+    use crate::state_store::StateStore;
+    use std::path::PathBuf;
+
+    #[test]
+    fn fixture_two_stops_executing_after_the_first_failure() -> Result<(), String> {
+        let path = PathBuf::from(
+            "./test/fixtures/example-2-the-second-of-three-migrations-fails/mitre.yml",
+        );
+        let config = match Configuration::from_file(&path) {
+            Ok(config) => config,
+            Err(e) => Err(format!("couldn't make config {}", e))?,
+        };
+
+        let mut runner = MariaDb::new_state_store(&config)
+            .map_err(|e| format!("Could not create state store {:?}", e))?;
+        let migrations = migrations(&config).expect("should make at least default migrations");
+
+        // Arrange: Run up (only built-in, because tmp dir)
+        match runner.up(migrations.clone()) {
+            Ok(migration_results) => {
+                // Built-in plus three in the fixture
+                assert_eq!(4, migration_results.len());
+
+                assert_eq!(MigrationResult::Success, migration_results[0].0);
+                assert_eq!(MigrationResult::Success, migration_results[1].0);
+
+                let result_results: Vec<MigrationResult> =
+                    migration_results.into_iter().map(|mr| mr.0).collect();
+                print!("{:#?}", result_results);
+
+                Ok(())
+            }
+            Err(e) => Err(format!("{:?}", e)),
+        }
+    }
+}

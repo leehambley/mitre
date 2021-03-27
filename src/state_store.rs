@@ -64,6 +64,11 @@ pub type MigrationStateTuple = (MigrationState, Migration);
 pub type MigrationResultTuple = (MigrationResult, Migration);
 
 pub trait StateStore {
+    #[cfg(test)] // testing helper, not thrilled about having this on the trait, but works for now.
+    fn reset_state_store(config: &Configuration) -> Result<(), Error>
+    where
+        Self: Sized;
+
     fn new_state_store(config: &Configuration) -> Result<Self, Error>
     where
         Self: Sized;

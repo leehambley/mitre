@@ -37,6 +37,9 @@ impl Runner for MariaDb {
     }
 
     // Applies a single migration (each runner needs something like this)
+    // apply() does not try and record results, applying a migration may
+    // drop a table or database leaving the system in a state where that
+    // could fail. Up/down/migrate record state _using_ apply().
     fn apply(&mut self, ms: &MigrationStep) -> Result<(), RunnerError> {
         let template_ctx = MapBuilder::new()
             .insert_str(

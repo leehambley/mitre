@@ -1,0 +1,1 @@
+ALTER TABLE some_random_table ADD column_two VARCHAR(255) NOT NULL;

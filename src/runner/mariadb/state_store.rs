@@ -10,7 +10,7 @@ use mysql::{prelude::Queryable, Conn, OptsBuilder};
 /// Helper methods for MariaDb (non-public) used in the context
 /// of fulfilling the implementation of the runner::Runner trait.
 impl MariaDb {
-    fn select_db(&mut self) -> bool {
+    pub fn select_db(&mut self) -> bool {
         match &self.runner_config.database {
             Some(database) => {
                 trace!("select_db database name is {}", database);
@@ -141,6 +141,45 @@ impl StateStore for MariaDb {
             Some(r) => Ok(r),
             None => Err(StateStoreError::CouldNotFindOrCreateRunner),
         }
+    }
+
+    #[cfg(test)]
+    fn reset_state_store(config: &Configuration) -> Result<(), StateStoreError> {
+        match config.configured_runners.get("mitre") {
+            Some(mitre_config) => match crate::runner::from_config(mitre_config) {
+                Ok(mut runner) => {
+                    let drop_db = MigrationStep {
+                        content: mustache::compile_str(
+                            "DROP DATABASE {{mariadb_migration_state_database_name}}",
+                        )
+                        .unwrap(),
+                        path: std::path::PathBuf::from("./reset_state_store"),
+                        source: String::from("no source"),
+                    };
+                    Ok(runner.apply(&drop_db)?)
+                }
+                Err(e) => {
+                    format!("cannot get mitre runner from config: {:?}", e);
+                    Err(StateStoreError::CouldNotFindOrCreateRunner)
+                }
+            },
+            None => {
+                format!("Cannot get config for mitre");
+                Err(StateStoreError::NoMitreConfigProvided)
+            }
+        }
+        // let runner = crate::runner::from_config(&config)?
+        // let drop_db = runner.conn .prep(format!("DROP DATABASE {}", config.)) .expect("could not prepare statement");
+        // match conn.exec::<bool, _, _>(drop_db, ()) {
+        //   Err(e) => Err(format!("error dropping db {:?}", e)),
+        //   Ok(_) => {
+        //     info!("Test DB Dropped {:?}", dbname);
+        //                   Ok(())
+        //               }
+        //           }
+        //     }
+        //   }
+        // }
     }
 
     fn new_state_store(config: &Configuration) -> Result<MariaDb, StateStoreError> {
