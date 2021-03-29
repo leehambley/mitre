@@ -77,5 +77,7 @@ pub trait StateStore {
 
     fn up(&mut self, _: Vec<Migration>) -> Result<Vec<MigrationResultTuple>, Error>;
 
+    fn down(&mut self, _: Vec<Migration>) -> Result<Vec<MigrationResultTuple>, Error>;
+
     fn diff(&mut self, _: Vec<Migration>) -> Result<Vec<MigrationStateTuple>, Error>;
 }

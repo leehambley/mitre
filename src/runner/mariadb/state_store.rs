@@ -32,6 +32,40 @@ impl MariaDb {
         }
     }
 
+    fn unapply_migration_step(
+        &mut self,
+        m: Migration,
+        ms: &MigrationStep,
+    ) -> (MigrationResult, Migration) {
+        let start = std::time::Instant::now();
+
+        match self.get_runner(&m) {
+            Err(e) => (
+                MigrationResult::Failure {
+                    reason: format!("{:?}", e),
+                },
+                m,
+            ),
+            Ok(runner) => match runner.apply(ms) {
+                Ok(_) => match self.remove_success_record(&m, ms, start.elapsed()) {
+                    Ok(_) => (MigrationResult::Success, m),
+                    Err(e) => (
+                        MigrationResult::Failure {
+                            reason: e.to_string(),
+                        },
+                        m,
+                    ),
+                },
+                Err(e) => (
+                    MigrationResult::Failure {
+                        reason: e.to_string(),
+                    },
+                    m,
+                ),
+            },
+        }
+    }
+
     fn apply_migration_step(
         &mut self,
         m: Migration,
@@ -63,6 +97,32 @@ impl MariaDb {
                     m,
                 ),
             },
+        }
+    }
+
+    fn remove_success_record(
+        &mut self,
+        m: &Migration,
+        _ms: &MigrationStep,
+        _: std::time::Duration,
+    ) -> Result<(), StateStoreError> {
+        if !self.select_db() {
+            return Err(StateStoreError::CouldNotRecordSuccess {
+                reason: String::from(
+                    "could not select db, that means the bootstrap migrations are not run",
+                ),
+            });
+        }
+
+        match self.conn.prep(format!("DELETE FROM {} WHERE version = ? LIMIT 1", MARIADB_MIGRATION_STATE_TABLE_NAME)) {
+          Ok(stmt) => match self.conn.exec_iter(stmt, (m.date_time,)) {
+            Ok(query_results) => match query_results.affected_rows() { // TODO: this also contains warnings, could be cool
+              1 => Ok(()),
+              _ => panic!("error removing success record during down, expected to affect exactly one row")
+            },
+            Err(e) => panic!("error running query {:?}", e),
+          },
+          Err(e) => panic!("coult not prepare statement {:?}", e)
         }
     }
 
@@ -104,45 +164,6 @@ impl MariaDb {
 }
 
 impl StateStore for MariaDb {
-    /// Given the set of runner configs on config, this will
-    /// try to create a
-    fn get_runner(&mut self, m: &Migration) -> Result<&mut BoxedRunner, StateStoreError> {
-        // If we have a cached runner miss, let's
-        trace!(
-            "looking up runner for {} in MariaDB StateStore",
-            m.runner_and_config.configuration_name
-        );
-        if self
-            .runners
-            .get(&m.runner_and_config.configuration_name)
-            .is_none()
-        {
-            let new_runner = crate::runner::from_config(&m.runner_and_config.runner_configuration)?;
-
-            match self
-                .runners
-                .insert(m.runner_and_config.configuration_name.clone(), new_runner)
-            {
-                None => trace!(
-                    "clean insert of {} into runners map, no old value",
-                    m.runner_and_config.runner.name
-                ),
-                Some(_) => warn!(
-                    "insert of {} into runners map overwrote a previous value, race condition?",
-                    m.runner_and_config.runner.name
-                ),
-            };
-        }
-
-        match self
-            .runners
-            .get_mut(&m.runner_and_config.configuration_name)
-        {
-            Some(r) => Ok(r),
-            None => Err(StateStoreError::CouldNotFindOrCreateRunner),
-        }
-    }
-
     #[cfg(test)]
     fn reset_state_store(config: &Configuration) -> Result<(), StateStoreError> {
         match config.configured_runners.get("mitre") {
@@ -150,7 +171,7 @@ impl StateStore for MariaDb {
                 Ok(mut runner) => {
                     let drop_db = MigrationStep {
                         content: mustache::compile_str(
-                            "DROP DATABASE {{mariadb_migration_state_database_name}}",
+                            "DROP DATABASE IF EXISTS {{mariadb_migration_state_database_name}}",
                         )
                         .unwrap(),
                         path: std::path::PathBuf::from("./reset_state_store"),
@@ -168,18 +189,6 @@ impl StateStore for MariaDb {
                 Err(StateStoreError::NoMitreConfigProvided)
             }
         }
-        // let runner = crate::runner::from_config(&config)?
-        // let drop_db = runner.conn .prep(format!("DROP DATABASE {}", config.)) .expect("could not prepare statement");
-        // match conn.exec::<bool, _, _>(drop_db, ()) {
-        //   Err(e) => Err(format!("error dropping db {:?}", e)),
-        //   Ok(_) => {
-        //     info!("Test DB Dropped {:?}", dbname);
-        //                   Ok(())
-        //               }
-        //           }
-        //     }
-        //   }
-        // }
     }
 
     fn new_state_store(config: &Configuration) -> Result<MariaDb, StateStoreError> {
@@ -218,6 +227,45 @@ impl StateStore for MariaDb {
             runner_config: mariadb_config,
             runners: RunnersHashMap::new(),
         })
+    }
+
+    /// Given the set of runner configs on config, this will
+    /// try to create a
+    fn get_runner(&mut self, m: &Migration) -> Result<&mut BoxedRunner, StateStoreError> {
+        // If we have a cached runner miss, let's
+        trace!(
+            "looking up runner for {} in MariaDB StateStore",
+            m.runner_and_config.configuration_name
+        );
+        if self
+            .runners
+            .get(&m.runner_and_config.configuration_name)
+            .is_none()
+        {
+            let new_runner = crate::runner::from_config(&m.runner_and_config.runner_configuration)?;
+
+            match self
+                .runners
+                .insert(m.runner_and_config.configuration_name.clone(), new_runner)
+            {
+                None => trace!(
+                    "clean insert of {} into runners map, no old value",
+                    m.runner_and_config.runner.name
+                ),
+                Some(_) => warn!(
+                    "insert of {} into runners map overwrote a previous value, race condition?",
+                    m.runner_and_config.runner.name
+                ),
+            };
+        }
+
+        match self
+            .runners
+            .get_mut(&m.runner_and_config.configuration_name)
+        {
+            Some(r) => Ok(r),
+            None => Err(StateStoreError::CouldNotFindOrCreateRunner),
+        }
     }
 
     fn up(
@@ -269,6 +317,29 @@ impl StateStore for MariaDb {
                 },
                 MigrationState::Applied => (MigrationResult::AlreadyApplied, migration),
             })
+            .collect())
+    }
+
+    fn down(
+        &mut self,
+        migrations: Vec<Migration>,
+    ) -> Result<Vec<MigrationResultTuple>, StateStoreError> {
+        let mut m = self.diff(migrations)?;
+        m.reverse();
+        Ok(m.into_iter()
+            .map(
+                |(migration_state, migration)| -> (MigrationResult, Migration) {
+                    match migration_state {
+                        MigrationState::Applied => match migration.steps.get(&Direction::Down) {
+                            Some(down_step) => {
+                                self.unapply_migration_step(migration.clone(), down_step)
+                            }
+                            None => (MigrationResult::IrreversibleMigration, migration),
+                        },
+                        MigrationState::Pending => (MigrationResult::NothingToDo, migration),
+                    }
+                },
+            )
             .collect())
     }
 

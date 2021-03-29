@@ -1,0 +1,24 @@
+---
+
+migrations_directory: "migrations/"
+
+es-mariadb: &es-mariadb
+  _runner: mariadb
+  database: mitre_test_fixture_three
+  ip_or_hostname: 127.0.0.1
+  password: example
+  port: 3306
+  username: root
+
+# # Please manage your own configs above this line for consistency # #
+# One must provide a "mitre" configuration, this is
+# where migrations are cached in a data store.
+#
+# Here we use the YAML "anchors" [1] feature
+# to conveniently reuse the es-mariadb configuration
+# properties to store our migration information
+# in our principle mariadb instance.
+#
+# [1]: https://yaml.org/spec/1.2/spec.html#id2765878
+mitre:
+ <<: *es-mariadb

@@ -104,7 +104,8 @@ pub enum MigrationResult {
     Success,
     Failure { reason: String },
     NothingToDo,
-    SkippedDueToEarlierError, // not implemented yet, should be
+    IrreversibleMigration, // migration contains no "down" part.
+    SkippedDueToEarlierError,
 }
 
 pub fn from_config(rc: &RunnerConfiguration) -> Result<BoxedRunner, Error> {
@@ -183,15 +184,63 @@ mod tests {
 
                 assert_eq!(MigrationResult::Success, migration_results[0].0);
                 assert_eq!(MigrationResult::Success, migration_results[1].0);
-                // assert_eq!(MigrationResult::SkippedDueToEarlierError, migration_results[2].0);
+                match migration_results[2].0 {
+                    MigrationResult::Failure { reason: _ } => {}
+                    _ => return Err(format!("expected results[1].0 to be Failure")),
+                }
                 assert_eq!(
                     MigrationResult::SkippedDueToEarlierError,
                     migration_results[3].0
                 );
 
-                let result_results: Vec<MigrationResult> =
-                    migration_results.into_iter().map(|mr| mr.0).collect();
-                print!("{:#?}", result_results);
+                Ok(())
+            }
+            Err(e) => Err(format!("{:?}", e)),
+        }
+    }
+
+    #[test]
+    fn test_down_migration() -> Result<(), String> {
+        let path = PathBuf::from("./test/fixtures/example-3-all-migrations-succeed/mitre.yml");
+
+        let config = match Configuration::from_file(&path) {
+            Ok(config) => config,
+            Err(e) => Err(format!("couldn't make config {}", e))?,
+        };
+
+        match MariaDb::reset_state_store(&config) {
+            Ok(_) => {}
+            Err(e) => return Err(format!("{:?}", e)),
+        }
+
+        let mut runner = MariaDb::new_state_store(&config)
+            .map_err(|e| format!("Could not create state store {:?}", e))?;
+
+        let migrations = migrations(&config).expect("should make at least default migrations");
+
+        // Arrange: Run up (only built-in, because tmp dir)
+        match runner.up(migrations.clone()) {
+            Ok(migration_results) => {
+                // Built-in plus three in the fixture
+                assert_eq!(2, migration_results.len());
+                assert_eq!(MigrationResult::Success, migration_results[0].0); // built-in
+                assert_eq!(MigrationResult::Success, migration_results[1].0);
+            }
+            Err(e) => return Err(format!("{:?}", e)),
+        }
+
+        // Act: Run down
+        match runner.down(migrations.clone()) {
+            Ok(migration_results) => {
+                // Built-in plus three in the fixture
+                assert_eq!(2, migration_results.len());
+
+                // NOTE: results are reversed when dealing with down()
+                assert_eq!(MigrationResult::Success, migration_results[0].0);
+                assert_eq!(
+                    MigrationResult::IrreversibleMigration,
+                    migration_results[1].0
+                ); // built-in
 
                 Ok(())
             }
