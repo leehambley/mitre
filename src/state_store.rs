@@ -75,9 +75,17 @@ pub trait StateStore {
 
     fn get_runner(&mut self, _: &Migration) -> Result<&mut crate::runner::BoxedRunner, Error>;
 
-    fn up(&mut self, _: Vec<Migration>) -> Result<Vec<MigrationResultTuple>, Error>;
+    fn up(
+        &mut self,
+        _: Vec<Migration>,
+        _: Option<chrono::NaiveDateTime>,
+    ) -> Result<Vec<MigrationResultTuple>, Error>;
 
-    fn down(&mut self, _: Vec<Migration>) -> Result<Vec<MigrationResultTuple>, Error>;
+    fn down(
+        &mut self,
+        _: Vec<Migration>,
+        _: Option<chrono::NaiveDateTime>,
+    ) -> Result<Vec<MigrationResultTuple>, Error>;
 
     fn diff(&mut self, _: Vec<Migration>) -> Result<Vec<MigrationStateTuple>, Error>;
 }

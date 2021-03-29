@@ -177,7 +177,7 @@ mod tests {
         let migrations = migrations(&config).expect("should make at least default migrations");
 
         // Arrange: Run up (only built-in, because tmp dir)
-        match runner.up(migrations.clone()) {
+        match runner.up(migrations.clone(), None) {
             Ok(migration_results) => {
                 // Built-in plus three in the fixture
                 assert_eq!(4, migration_results.len());
@@ -219,7 +219,7 @@ mod tests {
         let migrations = migrations(&config).expect("should make at least default migrations");
 
         // Arrange: Run up (only built-in, because tmp dir)
-        match runner.up(migrations.clone()) {
+        match runner.up(migrations.clone(), None) {
             Ok(migration_results) => {
                 // Built-in plus three in the fixture
                 assert_eq!(2, migration_results.len());
@@ -230,7 +230,7 @@ mod tests {
         }
 
         // Act: Run down
-        match runner.down(migrations.clone()) {
+        match runner.down(migrations.clone(), None) {
             Ok(migration_results) => {
                 // Built-in plus three in the fixture
                 assert_eq!(2, migration_results.len());

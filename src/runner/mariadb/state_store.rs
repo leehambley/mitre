@@ -271,7 +271,9 @@ impl StateStore for MariaDb {
     fn up(
         &mut self,
         migrations: Vec<Migration>,
+        dt: Option<chrono::NaiveDateTime>,
     ) -> Result<Vec<MigrationResultTuple>, StateStoreError> {
+        let _apply_until = dt.unwrap_or(chrono::Utc::now().naive_utc());
         let mut stop_applying = false;
         Ok(self
             .diff(migrations)?
@@ -323,10 +325,13 @@ impl StateStore for MariaDb {
     fn down(
         &mut self,
         migrations: Vec<Migration>,
+        dt: Option<chrono::NaiveDateTime>,
     ) -> Result<Vec<MigrationResultTuple>, StateStoreError> {
-        let mut m = self.diff(migrations)?;
-        m.reverse();
-        Ok(m.into_iter()
+        let _unapply_after = dt.unwrap_or(chrono::Utc::now().naive_utc());
+        Ok(self
+            .diff(migrations)?
+            .into_iter()
+            .rev()
             .map(
                 |(migration_state, migration)| -> (MigrationResult, Migration) {
                     match migration_state {

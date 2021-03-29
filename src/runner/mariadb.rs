@@ -273,7 +273,7 @@ mod tests {
         let migrations = migrations(&config).expect("should make at least default migrations");
 
         // Arrange: Run up (only built-in, because tmp dir)
-        match runner.up(migrations.clone()) {
+        match runner.up(migrations.clone(), None) {
             Ok(migration_results) => {
                 print!("{:#?}", migration_results);
 
@@ -302,7 +302,7 @@ mod tests {
         };
 
         // Assert up is a noop
-        match runner.up(migrations) {
+        match runner.up(migrations, None) {
             Ok(migration_results) => {
                 let diff_pending: Vec<(MigrationResult, Migration)> = migration_results
                     .into_iter()

@@ -262,7 +262,7 @@ mitre --help
                 Ok(migrations) => {
                     let mut mdb = MariaDb::new_state_store(&config)
                         .expect("must be able to instance mariadb state store");
-                    match mdb.up(migrations) {
+                    match mdb.up(migrations, None) {
                         Ok(r) => {
                             let mut table = Table::new("{:>}  {:<}");
                             for (result, migration) in r {
@@ -289,7 +289,7 @@ mitre --help
                 Ok(migrations) => {
                     let mut mdb = MariaDb::new_state_store(&config)
                         .expect("must be able to instance mariadb state store");
-                    match mdb.down(migrations) {
+                    match mdb.down(migrations, None) {
                         Ok(r) => {
                             let mut table = Table::new("{:>}  {:<}");
                             for (result, migration) in r {
