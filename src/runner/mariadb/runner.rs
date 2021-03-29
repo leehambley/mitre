@@ -41,6 +41,7 @@ impl Runner for MariaDb {
     // drop a table or database leaving the system in a state where that
     // could fail. Up/down/migrate record state _using_ apply().
     fn apply(&mut self, ms: &MigrationStep) -> Result<(), RunnerError> {
+        self.select_db();
         let template_ctx = MapBuilder::new()
             .insert_str(
                 "mariadb_migration_state_table_name",

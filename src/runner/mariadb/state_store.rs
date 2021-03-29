@@ -224,25 +224,48 @@ impl StateStore for MariaDb {
         &mut self,
         migrations: Vec<Migration>,
     ) -> Result<Vec<MigrationResultTuple>, StateStoreError> {
+        let mut stop_applying = false;
         Ok(self
             .diff(migrations)?
             .into_iter()
             .map(|(migration_state, migration)| match migration_state {
                 MigrationState::Pending => match (
+                    stop_applying,
                     migration.steps.get(&Direction::Change),
                     migration.steps.get(&Direction::Up),
                 ) {
-                    (Some(_up_step), Some(_change_step)) => (
+                    (true, _, _) => (MigrationResult::SkippedDueToEarlierError, migration),
+                    (false, Some(_up_step), Some(_change_step)) => (
                         MigrationResult::Failure {
                             reason: String::from("contains both up and down parts"),
                         },
                         migration,
                     ),
-                    (Some(up_step), None) => self.apply_migration_step(migration.clone(), up_step),
-                    (None, Some(change_step)) => {
-                        self.apply_migration_step(migration.clone(), change_step)
+                    (false, Some(up_step), None) => {
+                        let (migration_result, migration) =
+                            self.apply_migration_step(migration.clone(), up_step);
+                        match migration_result {
+                            MigrationResult::Failure { reason: _ } => {
+                                warn!("migration {:?} failed, will stop applying", migration);
+                                stop_applying = true;
+                            }
+                            _ => {}
+                        }
+                        (migration_result, migration)
                     }
-                    (None, None) => (MigrationResult::NothingToDo, migration),
+                    (false, None, Some(change_step)) => {
+                        let (migration_result, migration) =
+                            self.apply_migration_step(migration.clone(), change_step);
+                        match migration_result {
+                            MigrationResult::Failure { reason: _ } => {
+                                warn!("migration {:?} failed, will stop applying", migration);
+                                stop_applying = true;
+                            }
+                            _ => {}
+                        }
+                        (migration_result, migration)
+                    }
+                    (false, None, None) => (MigrationResult::NothingToDo, migration),
                 },
                 MigrationState::Applied => (MigrationResult::AlreadyApplied, migration),
             })

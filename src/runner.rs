@@ -165,8 +165,14 @@ mod tests {
             Err(e) => Err(format!("couldn't make config {}", e))?,
         };
 
+        match MariaDb::reset_state_store(&config) {
+            Ok(_) => {}
+            Err(e) => return Err(format!("{:?}", e)),
+        }
+
         let mut runner = MariaDb::new_state_store(&config)
             .map_err(|e| format!("Could not create state store {:?}", e))?;
+
         let migrations = migrations(&config).expect("should make at least default migrations");
 
         // Arrange: Run up (only built-in, because tmp dir)
@@ -177,6 +183,11 @@ mod tests {
 
                 assert_eq!(MigrationResult::Success, migration_results[0].0);
                 assert_eq!(MigrationResult::Success, migration_results[1].0);
+                // assert_eq!(MigrationResult::SkippedDueToEarlierError, migration_results[2].0);
+                assert_eq!(
+                    MigrationResult::SkippedDueToEarlierError,
+                    migration_results[3].0
+                );
 
                 let result_results: Vec<MigrationResult> =
                     migration_results.into_iter().map(|mr| mr.0).collect();
