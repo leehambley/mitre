@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - uses: Swatinem/rust-cache@v1
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
@@ -27,6 +28,6 @@ jobs:
       mariadb:
         image: mariadb:latest
         env:
-          - MYSQL_ROOT_PASSWORD=example
+        - MYSQL_ROOT_PASSWORD=example
         ports:
-          - 3306:3306
+        - 3306:3306
