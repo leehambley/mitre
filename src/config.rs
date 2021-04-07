@@ -120,19 +120,22 @@ pub enum ConfigProblem {
     NoPasswordSpecified,
 }
 
-pub type RunnerName = String;
+/// Alias for a String when using a configuration name, e.g "mitre" is expected to refer to a
+/// key in the configured runners map which refers to a MariaDB runner. ConfigurationName
+/// is an important concept in case more than one MariaDB runner is in the config.
+pub type ConfigurationName = String;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Configuration {
     pub migrations_directory: PathBuf,
-    pub configured_runners: HashMap<RunnerName, RunnerConfiguration>,
+    pub configured_runners: HashMap<ConfigurationName, RunnerConfiguration>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub struct RunnerConfiguration {
     // Runner is not optional, but we need to option it here to maintain
     // serde::Deserialize compatibility
-    pub _runner: RunnerName,
+    pub _runner: String,
 
     pub database: Option<String>, // used by MariaDB, MySQL, PostgreSQL runners
 
@@ -305,7 +308,7 @@ mitre:
 }
 
 fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigError> {
-    let mut hm: HashMap<RunnerName, RunnerConfiguration> = HashMap::new();
+    let mut hm: HashMap<ConfigurationName, RunnerConfiguration> = HashMap::new();
     let mut mig_dir = DEFAULT_MIGRATIONS_DIR;
     match yaml_docs
         .iter()

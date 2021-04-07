@@ -50,6 +50,7 @@ fn main() {
         .subcommand(App::new("ls").about("list all migrations and their status"))
         .subcommand(App::new("up").about("deprecated, use migrate"))
         .subcommand(App::new("migrate").about("run all outstanding migrations"))
+        .subcommand(App::new("down").about("reverse all reversible migrations"))
         .subcommand(App::new("show-config").about("for showing config file"))
         .subcommand(App::new("show-migrations").about("for migrations"))
         .subcommand(
@@ -233,7 +234,7 @@ mitre --help
                                             .to_string(),
                                     )
                                     .with_cell(s.path.into_os_string().into_string().unwrap())
-                                    .with_cell(m.runner_and_config.0.name)
+                                    .with_cell(m.runner_and_config.runner.name)
                                     .with_cell(
                                         m.flags
                                             .iter()
@@ -261,7 +262,34 @@ mitre --help
                 Ok(migrations) => {
                     let mut mdb = MariaDb::new_state_store(&config)
                         .expect("must be able to instance mariadb state store");
-                    match mdb.up(migrations) {
+                    match mdb.up(migrations, None) {
+                        Ok(r) => {
+                            let mut table = Table::new("{:>}  {:<}");
+                            for (result, migration) in r {
+                                table.add_row(
+                                    Row::new().with_cell(format!("{:?}", result)).with_cell(
+                                        migration
+                                            .date_time
+                                            .format(crate::migrations::FORMAT_STR)
+                                            .to_string(),
+                                    ),
+                                );
+                            }
+                            print!("{}", table);
+                        }
+                        Err(e) => println!("up() had an error {:?}", e),
+                    }
+                }
+            };
+        }
+
+        Some("down") => {
+            match migrations::migrations(&config) {
+                Err(e) => panic!("Error: {:?}", e),
+                Ok(migrations) => {
+                    let mut mdb = MariaDb::new_state_store(&config)
+                        .expect("must be able to instance mariadb state store");
+                    match mdb.down(migrations, None) {
                         Ok(r) => {
                             let mut table = Table::new("{:>}  {:<}");
                             for (result, migration) in r {
@@ -302,7 +330,6 @@ mitre --help
                 }
             }
         }
-        Some("down") => {} // down was used
         Some("redo") => {} // redo was used
         Some("generate-migration") => {
             info!("generating migration");

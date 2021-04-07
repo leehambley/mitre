@@ -13,6 +13,11 @@ pub enum Error {
     /// even though the type is Option<String>.
     NoStateStoreDatabaseNameProvided,
 
+    /// Could not record success
+    CouldNotRecordSuccess {
+        reason: String,
+    },
+
     /// An attempt was made to instantiate a runner or state store
     /// with a runner name that did not match the implementation's expected name.
     /// e.g starting a PostgreSQL state store with a value of "curl" in the runner name.
@@ -59,13 +64,28 @@ pub type MigrationStateTuple = (MigrationState, Migration);
 pub type MigrationResultTuple = (MigrationResult, Migration);
 
 pub trait StateStore {
+    #[cfg(test)] // testing helper, not thrilled about having this on the trait, but works for now.
+    fn reset_state_store(config: &Configuration) -> Result<(), Error>
+    where
+        Self: Sized;
+
     fn new_state_store(config: &Configuration) -> Result<Self, Error>
     where
         Self: Sized;
 
     fn get_runner(&mut self, _: &Migration) -> Result<&mut crate::runner::BoxedRunner, Error>;
 
-    fn up(&mut self, _: Vec<Migration>) -> Result<Vec<MigrationResultTuple>, Error>;
+    fn up(
+        &mut self,
+        _: Vec<Migration>,
+        _: Option<chrono::NaiveDateTime>,
+    ) -> Result<Vec<MigrationResultTuple>, Error>;
+
+    fn down(
+        &mut self,
+        _: Vec<Migration>,
+        _: Option<chrono::NaiveDateTime>,
+    ) -> Result<Vec<MigrationResultTuple>, Error>;
 
     fn diff(&mut self, _: Vec<Migration>) -> Result<Vec<MigrationStateTuple>, Error>;
 }
