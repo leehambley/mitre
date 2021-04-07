@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  build-and-test:
 
     runs-on: ubuntu-latest
 
@@ -22,3 +22,11 @@ jobs:
       run: cargo test --verbose
     - name: Run cargo-deny
       run: cargo deny check
+
+    services:
+      mariadb:
+        image: mariadb:latest
+        env:
+          - MYSQL_ROOT_PASSWORD=example
+        ports:
+          - 3306:3306
