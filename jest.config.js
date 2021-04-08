@@ -7,4 +7,5 @@ module.exports = {
   coverageProvider: "v8",
   testEnvironment: "node",
   testMatch: ["<rootDir>/test/node/*-test.js"],
+  verbose: true,
 };

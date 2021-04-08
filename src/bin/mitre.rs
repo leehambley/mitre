@@ -14,7 +14,7 @@ use mitre::ui::start_web_ui;
 
 fn main() {
     env_logger::Builder::new()
-        .filter(None, log::LevelFilter::Info)
+        .filter(None, log::LevelFilter::Trace)
         .parse_env("MITRE_LOG")
         .init();
 
