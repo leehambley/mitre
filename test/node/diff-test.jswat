@@ -1,12 +1,12 @@
 const path = require("path");
 const mitre = require("../../src/ffi/node");
 
-describe.skip("diff", () => {
-  it("fails with no config file passed", () => {
+describe("diff", () => {
+  it.skip("fails with no config file passed", () => {
     expect(() => mitre.diff()).toThrow();
   });
 
-  it("sends a list of migration states", () => {
+  it.skip("sends a list of migration states", () => {
     const res = mitre.diff({
       migrationsDirectory: path.resolve(
         __dirname,

@@ -5,15 +5,22 @@ require "pry"
 
 module Mitre
 
-  class ReservedWord < FFI::Struct
-    layout :word, :string,
-           :reason, :string,
-           :kind, :string
+  class RunnerConfiguration < FFI::Struct
+    layout :configuration_name, :string,
+           :_runner, :string,
+           :database, :string,
+           :index, :string,
+           :database_number, :uint8,
+           :ip_or_hostname, :string,
+           :port, :uint16, # TODO: check me?
+           :username, :string,
+           :password, :string
   end
   
-  class ReservedWords < FFI::Struct
-    layout :len,  :uint8,
-           :words, :pointer
+  class Configuration < FFI::Struct
+    layout :migrations_directory,:string,
+           :configured_runner, :pointer,
+           :number_of_configured_runners, :uint8
   end
 
   extend FFI::Library
@@ -23,14 +30,13 @@ module Mitre
     "#{File.expand_path("./target/debug/", __dir__)}/#{prefix}mitre.#{FFI::Platform::LIBSUFFIX}"
   end
 
-  attach_function :reserved_words, [ ], :pointer
-  attach_function :free_reserved_words, [:pointer], :void
+  attach_function :init_logging, [ ], :void
+  attach_function :config_from_file, [:string], :void
   
 end
 
-def print_rw(rw)
-  puts "Word: #{rw[:word]} | Kind: #{rw[:kind]} | Reason: #{rw[:reason]}"
-end
+Mitre::init_logging()
+pewpew = "/home/leehambley/code/mitre/test/fixtures/example-1-simple-mixed-migrations/mitre.yml"
 
 # Simple case, just one RW.
 # TODO: `[:kind]` shows :reason not kind, and accessing reason segfaults.. off by one ?
@@ -38,13 +44,12 @@ end
 
 # Yikes, arrays of pointers to structs
 # https://github.com/ffi/ffi/wiki/structs#array-of-structs
-rws = Mitre::ReservedWords.new(Mitre.reserved_words())
-puts rws.to_ptr
-puts "There are #{rws[:len]} reserved words"
-0.upto(rws[:len]-1) do |i|
-  rw = Mitre::ReservedWord.new(rws[:words] + (i * Mitre::ReservedWord.size))
-  print_rw(rw)
-end
+ffiResult = Mitre.config_from_file(pewpew)
+binding.pry
+rws = Mitre::Configuration.new(ffiResult)
+puts rws
+puts rws[:migrations_directory]
+# print_rw(conf)
 
-puts "cleaning up"
-Mitre::free_reserved_words(rws)
+# puts "cleaning up"
+# Mitre::free_reserved_words(rws)

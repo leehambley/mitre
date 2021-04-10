@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "pretest": "cargo build",
-    "test": "jest"
+    "test": "npx jest"
   },
   "keywords": [],
   "author": "",

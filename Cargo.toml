@@ -3,7 +3,7 @@ authors = ["Lee Hambley <lee.hambley@gmail.com>", "Daniel Schmidt <danielmschmid
 edition = "2018"
 name = "mitre"
 version = "0.1.0"
-license = "Apache-2.0"
+license = "Apache- 2.0"
 
 [lib]
 crate-type = ["rlib", "dylib"]
