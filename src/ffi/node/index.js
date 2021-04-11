@@ -19,8 +19,8 @@ const RunnerConfigPtr = ref.refType(RunnerConfig);
 
 const Configuration = Struct({
   migrations_directory: ref.types.CString,
-  configured_runners: RunnerConfigPtr,
-  number_of_configured_runners: ref.types.uint8,
+  configured_runners: Array(RunnerConfig),
+  number_of_configured_runners: ref.types.size_t,
 });
 
 const ConfigurationPtr = ref.refType(Configuration);
@@ -43,30 +43,33 @@ const mitre = {
       number_of_configured_runners,
     } = config.deref();
 
-    // Array() types and similar don't seem to help. We can manually
-    // construct a RunnerConfig, probably given an offset and a sizeof
-    // that is an adventure for another day.
-    let runner_one = configured_runners.deref();
+    configured_runners.length = number_of_configured_runners
 
     let cr = {};
-    cr[runner_one.configuration_name] = {
-      _runner: runner_one._runner,
-      database: runner_one.database,
-      index: runner_one.index,
-      database_number: runner_one.database_number,
-      ip_or_hostname: runner_one.ip_or_hostname,
-      port: runner_one.port,
-      username: runner_one.username,
-      password: runner_one.password,
-    };
+    for (let i = 0; i < configured_runners.length; i++) {
+      console.log({ i, cri: configured_runners[i]._runner });
+    } 
+    // cr[runner_one.configuration_name] = {
+    //   _runner: runner_one._runner,
+    //   database: runner_one.database,
+    //   index: runner_one.index,
+    //   database_number: runner_one.database_number,
+    //   ip_or_hostname: runner_one.ip_or_hostname,
+    //   port: runner_one.port,
+    //   username: runner_one.username,
+    //   password: runner_one.password,
+    // };
 
     // Assume we need something like
+    // ffi.Pointer(  )
     // new RunnerConfig(configured_runners.address + 1 * configured_runners.byteLength)
 
     return {
       migrationsDirectory: migrations_directory,
       configuredRunners: cr,
       numConfiguredRunners: number_of_configured_runners,
+
+      _config_ref_against_gc: config
     };
   },
   diff: (config) => {},

@@ -8,7 +8,7 @@ use std::os::unix::ffi::OsStrExt;
 pub struct Configuration {
     pub migrations_directory: *mut c_char,
     pub configured_runners: *mut RunnerConfiguration,
-    pub number_of_configured_runners: u8,
+    pub number_of_configured_runners: usize,
 }
 
 // this derive(Debug) just ensures we generate some boilerplate to hide warnings about
@@ -99,6 +99,6 @@ pub extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
             .into_raw(),
         configured_runners: Box::into_raw(configured_runners.into_boxed_slice())
             as *mut RunnerConfiguration,
-        number_of_configured_runners: config.configured_runners.keys().len() as u8,
+        number_of_configured_runners: config.configured_runners.keys().len(),
     }))
 }
