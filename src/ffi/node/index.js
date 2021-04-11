@@ -43,33 +43,25 @@ const mitre = {
       number_of_configured_runners,
     } = config.deref();
 
-    configured_runners.length = number_of_configured_runners
+    configured_runners.length = number_of_configured_runners;
 
     let cr = {};
     for (let i = 0; i < configured_runners.length; i++) {
-      console.log({ i, cri: configured_runners[i]._runner });
-    } 
-    // cr[runner_one.configuration_name] = {
-    //   _runner: runner_one._runner,
-    //   database: runner_one.database,
-    //   index: runner_one.index,
-    //   database_number: runner_one.database_number,
-    //   ip_or_hostname: runner_one.ip_or_hostname,
-    //   port: runner_one.port,
-    //   username: runner_one.username,
-    //   password: runner_one.password,
-    // };
-
-    // Assume we need something like
-    // ffi.Pointer(  )
-    // new RunnerConfig(configured_runners.address + 1 * configured_runners.byteLength)
-
+      cr[configured_runners[i].configuration_name] = {
+        _runner: configured_runners[i]._runner,
+        database: configured_runners[i].database,
+        index: configured_runners[i].index,
+        databaseNumber: configured_runners[i].database_number,
+        ipOrHostname: configured_runners[i].ip_or_hostname,
+        port: configured_runners[i].port,
+        username: configured_runners[i].username,
+        password: configured_runners[i].password,
+      };
+    }
     return {
       migrationsDirectory: migrations_directory,
       configuredRunners: cr,
-      numConfiguredRunners: number_of_configured_runners,
-
-      _config_ref_against_gc: config
+      _config_ref_against_gc: config,
     };
   },
   diff: (config) => {},

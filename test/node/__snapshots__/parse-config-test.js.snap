@@ -1,0 +1,46 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`parseConfig returns a parsed config by dir 1`] = `
+Object {
+  "es-docker": Object {
+    "_runner": "http",
+    "database": "",
+    "databaseNumber": 0,
+    "index": "",
+    "ipOrHostname": "es",
+    "password": "",
+    "port": 0,
+    "username": "",
+  },
+  "es-mariadb": Object {
+    "_runner": "mariadb",
+    "database": "mitre",
+    "databaseNumber": 0,
+    "index": "",
+    "ipOrHostname": "127.0.0.1",
+    "password": "example",
+    "port": 3306,
+    "username": "root",
+  },
+  "es-postgres": Object {
+    "_runner": "postgres",
+    "database": "",
+    "databaseNumber": 0,
+    "index": "",
+    "ipOrHostname": "postgres",
+    "password": "example",
+    "port": 5432,
+    "username": "root",
+  },
+  "mitre": Object {
+    "_runner": "mariadb",
+    "database": "mitre",
+    "databaseNumber": 0,
+    "index": "",
+    "ipOrHostname": "127.0.0.1",
+    "password": "example",
+    "port": 3306,
+    "username": "root",
+  },
+}
+`;

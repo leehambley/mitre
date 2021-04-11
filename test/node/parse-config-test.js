@@ -22,19 +22,6 @@ describe("parseConfig", () => {
     expect(
       config.migrationsDirectory
     ).toEqual(expect.stringMatching(/.*example-1-simple-mixed-migrations\/migrations\/$/));
-    expect(config.configuredRunners).toStrictEqual({
-      mitre: {
-        _runner: "mariadb",
-      },
-      "es-mariadb": {
-        _runner: "mariadb"
-      },
-      "es-docker": {
-        _runner: "foo"
-      } 
-    })
-    expect(
-      config.numConfiguredRunners
-    ).toStrictEqual(4);
+    expect(config.configuredRunners).toMatchSnapshot();
   });
 });
