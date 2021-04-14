@@ -3,6 +3,14 @@ var ref = require("ref-napi");
 var Struct = require("ref-struct-di")(ref);
 var Array = require("ref-array-di")(ref);
 
+const LogCallbacks = Struct({
+  // https://github.com/node-ffi-napi/ref-struct-di/blob/master/test/struct.js#L57
+  trace: ffi.Function("void", [ref.types.CString]),
+  debug: ffi.Function("void", [ref.types.CString]),
+});
+
+const LogCallbacksPtr = ref.refType(LogCallbacks);
+
 const RunnerConfig = Struct({
   configuration_name: ref.types.CString,
   _runner: ref.types.CString,
@@ -15,8 +23,6 @@ const RunnerConfig = Struct({
   password: ref.types.CString,
 });
 
-const RunnerConfigPtr = ref.refType(RunnerConfig);
-
 const Configuration = Struct({
   migrations_directory: ref.types.CString,
   configured_runners: Array(RunnerConfig),
@@ -26,12 +32,27 @@ const Configuration = Struct({
 const ConfigurationPtr = ref.refType(Configuration);
 
 var libmitre = ffi.Library("./target/debug/libmitre", {
-  init_logging: ["int", []],
+  init_logger: ["void", [LogCallbacksPtr]],
   config_from_file: [ConfigurationPtr, [ref.types.CString]],
 });
 
+const fnTrace = function (msg) {
+  console.log("trace: fn" + msg);
+};
+
+const fnDebug = function (msg) {
+  console.log("debug: fn" + msg);
+};
+
 // https://github.com/search?q=ffi.Library&type=Code&l=JavaScript
 const mitre = {
+  initLogging: () => {
+    let lc = new LogCallbacks({
+      trace: fnTrace,
+      debug: fnDebug,
+    });
+    libmitre.init_logger(lc.ref());
+  },
   parseConfig: (path) => {
     // NOTE String may not be longer than
     // https://doc.rust-lang.org/std/primitive.isize.html#associatedconstant.MAX
@@ -67,6 +88,6 @@ const mitre = {
   diff: (config) => {},
 };
 
-libmitre.init_logging();
+mitre.initLogging();
 
 module.exports = mitre;

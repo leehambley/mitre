@@ -3,6 +3,27 @@ use std::os::raw::c_char;
 // rust-analyzer has a bug here showing a false warning about unresolved import
 // https://github.com/rust-analyzer/rust-analyzer/issues/6038
 use std::os::unix::ffi::OsStrExt;
+
+type LoggingFunction = extern "C" fn(*mut c_char);
+#[derive(Debug)]
+#[repr(C)]
+struct LogCallbacks {
+    trace: LoggingFunction,
+    debug: LoggingFunction,
+}
+
+#[no_mangle]
+unsafe extern "C" fn init_logger(lc: *mut LogCallbacks) {
+    env_logger::Builder::new()
+        .filter(None, log::LevelFilter::Info)
+        .parse_env("MITRE_LOG")
+        .init();
+    ((*lc).trace)(CString::new("hello trace").unwrap().into_raw());
+    // debug!("printed the trace message");
+    ((*lc).debug)(CString::new("hello debug").unwrap().into_raw());
+    // debug!("printed the debug message");
+}
+
 #[derive(Debug)]
 #[repr(C)]
 pub struct Configuration {
@@ -28,24 +49,12 @@ pub struct RunnerConfiguration {
     pub password: *mut c_char,
 }
 
-/// Important to call this before expecting anything else to log, should be called once
-/// only otherwise will print a warning.
-#[no_mangle]
-extern "C" fn init_logging() -> u8 {
-    env_logger::Builder::new()
-        .filter(None, log::LevelFilter::Info)
-        .parse_env("MITRE_LOG")
-        .init();
-    return 0;
-}
-
 // http://jakegoulding.com/rust-ffi-omnibus/string_arguments/
 // http://jakegoulding.com/rust-ffi-omnibus/objects/
 // https://github.com/andywer/leakage
 // https://michael-f-bryan.github.io/rust-ffi-guide/basic_request.html
 #[no_mangle]
 pub extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
-    trace!("provided path is {:#?}", p);
     let path_as_str = unsafe {
         match CStr::from_ptr(p).to_str() {
             Ok(s) => s,
