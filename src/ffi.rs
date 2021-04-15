@@ -14,11 +14,9 @@ struct LogCallbacks {
 
 impl log::Log for LogCallbacks {
     fn enabled(&self, _metadata: &log::Metadata) -> bool {
-        println!("hot here");
         true
     }
     fn log(&self, record: &log::Record) {
-        println!("hot here");
         let content = format!(
             "{} : {} -- {}",
             record.level(),
@@ -45,11 +43,9 @@ unsafe extern "C" fn init_logger(lc: *mut LogCallbacks) {
             panic!("Error setting logger: {}", e);
         }
         Ok(_) => {
-            trace!("FFI: Initialized logger");
+            trace!("Initialized logger");
         }
     }
-    trace!("FFI: Initialized logger");
-    info!("FFI: Initialized logger");
 }
 
 #[derive(Debug)]
