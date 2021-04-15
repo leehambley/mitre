@@ -5,7 +5,7 @@ use std::os::raw::c_char;
 use std::os::unix::ffi::OsStrExt;
 
 type LoggingFunction = extern "C" fn(*mut c_char);
-#[derive(Debug,Copy,Clone)]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 struct LogCallbacks {
     trace: LoggingFunction,
@@ -14,9 +14,11 @@ struct LogCallbacks {
 
 impl log::Log for LogCallbacks {
     fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        println!("hot here");
         true
     }
     fn log(&self, record: &log::Record) {
+        println!("hot here");
         let content = format!(
             "{} : {} -- {}",
             record.level(),
@@ -25,32 +27,29 @@ impl log::Log for LogCallbacks {
         );
         let log_fn = match record.level() {
             log::Level::Trace => self.trace,
-            _ => self.debug
+            _ => self.debug,
         };
 
         log_fn(CString::new(content.as_str()).unwrap().into_raw())
     }
-    fn flush(&self) {
-        
-    }
+    fn flush(&self) {}
 }
-
-
 
 #[no_mangle]
 unsafe extern "C" fn init_logger(lc: *mut LogCallbacks) {
     error!("pre init max");
-    log::set_max_level(log::max_level());
+    log::set_max_level(log::LevelFilter::Trace);
     error!("pre init");
     match log::set_logger(&*lc) {
-       Err(e) => {
-           panic!("Error setting logger: {}",e);
-       }
-       Ok(_) =>{
-        trace!("FFI: Initialized logger");
-       }
-   }
-   info!("FFI: Initialized logger");
+        Err(e) => {
+            panic!("Error setting logger: {}", e);
+        }
+        Ok(_) => {
+            trace!("FFI: Initialized logger");
+        }
+    }
+    trace!("FFI: Initialized logger");
+    info!("FFI: Initialized logger");
 }
 
 #[derive(Debug)]
