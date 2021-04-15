@@ -5,23 +5,52 @@ use std::os::raw::c_char;
 use std::os::unix::ffi::OsStrExt;
 
 type LoggingFunction = extern "C" fn(*mut c_char);
-#[derive(Debug)]
+#[derive(Debug,Copy,Clone)]
 #[repr(C)]
 struct LogCallbacks {
     trace: LoggingFunction,
     debug: LoggingFunction,
 }
 
+impl log::Log for LogCallbacks {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
+    fn log(&self, record: &log::Record) {
+        let content = format!(
+            "{} : {} -- {}",
+            record.level(),
+            record.target(),
+            record.args()
+        );
+        let log_fn = match record.level() {
+            log::Level::Trace => self.trace,
+            _ => self.debug
+        };
+
+        log_fn(CString::new(content.as_str()).unwrap().into_raw())
+    }
+    fn flush(&self) {
+        
+    }
+}
+
+
+
 #[no_mangle]
 unsafe extern "C" fn init_logger(lc: *mut LogCallbacks) {
-    env_logger::Builder::new()
-        .filter(None, log::LevelFilter::Info)
-        .parse_env("MITRE_LOG")
-        .init();
-    ((*lc).trace)(CString::new("hello trace").unwrap().into_raw());
-    // debug!("printed the trace message");
-    ((*lc).debug)(CString::new("hello debug").unwrap().into_raw());
-    // debug!("printed the debug message");
+    error!("pre init max");
+    log::set_max_level(log::max_level());
+    error!("pre init");
+    match log::set_logger(&*lc) {
+       Err(e) => {
+           panic!("Error setting logger: {}",e);
+       }
+       Ok(_) =>{
+        trace!("FFI: Initialized logger");
+       }
+   }
+   info!("FFI: Initialized logger");
 }
 
 #[derive(Debug)]
@@ -55,6 +84,7 @@ pub struct RunnerConfiguration {
 // https://michael-f-bryan.github.io/rust-ffi-guide/basic_request.html
 #[no_mangle]
 pub extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
+    trace!("FFI: Getting config from file");
     let path_as_str = unsafe {
         match CStr::from_ptr(p).to_str() {
             Ok(s) => s,
