@@ -54,6 +54,7 @@ pub struct Configuration {
     pub migrations_directory: *mut c_char,
     pub configured_runners: *mut RunnerConfiguration,
     pub number_of_configured_runners: usize,
+    // pub rust_config: *mut crate::config::Configuration,
 }
 
 // this derive(Debug) just ensures we generate some boilerplate to hide warnings about
@@ -71,6 +72,44 @@ pub struct RunnerConfiguration {
     pub port: u16,
     pub username: *mut c_char,
     pub password: *mut c_char,
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct MigrationStep {
+    path: *mut c_char,
+    content: *mut c_char,
+    source: *mut c_char,
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct Migration {
+    date_time: *mut c_char,
+    steps: *mut MigrationStep,
+    num_steps: usize,
+    built_in: u8, // bool
+                  // TODO: Flags
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct MigrationState {
+    state: *mut c_char,
+    migration: *mut Migration,
+}
+#[derive(Debug)]
+#[repr(C)]
+pub struct MigrationStates {
+    migration_state: *mut Migration,
+    num_migration_states: usize,
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct MigrationResult {
+    result: *mut c_char,
+    migration: *mut Migration,
 }
 
 // http://jakegoulding.com/rust-ffi-omnibus/string_arguments/
@@ -134,5 +173,12 @@ pub extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
         configured_runners: Box::into_raw(configured_runners.into_boxed_slice())
             as *mut RunnerConfiguration,
         number_of_configured_runners: config.configured_runners.keys().len(),
+        // rust_config: Box::into_raw(Box::new(config))
     }))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn diff(config: *mut crate::config::Configuration) {
+    // let c = Box::from_raw(config);
+    info!("The config survived the roundtrip {:?}", config);
 }
