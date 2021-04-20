@@ -13,6 +13,9 @@ pub enum Error {
     /// even though the type is Option<String>.
     NoStateStoreDatabaseNameProvided,
 
+    /// No supported state store in mitre entry of the configuration
+    UnsupportedRunnerSpecified,
+
     /// Could not record success
     CouldNotRecordSuccess {
         reason: String,
@@ -62,6 +65,25 @@ impl std::fmt::Display for Error {
 
 pub type MigrationStateTuple = (MigrationState, Migration);
 pub type MigrationResultTuple = (MigrationResult, Migration);
+
+/// Takes a `crate::config::Configuration` and restores a
+//
+// Please make sure to add any new implementations to both places if the runner
+// is both a state store and a runner!
+pub fn from_config(c: &Configuration) -> Result<impl StateStore, Error> {
+    match c.get("mitre") {
+        Some(mc) => {
+            if mc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
+                Ok(crate::runner::mariadb::MariaDb::new_state_store(
+                    &c.clone(),
+                )?)
+            } else {
+                Err(Error::UnsupportedRunnerSpecified)
+            }
+        }
+        None => Err(Error::NoMitreConfigProvided),
+    }
+}
 
 pub trait StateStore {
     #[cfg(test)] // testing helper, not thrilled about having this on the trait, but works for now.

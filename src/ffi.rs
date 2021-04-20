@@ -4,6 +4,10 @@ use std::os::raw::c_char;
 // https://github.com/rust-analyzer/rust-analyzer/issues/6038
 use std::os::unix::ffi::OsStrExt;
 
+// Allows use of .diff() on unknown impl StateStore
+// result type.
+use crate::state_store::StateStore;
+
 type LoggingFunction = extern "C" fn(*mut c_char);
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
@@ -50,41 +54,42 @@ unsafe extern "C" fn init_logger(lc: *mut LogCallbacks) {
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct Configuration {
-    pub migrations_directory: *mut c_char,
-    pub configured_runners: *mut RunnerConfiguration,
-    pub number_of_configured_runners: usize,
-    // pub rust_config: *mut crate::config::Configuration,
+struct Configuration {
+    migrations_directory: *mut c_char,
+    configured_runners: *mut RunnerConfiguration,
+    number_of_configured_runners: usize,
+    rust_config: *mut crate::config::Configuration,
 }
 
 // this derive(Debug) just ensures we generate some boilerplate to hide warnings about
 // https://github.com/rust-lang/rust/issues/81658
 #[derive(Debug)]
 #[repr(C)]
-pub struct RunnerConfiguration {
-    pub configuration_name: *mut c_char,
+struct RunnerConfiguration {
+    configuration_name: *mut c_char,
 
-    pub _runner: *mut c_char,
-    pub database: *mut c_char,
-    pub index: *mut c_char,
-    pub database_number: u8,
-    pub ip_or_hostname: *mut c_char,
-    pub port: u16,
-    pub username: *mut c_char,
-    pub password: *mut c_char,
+    _runner: *mut c_char,
+    database: *mut c_char,
+    index: *mut c_char,
+    database_number: u8,
+    ip_or_hostname: *mut c_char,
+    port: u16,
+    username: *mut c_char,
+    password: *mut c_char,
 }
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct MigrationStep {
+struct MigrationStep {
+    direction: *mut c_char,
+
     path: *mut c_char,
-    content: *mut c_char,
     source: *mut c_char,
 }
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct Migration {
+struct Migration {
     date_time: *mut c_char,
     steps: *mut MigrationStep,
     num_steps: usize,
@@ -94,20 +99,20 @@ pub struct Migration {
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct MigrationState {
+struct MigrationState {
     state: *mut c_char,
     migration: *mut Migration,
 }
 #[derive(Debug)]
 #[repr(C)]
-pub struct MigrationStates {
-    migration_state: *mut Migration,
+struct MigrationStates {
+    migration_state: *mut MigrationState,
     num_migration_states: usize,
 }
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct MigrationResult {
+struct MigrationResult {
     result: *mut c_char,
     migration: *mut Migration,
 }
@@ -117,7 +122,7 @@ pub struct MigrationResult {
 // https://github.com/andywer/leakage
 // https://michael-f-bryan.github.io/rust-ffi-guide/basic_request.html
 #[no_mangle]
-pub extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
+extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
     trace!("FFI: Getting config from file");
     let path_as_str = unsafe {
         match CStr::from_ptr(p).to_str() {
@@ -173,12 +178,105 @@ pub extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
         configured_runners: Box::into_raw(configured_runners.into_boxed_slice())
             as *mut RunnerConfiguration,
         number_of_configured_runners: config.configured_runners.keys().len(),
-        // rust_config: Box::into_raw(Box::new(config))
+        rust_config: Box::into_raw(Box::new(config)),
     }))
 }
 
+/// Releases the heap allocated resources created by config_from_file
+/// should be called by the FFI host language to avoid a memory leak.
 #[no_mangle]
-pub unsafe extern "C" fn diff(config: *mut crate::config::Configuration) {
-    // let c = Box::from_raw(config);
-    info!("The config survived the roundtrip {:?}", config);
+unsafe extern "C" fn free_config_from_file(c: *mut Configuration) {
+    assert!(!c.is_null());
+    let c: Box<Configuration> = Box::from_raw(c);
+    let rcs: Vec<RunnerConfiguration> = Vec::from_raw_parts(
+        c.configured_runners,
+        c.number_of_configured_runners,
+        c.number_of_configured_runners,
+    );
+    for rc in rcs {
+        CString::from_raw(rc.configuration_name);
+        CString::from_raw(rc._runner);
+        CString::from_raw(rc.database);
+        CString::from_raw(rc.index);
+        CString::from_raw(rc.ip_or_hostname);
+        CString::from_raw(rc.username);
+        CString::from_raw(rc.password);
+    }
+    Box::from_raw(c.rust_config);
+    CString::from_raw(c.migrations_directory);
+}
+
+/// Takes a pointer to a Box<crate::config::Configuration>, not to the FFI
+/// compatible pointer object returned to the host language. The
+/// `crate::config::Configuration` pointer is contained within the FFI friendly
+/// struct, and freed at the same time. The config will be cloned in
+/// `crate::state_store::from_config()`, so can be safely released after calls to
+/// this function.
+//
+// One improvement here might be this, one day:
+// https://doc.rust-lang.org/nomicon/ffi.html#representing-opaque-structs
+#[no_mangle]
+unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut MigrationStates {
+    let rc = Box::from_raw(c);
+    let migrations = match crate::migrations::migrations(&rc.clone()) {
+        Ok(migrations) => migrations,
+        Err(e) => {
+            error!("could not list migrations using config {:?}", e);
+            return std::ptr::null_mut();
+        }
+    };
+    let migration_states = match crate::state_store::from_config(&rc.clone()) {
+        Ok(mut ss) => match ss.diff(migrations) {
+            Ok(diff_results) => {
+                let mut num_migration_states: usize = 0;
+                let mut migration_states: Vec<MigrationState> = vec![];
+                for (migration_state, migration) in diff_results {
+                    num_migration_states += 1;
+                    let mut num_steps: usize = 0;
+                    let mut steps: Vec<MigrationStep> = vec![];
+                    for (direction, step) in migration.steps {
+                        num_steps += 1;
+                        steps.push(MigrationStep {
+                            direction: CString::new(format!("{:?}", direction)).unwrap().into_raw(),
+                            path: CString::new(step.path.to_str().unwrap_or_default())
+                                .unwrap()
+                                .into_raw(),
+                            source: CString::new(step.source).unwrap().into_raw(),
+                        })
+                    }
+                    migration_states.push(MigrationState {
+                        state: CString::new(format!("{:?}", migration_state))
+                            .unwrap()
+                            .into_raw(),
+                        migration: Box::into_raw(Box::new(Migration {
+                            date_time: CString::new(format!(
+                                "{}",
+                                migration.date_time.format(crate::migrations::FORMAT_STR)
+                            ))
+                            .unwrap()
+                            .into_raw(),
+                            steps: Box::into_raw(steps.into_boxed_slice()) as *mut MigrationStep,
+                            num_steps: num_steps,
+                            built_in: 1,
+                        })),
+                    });
+                }
+                MigrationStates {
+                    migration_state: Box::into_raw(migration_states.into_boxed_slice())
+                        as *mut MigrationState,
+                    num_migration_states: num_migration_states,
+                }
+            }
+            Err(e) => {
+                error!("could not run diff() on state store {:?}", e);
+                return std::ptr::null_mut();
+            }
+        },
+        Err(e) => {
+            error!("could not make state store from config: {:?}", e);
+            return std::ptr::null_mut();
+        }
+    };
+    Box::leak(rc); // don't reclaim this, really, just reference the box contents
+    Box::into_raw(Box::new(migration_states))
 }

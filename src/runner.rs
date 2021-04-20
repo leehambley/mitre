@@ -108,6 +108,8 @@ pub enum MigrationResult {
     SkippedDueToEarlierError,
 }
 
+/// Analog the `from_config` in StateStora trait, which however does
+/// not box the StateStore result.
 pub fn from_config(rc: &RunnerConfiguration) -> Result<BoxedRunner, Error> {
     trace!("Getting runner from config {:?}", rc);
     if rc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
