@@ -14,6 +14,9 @@ type LoggingFunction = extern "C" fn(*mut c_char);
 struct LogCallbacks {
     trace: LoggingFunction,
     debug: LoggingFunction,
+    info: LoggingFunction,
+    warn: LoggingFunction,
+    error: LoggingFunction,
 }
 
 impl log::Log for LogCallbacks {
@@ -27,9 +30,13 @@ impl log::Log for LogCallbacks {
             record.target(),
             record.args()
         );
+
         let log_fn = match record.level() {
             log::Level::Trace => self.trace,
-            _ => self.debug,
+            log::Level::Debug => self.debug,
+            log::Level::Info => self.info,
+            log::Level::Warn => self.warn,
+            log::Level::Error => self.error,
         };
 
         log_fn(CString::new(content.as_str()).unwrap().into_raw())
@@ -39,9 +46,7 @@ impl log::Log for LogCallbacks {
 
 #[no_mangle]
 unsafe extern "C" fn init_logger(lc: *mut LogCallbacks) {
-    error!("pre init max");
     log::set_max_level(log::LevelFilter::Trace);
-    error!("pre init");
     match log::set_logger(&*lc) {
         Err(e) => {
             panic!("Error setting logger: {}", e);
@@ -82,7 +87,6 @@ struct RunnerConfiguration {
 #[repr(C)]
 struct MigrationStep {
     direction: *mut c_char,
-
     path: *mut c_char,
     source: *mut c_char,
 }
@@ -225,6 +229,7 @@ unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut Migratio
             return std::ptr::null_mut();
         }
     };
+
     let migration_states = match crate::state_store::from_config(&rc.clone()) {
         Ok(mut ss) => match ss.diff(migrations) {
             Ok(diff_results) => {
@@ -237,34 +242,36 @@ unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut Migratio
                     for (direction, step) in migration.steps {
                         num_steps += 1;
                         steps.push(MigrationStep {
-                            direction: CString::new(format!("{:?}", direction)).unwrap().into_raw(),
+                            direction: CString::new(format!("{:?}", direction))
+                                .unwrap_or_default()
+                                .into_raw(),
                             path: CString::new(step.path.to_str().unwrap_or_default())
-                                .unwrap()
+                                .unwrap_or_default()
                                 .into_raw(),
                             source: CString::new(step.source).unwrap().into_raw(),
                         })
                     }
                     migration_states.push(MigrationState {
                         state: CString::new(format!("{:?}", migration_state))
-                            .unwrap()
+                            .unwrap_or_default()
                             .into_raw(),
                         migration: Box::into_raw(Box::new(Migration {
                             date_time: CString::new(format!(
                                 "{}",
                                 migration.date_time.format(crate::migrations::FORMAT_STR)
                             ))
-                            .unwrap()
+                            .unwrap_or_default()
                             .into_raw(),
                             steps: Box::into_raw(steps.into_boxed_slice()) as *mut MigrationStep,
-                            num_steps: num_steps,
                             built_in: 1,
+                            num_steps,
                         })),
                     });
                 }
                 MigrationStates {
                     migration_state: Box::into_raw(migration_states.into_boxed_slice())
                         as *mut MigrationState,
-                    num_migration_states: num_migration_states,
+                    num_migration_states,
                 }
             }
             Err(e) => {
@@ -277,6 +284,30 @@ unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut Migratio
             return std::ptr::null_mut();
         }
     };
-    Box::leak(rc); // don't reclaim this, really, just reference the box contents
+    // Box::leak(rc); // don't reclaim this, really, just reference the box contents
     Box::into_raw(Box::new(migration_states))
+}
+
+/// Free the results allocated by `diff()`.
+/// This function will not free the pointer associated with the configuration as the configuration
+/// is cloned into the state store implementation to avoid long-living references, anyway.
+#[no_mangle]
+unsafe extern "C" fn free_diff(m: *mut MigrationStates) {
+    let ms: Box<MigrationStates> = Box::from_raw(m);
+    let ms_states: Vec<MigrationState> = Vec::from_raw_parts(
+        ms.migration_state,
+        ms.num_migration_states,
+        ms.num_migration_states,
+    );
+    for state in ms_states {
+        CString::from_raw(state.state);
+        let migration = Box::from_raw(state.migration);
+        let steps: Vec<MigrationStep> =
+            Vec::from_raw_parts(migration.steps, migration.num_steps, migration.num_steps);
+        for step in steps {
+            CString::from_raw(step.direction);
+            CString::from_raw(step.path);
+            CString::from_raw(step.source);
+        }
+    }
 }

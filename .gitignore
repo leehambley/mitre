@@ -1,3 +1,5 @@
-/target
+mitre.yml
+.bundle
 .vscode
+/target
 node_modules
