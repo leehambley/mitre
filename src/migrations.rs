@@ -1,8 +1,7 @@
-use crate::config::{Configuration, RunnerConfiguration};
-/// Migration look-up functions. Explore the filesystem looking for
-/// files matching the migration naming rules.
+use crate::config::{Configuration, ConfigurationName, RunnerConfiguration};
 use crate::reserved::{flags, runner_by_name, Flag, Runner};
 use core::cmp::Ordering;
+use maplit::hashmap;
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -60,7 +59,6 @@ impl From<mustache::Error> for MigrationsError {
 #[derive(Debug, Clone)]
 pub struct MigrationStep {
     pub path: PathBuf,
-    pub content: mustache::Template,
     pub source: String,
 }
 
@@ -91,7 +89,7 @@ pub struct Migration {
     pub steps: MigrationSteps,
     pub built_in: bool,
     pub flags: Vec<Flag>,
-    pub runner_and_config: RunnerAndConfiguration, // runners are compiled-in
+    pub configuration_name: ConfigurationName,
 }
 impl<'a> PartialOrd for Migration {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -101,6 +99,12 @@ impl<'a> PartialOrd for Migration {
 impl<'a> Ord for Migration {
     fn cmp(&self, other: &Self) -> Ordering {
         self.date_time.cmp(&other.date_time)
+    }
+}
+
+impl MigrationStep {
+    pub fn content(&self) -> Result<mustache::Template, mustache::Error> {
+        mustache::compile_str(&self.source)
     }
 }
 
@@ -179,13 +183,10 @@ impl<'a> MigrationFinder<'a> {
             file.read_to_string(&mut buffer)?;
             buffer
         };
-        let content = mustache::compile_str(&source)?;
-
         let mut hm = HashMap::new();
         hm.insert(
             d,
             MigrationStep {
-                content,
                 source,
                 path: PathBuf::from(path),
             },
@@ -279,16 +280,8 @@ impl<'a> MigrationFinder<'a> {
                     file.read_to_string(&mut buffer).ok()?;
                     buffer
                 };
-                let content = mustache::compile_str(&source).ok()?;
 
-                steps.insert(
-                    direction,
-                    MigrationStep {
-                        content,
-                        source,
-                        path,
-                    },
-                );
+                steps.insert(direction, MigrationStep { source, path });
                 Some(()) // redundant, just for filter_map and ? above
             })
             .collect::<()>(); // force us to do the work, else is lazy
@@ -299,7 +292,7 @@ impl<'a> MigrationFinder<'a> {
             Some(rac) => Ok(vec![Migration {
                 built_in: false,
                 date_time,
-                runner_and_config: rac,
+                configuration_name: rac.configuration_name,
                 flags: self.flags_from_filename(&dir),
                 steps,
             }]),
@@ -326,7 +319,6 @@ impl<'a> MigrationFinder<'a> {
                 // having both of these working so simply.
                 //
                 // The question mark breaks us out of this loop
-                let content = mustache::compile_str(&source).ok()?;
                 let date_time = extract_timestamp(&path).ok()?;
 
                 // Dissect the filename... (this block is duplicated in migration_from_file)
@@ -356,17 +348,16 @@ impl<'a> MigrationFinder<'a> {
                                 steps.insert(
                                     Direction::Change,
                                     MigrationStep {
-                                        content,
                                         source,
                                         path: path.clone(),
                                     },
                                 );
                                 Some(Migration {
-                                    built_in: true,
                                     date_time,
-                                    runner_and_config,
-                                    flags: self.flags_from_filename(&path),
                                     steps,
+                                    built_in: true,
+                                    flags: self.flags_from_filename(&path),
+                                    configuration_name: runner_and_config.configuration_name,
                                 })
                             }
                             Err(e) => {
@@ -415,7 +406,7 @@ impl<'a> MigrationFinder<'a> {
                             Ok(steps) => Ok(vec![Migration {
                                 built_in: false,
                                 date_time,
-                                runner_and_config,
+                                configuration_name: runner_and_config.configuration_name,
                                 flags: self.flags_from_filename(&p),
                                 steps,
                             }]),
@@ -449,7 +440,7 @@ impl<'a> MigrationFinder<'a> {
             ext,
             self.config.configured_runners
         );
-        match self.config.configured_runners.get(config_name) {
+        match self.config.get(config_name) {
             Some(config) => match runner_by_name(&config._runner) {
                 Some(runner) => match runner.exts.iter().find(|e| e == &&ext) {
                     Some(_) => Ok(RunnerAndConfiguration {
@@ -469,6 +460,30 @@ impl<'a> MigrationFinder<'a> {
             },
             None => Err(format!("no configuration found for runner {}", config_name)),
         }
+    }
+}
+
+// TODO: should be a result
+pub fn from_stored_migration(
+    version: String,
+    config_name: String,
+    down_migration: Option<String>,
+) -> Migration {
+    let date_time = chrono::NaiveDateTime::parse_from_str(version.as_str(), FORMAT_STR).unwrap();
+    let steps = match down_migration {
+        Some(down_migration) => hashmap! {Direction::Down => MigrationStep {
+          source: down_migration,
+          path: PathBuf::new(),
+        }},
+        None => hashmap! {},
+    };
+
+    Migration {
+        steps,
+        built_in: false,
+        date_time,
+        flags: vec![], // TODO: fill me
+        configuration_name: String::from(config_name),
     }
 }
 

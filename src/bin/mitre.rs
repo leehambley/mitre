@@ -8,7 +8,7 @@ use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
 use mitre::runner::from_config as runner_from_config;
-use mitre::runner::mariadb::MariaDb;
+use mitre::state_store::from_config as state_store_from_config;
 use mitre::state_store::StateStore;
 use mitre::ui::start_web_ui;
 
@@ -51,7 +51,6 @@ fn main() {
         .subcommand(App::new("up").about("deprecated, use migrate"))
         .subcommand(App::new("migrate").about("run all outstanding migrations"))
         .subcommand(App::new("down").about("reverse all reversible migrations"))
-        .subcommand(App::new("show-config").about("for showing config file"))
         .subcommand(App::new("show-migrations").about("for migrations"))
         .subcommand(
             App::new("generate-migration")
@@ -189,11 +188,6 @@ mitre --help
             print!("{}", table);
         }
 
-        Some("show-config") => {
-            let _mdb = MariaDb::new_state_store(&config)
-                .expect("must be able to instance mariadb state store");
-        }
-
         Some("ls") => {
             let mut table = Table::new("{:<} {:<} {:<} {:<} {:<} {:<} {:<}");
 
@@ -208,7 +202,7 @@ mitre --help
                     .with_cell("Direction"),
             );
 
-            let mut mdb = match MariaDb::new_state_store(&config) {
+            let mut mdb = match state_store_from_config(&config) {
                 Ok(mdb) => Ok(mdb),
                 Err(reason) => {
                     warn!("Error instantiating mdb {:?}", reason);
@@ -234,7 +228,7 @@ mitre --help
                                             .to_string(),
                                     )
                                     .with_cell(s.path.into_os_string().into_string().unwrap())
-                                    .with_cell(m.runner_and_config.runner.name)
+                                    .with_cell(m.configuration_name.clone())
                                     .with_cell(
                                         m.flags
                                             .iter()
@@ -260,7 +254,7 @@ mitre --help
             match migrations::migrations(&config) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
-                    let mut mdb = MariaDb::new_state_store(&config)
+                    let mut mdb = state_store_from_config(&config)
                         .expect("must be able to instance mariadb state store");
                     match mdb.up(migrations, None) {
                         Ok(r) => {
@@ -287,7 +281,7 @@ mitre --help
             match migrations::migrations(&config) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
-                    let mut mdb = MariaDb::new_state_store(&config)
+                    let mut mdb = state_store_from_config(&config)
                         .expect("must be able to instance mariadb state store");
                     match mdb.down(migrations, None) {
                         Ok(r) => {

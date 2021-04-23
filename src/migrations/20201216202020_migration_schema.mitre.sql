@@ -27,11 +27,14 @@ CREATE TABLE `{{mariadb_migration_state_database_name}}`.`{{mariadb_migration_st
   `applied_at_utc` TIMESTAMP NOT NULL,
   `apply_time_ms` BIGINT UNSIGNED NOT NULL,
 
-  -- Was this a built-in migration
-  `built_in` BOOLEAN NOT NULL,
+  -- Flags e.g `sorted,comma,separated,nospaces`
+  `flags` TINYTEXT NOT NULL,
 
-  -- Environment
-  `environment` TINYTEXT NOT NULL
+  -- Runner Configuration Name (key in the YAML)
+  `configuration_name` TINYTEXT NOT NULL,
+
+  -- Was this a built-in migration
+  `built_in` BOOLEAN NOT NULL
 
 ) ENGINE=InnoDB;
 -- ENGINE=InnoDB is the default, but let's be explicit.

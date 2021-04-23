@@ -1,8 +1,9 @@
 use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
 // rust-analyzer has a bug here showing a false warning about unresolved import
 // https://github.com/rust-analyzer/rust-analyzer/issues/6038
-use std::os::unix::ffi::OsStrExt;
+use std::os::raw::c_char;
+
+pub use std::os::unix::ffi::OsStrExt;
 
 // Allows use of .diff() on unknown impl StateStore
 // result type.
