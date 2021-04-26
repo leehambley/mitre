@@ -231,7 +231,7 @@ unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut Migratio
         }
     };
 
-    let migration_states = match crate::state_store::from_config(&rc.clone()) {
+    let migration_states = match StateStore::from_config(&rc.clone()) {
         Ok(mut ss) => match ss.diff(migrations) {
             Ok(diff_results) => {
                 let mut num_migration_states: usize = 0;

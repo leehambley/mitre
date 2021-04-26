@@ -8,7 +8,6 @@ use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
 use mitre::runner::from_config as runner_from_config;
-use mitre::state_store::from_config as state_store_from_config;
 use mitre::state_store::StateStore;
 use mitre::ui::start_web_ui;
 
@@ -202,7 +201,7 @@ mitre --help
                     .with_cell("Direction"),
             );
 
-            let mut mdb = match state_store_from_config(&config) {
+            let mut mdb = match StateStore::from_config(&config) {
                 Ok(mdb) => Ok(mdb),
                 Err(reason) => {
                     warn!("Error instantiating mdb {:?}", reason);
@@ -254,7 +253,7 @@ mitre --help
             match migrations::migrations(&config) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
-                    let mut mdb = state_store_from_config(&config)
+                    let mut mdb = StateStore::from_config(&config)
                         .expect("must be able to instance mariadb state store");
                     match mdb.up(migrations, None) {
                         Ok(r) => {
@@ -281,7 +280,7 @@ mitre --help
             match migrations::migrations(&config) {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
-                    let mut mdb = state_store_from_config(&config)
+                    let mut mdb = StateStore::from_config(&config)
                         .expect("must be able to instance mariadb state store");
                     match mdb.down(migrations, None) {
                         Ok(r) => {

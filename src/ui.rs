@@ -1,6 +1,6 @@
 use crate::config;
 use crate::migrations::Migration;
-use crate::state_store::{from_config, StateStore};
+use crate::state_store::StateStore;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
 use std::path::PathBuf;
@@ -23,7 +23,7 @@ struct MigrationsTemplate<'a> {
 
 struct AppData {
     migrations: Mutex<Vec<Migration>>,
-    state_store: Mutex<Box<dyn StateStore>>,
+    state_store: Mutex<Box<StateStore>>,
 }
 
 async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
@@ -66,7 +66,7 @@ pub async fn start_web_ui(
             .data(AppData {
                 migrations: Mutex::new(migrations.clone()),
                 state_store: Mutex::new(Box::new(
-                    from_config(&config).expect("could not make state store"),
+                    StateStore::from_config(&config).expect("could not make state store"),
                 )),
             })
             .route("/", web::get().to(index))
