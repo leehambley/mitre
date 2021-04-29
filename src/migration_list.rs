@@ -1,6 +1,9 @@
 use super::{Error, Migration};
 use std::vec::IntoIter;
 
+pub mod from_disk;
+pub use from_disk::from_disk;
+
 pub trait MigrationList {
     fn all(&self) -> Result<IntoIter<Migration>, Error>;
 }

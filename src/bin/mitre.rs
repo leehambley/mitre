@@ -11,6 +11,8 @@ use mitre::runner::from_config as runner_from_config;
 use mitre::state_store::StateStore;
 use mitre::ui::start_web_ui;
 
+use mitre::MigrationList;
+
 fn main() {
     env_logger::Builder::new()
         .filter(None, log::LevelFilter::Trace)
@@ -212,10 +214,10 @@ mitre --help
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow
-            match migrations::migrations(&config) {
+            match mitre::migration_list::from_disk(&config).all() {
                 Err(e) => error!("Error: {:?}", e),
                 Ok(migrations) => {
-                    for (migration_state, m) in mdb.diff(migrations).expect("boom") {
+                    for (migration_state, m) in mdb.diff(migrations.collect()).expect("boom") {
                         m.clone().steps.into_iter().for_each(|(direction, s)| {
                             table.add_row(
                                 Row::new()
@@ -250,12 +252,12 @@ mitre --help
         }
 
         Some("migrate") => {
-            match migrations::migrations(&config) {
+            match mitre::migration_list::from_disk(&config).all() {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
                     let mut mdb = StateStore::from_config(&config)
                         .expect("must be able to instance mariadb state store");
-                    match mdb.up(migrations, None) {
+                    match mdb.up(migrations.collect(), None) {
                         Ok(r) => {
                             let mut table = Table::new("{:>}  {:<}");
                             for (result, migration) in r {
@@ -277,12 +279,12 @@ mitre --help
         }
 
         Some("down") => {
-            match migrations::migrations(&config) {
+            match mitre::migration_list::from_disk(&config).all() {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
                     let mut mdb = StateStore::from_config(&config)
                         .expect("must be able to instance mariadb state store");
-                    match mdb.down(migrations, None) {
+                    match mdb.down(migrations.collect(), None) {
                         Ok(r) => {
                             let mut table = Table::new("{:>}  {:<}");
                             for (result, migration) in r {
@@ -305,11 +307,11 @@ mitre --help
 
         Some("ui") => {
             info!("Starting webserver");
-            match migrations::migrations(&config) {
+            match mitre::migration_list::from_disk(&config).all() {
                 Ok(migrations) => {
                     info!("Opening webserver");
                     // TODO: Add a flag to enable / disable open
-                    match start_web_ui(config_file.to_path_buf(), migrations, true) {
+                    match start_web_ui(config_file.to_path_buf(), migrations.collect(), true) {
                         Ok(_) => {
                             info!("Closing webserver")
                         }

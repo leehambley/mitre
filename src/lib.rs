@@ -12,7 +12,7 @@ pub mod ui;
 
 mod engine;
 mod in_memory_migrations;
-mod migration_list;
+pub mod migration_list;
 mod migration_storage;
 
 pub use engine::Engine;
@@ -23,7 +23,15 @@ pub use migration_storage::MigrationStorage;
 pub type MigrationStateTuple = (MigrationState, Migration);
 pub type MigrationResultTuple = (MigrationResult, Migration);
 #[derive(Debug)]
-pub enum Error {}
+pub enum Error {
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::Io(err)
+    }
+}
 
 #[cfg(test)]
 #[ctor::ctor]

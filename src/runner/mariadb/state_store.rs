@@ -1,5 +1,5 @@
 use super::MARIADB_MIGRATION_STATE_TABLE_NAME;
-use crate::migrations::{from_stored_migration, Direction, Migration, MigrationStep};
+use crate::migrations::{Direction, Migration, MigrationStep, FORMAT_STR};
 use crate::runner::MigrationState;
 use crate::state_store::{Error as StateStoreError, MigrationStateTuple};
 use crate::{
@@ -8,7 +8,9 @@ use crate::{
 };
 use itertools::Itertools;
 use log::{debug, trace, warn};
+use maplit::hashmap;
 use mysql::{prelude::Queryable, Conn, OptsBuilder};
+use std::path::PathBuf;
 
 pub struct MariaDb {
     conn: Conn,
@@ -37,6 +39,29 @@ impl MariaDb {
                 false
             }
         }
+    }
+}
+
+pub fn from_stored_migration(
+    version: String,
+    config_name: String,
+    down_migration: Option<String>,
+) -> Migration {
+    let date_time = chrono::NaiveDateTime::parse_from_str(version.as_str(), FORMAT_STR).unwrap();
+    let steps = match down_migration {
+        Some(down_migration) => hashmap! {Direction::Down => MigrationStep {
+          source: down_migration,
+          path: PathBuf::new(),
+        }},
+        None => hashmap! {},
+    };
+
+    Migration {
+        steps,
+        built_in: false,
+        date_time,
+        flags: vec![], // TODO: fill me
+        configuration_name: String::from(config_name),
     }
 }
 
