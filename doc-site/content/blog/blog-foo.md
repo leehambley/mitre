@@ -1,0 +1,5 @@
++++
+title = "BLOG FOO"
++++
+
+HELLO WORLD I AM THE BLOG FOO
