@@ -1,6 +1,7 @@
 use crate::config::RunnerConfiguration;
 use crate::migrations::Migration;
 use crate::migrations::MigrationStep;
+use log::trace;
 use std::collections::HashMap;
 
 pub mod mariadb;

@@ -7,11 +7,12 @@ use crate::{
     state_store::StateStoreAdapter,
 };
 use itertools::Itertools;
+use log::{debug, trace, warn};
 use mysql::{prelude::Queryable, Conn, OptsBuilder};
 
 pub struct MariaDb {
     conn: Conn,
-    config: Configuration, // TODO: refactor reset so this can be removed
+    config: Configuration,
     runner_config: RunnerConfiguration, // TODO: rename or deconstruct?
 }
 

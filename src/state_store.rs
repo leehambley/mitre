@@ -1,6 +1,7 @@
 use crate::migrations::{Direction, Migration, MigrationStep};
 use crate::runner::{BoxedRunner, Error as RunnerError, MigrationResult, MigrationState};
 use crate::{config::Configuration, runner::RunnersHashMap};
+use log::{trace, warn};
 
 #[derive(Debug)]
 pub enum Error {

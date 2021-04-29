@@ -3,6 +3,7 @@ use crate::migrations::Migration;
 use crate::state_store::StateStore;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
+use log::info;
 use std::path::PathBuf;
 use std::sync::Mutex;
 

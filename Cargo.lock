@@ -624,6 +624,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "concat-idents"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f29bafee6d91a80db18bcd41dbdbb8d1d117ea31676b22e7370061ccea5f76c"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "const_fn"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1593,6 +1603,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored",
+ "concat-idents",
  "ctor",
  "env_logger",
  "envsubst",

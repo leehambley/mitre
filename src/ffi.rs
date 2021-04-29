@@ -1,3 +1,4 @@
+use log::{error, trace, warn};
 use std::ffi::{CStr, CString};
 // rust-analyzer has a bug here showing a false warning about unresolved import
 // https://github.com/rust-analyzer/rust-analyzer/issues/6038

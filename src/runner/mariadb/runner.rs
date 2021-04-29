@@ -3,6 +3,7 @@ use crate::config::RunnerConfiguration;
 use crate::migrations::MigrationStep;
 use crate::runner::{Error as RunnerError, MigrationFileExtension, MigrationTemplate, Runner};
 use indoc::indoc;
+use log::{debug, info, trace};
 use mustache::MapBuilder;
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};

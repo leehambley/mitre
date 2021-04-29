@@ -1,6 +1,7 @@
 use crate::config::{Configuration, ConfigurationName, RunnerConfiguration};
 use crate::reserved::{flags, runner_by_name, Flag, Runner};
 use core::cmp::Ordering;
+use log::{debug, error, info, trace, warn};
 use maplit::hashmap;
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
