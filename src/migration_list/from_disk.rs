@@ -41,7 +41,7 @@ pub struct MigrationFinder<'a> {
 }
 
 impl<'a> MigrationList for MigrationFinder<'a> {
-    fn all(&self) -> Result<IntoIter<Migration>, Error> {
+    fn all(&mut self) -> Result<IntoIter<Migration>, Error> {
         let mut m = self.built_in_migrations();
         m.extend(self.migrations_in_dir()?);
         Ok(m.into_iter())

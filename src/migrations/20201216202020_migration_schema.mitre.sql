@@ -1,31 +1,21 @@
 -- Bootstrap the database
-CREATE DATABASE IF NOT EXISTS `{{mariadb_migration_state_database_name}}` CHARACTER SET utf8 COLLATE utf8_bin;
+CREATE DATABASE IF NOT EXISTS `{{migration_state_database_name}}` CHARACTER SET utf8 COLLATE utf8_bin;
+
+-- Start a transaction to create both, or no tables..
+START TRANSACTION;
 
 -- Table name must agree with the constant in the mariadb.rs 
-CREATE TABLE `{{mariadb_migration_state_database_name}}`.`{{mariadb_migration_state_table_name}}` (
+CREATE TABLE `{{migration_state_database_name}}`.`{{migration_state_table_name}}` (
 
   -- TIMESTMAP is YYYYMMDDHHMMSS just like migration filenames
   -- assumed to be UTC, and stored as such.
   -- BIGINT(14) is just a rendering hint, not a real qualifier
   `version` BIGINT(14) NOT NULL PRIMARY KEY,
 
-  -- These columns store the up/down/change migrations, so we
-  -- know what was applied and can handle turning the database
-  -- back in a branch, for e.g by running "downs" in environments
-  -- that have had the code rolled-back, perhaps.
-  --
-  -- We don't store the parsed templating code, this is just here
-  -- for re-runs and a semblence of independence from code lifecycle
-  --
-  -- Backticks everywhere for consistency, required here 
-  -- because `change` is a reserved word.
-  `up` BLOB,
-  `down` BLOB,
-  `change` BLOB,
-
-  -- Simple metadata columns
-  `applied_at_utc` TIMESTAMP NOT NULL,
-  `apply_time_ms` BIGINT UNSIGNED NOT NULL,
+  -- Not exactly a property of a migration, but metadata
+  -- stored when we store a migration in here via the MigrationStorage
+  -- trait.
+  `stored_at` DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
 
   -- Flags e.g `sorted,comma,separated,nospaces`
   `flags` TINYTEXT NOT NULL,
@@ -38,3 +28,27 @@ CREATE TABLE `{{mariadb_migration_state_database_name}}`.`{{mariadb_migration_st
 
 ) ENGINE=InnoDB;
 -- ENGINE=InnoDB is the default, but let's be explicit.
+
+CREATE TABLE `{{migration_state_database_name}}`.`{{migration_steps_table_name}}` (
+
+  -- Version must match `{{migration_state_table_name}}`'s column of the 
+  -- same name
+  `version` BIGINT(14) NOT NULL,
+
+  -- Direction
+  `direction` ENUM('up', 'down', 'change') NOT NULL,
+
+  -- Source has a size limit of about 16MiB on most MySQL compatible systems
+  -- Empty string is not permitted to prevent stub migration parts being stored
+  -- by mistake
+  `source` MEDIUMBLOB NOT NULL CHECK (`source` <> ''),
+
+  PRIMARY KEY (`version`, `direction`),
+
+  CONSTRAINT `fk_migration_version`
+    FOREIGN KEY (`version`) REFERENCES `{{migration_state_database_name}}`.`{{migration_steps_table_name}}` (`version`)
+
+)
+
+-- Finalize
+COMMIT;

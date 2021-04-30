@@ -6,7 +6,7 @@ pub struct InMemoryMigrations {
 }
 
 impl MigrationList for InMemoryMigrations {
-    fn all(&self) -> Result<IntoIter<Migration>, Error> {
+    fn all(&mut self) -> Result<IntoIter<Migration>, Error> {
         Ok(self.m.clone().into_iter())
     }
 }
