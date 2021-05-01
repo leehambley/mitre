@@ -72,30 +72,30 @@ pub const POSTGRESQL: &str = "Postgres";
 pub fn words() -> Vec<ReservedWord> {
     vec![
     ReservedWord::Runner(Runner {
-      name: MARIA_DB,
-      desc: "MariaDB by the MariaDB Foundation",
-      exts: vec!["sql"],
-  }),
+        name: MARIA_DB,
+        desc: "MariaDB by the MariaDB Foundation",
+        exts: vec!["sql"],
+    }),
     ReservedWord::Runner(Runner {
-      name: REDIS,
-      desc: "The screaming fast in-memory object store",
-      exts: vec!["redis"],
-  }),
-  ReservedWord::Runner(Runner {
-    name: HTTP,
-    desc: "HTTP",
-    exts: vec!["get", "post", "delete", "patch"],
-}),
-ReservedWord::Runner(Runner {
-  name: ELASTICSEARCH,
-  desc: ELASTICSEARCH,
-  exts: vec!["es"],
-}),
+        name: REDIS,
+        desc: "The screaming fast in-memory object store",
+        exts: vec!["redis"],
+    }),
+    ReservedWord::Runner(Runner {
+      name: HTTP,
+      desc: "HTTP",
+      exts: vec!["get", "post", "delete", "patch"],
+    }),
+    ReservedWord::Runner(Runner {
+      name: ELASTICSEARCH,
+      desc: ELASTICSEARCH,
+      exts: vec!["es"],
+    }),
     ReservedWord::Runner(Runner {
       name: BASH_3,
       desc: "GNU Bash 3",
       exts: vec!["sh", "bash3"],
-  }),
+    }),
     ReservedWord::Runner(Runner {
       name: POSTGRESQL,
       desc: "PostgreSQL",
@@ -105,17 +105,17 @@ ReservedWord::Runner(Runner {
       name: BASH_4,
       desc: "GNU Bash 4",
       exts: vec!["sh", "bash4"],
-  }),
-    ReservedWord::Runner(Runner {
-      name: RAILS,
-      desc: "Ruby on Rails (5.x or above)",
-      exts: vec!["rb"],
-  }),
-    ReservedWord::Runner(Runner {
-      name: PYTHON_3,
-      desc: "Python 3",
-      exts: vec!["py", "py3"],
-  }),
+    }),
+      ReservedWord::Runner(Runner {
+        name: RAILS,
+        desc: "Ruby on Rails (5.x or above)",
+        exts: vec!["rb"],
+    }),
+      ReservedWord::Runner(Runner {
+        name: PYTHON_3,
+        desc: "Python 3",
+        exts: vec!["py", "py3"],
+    }),
     ReservedWord::Runner(Runner {
       name: KAFKA,
       desc: "Kafka",
@@ -148,6 +148,21 @@ pub fn flags() -> impl Iterator<Item = Flag> {
     })
 }
 
+/// Given a list like "a,b", returns the matching Flags{}
+pub fn flags_from_str_flags(s: &String) -> Vec<Flag> {
+    s.split(",")
+        .filter_map(|p| {
+            words().into_iter().find_map(|w| match w {
+                ReservedWord::Flag(f) => match f.name == p {
+                    true => Some(f),
+                    _ => None,
+                },
+                _ => None,
+            })
+        })
+        .collect()
+}
+
 /// Filters the reserved words to return only the runner [`words`].
 pub fn runners() -> impl Iterator<Item = Runner> {
     words().into_iter().filter_map(|word| match word {
@@ -164,10 +179,30 @@ pub fn runner_by_name(s: &str) -> Option<Runner> {
 #[cfg(test)]
 mod tests {
 
+    use itertools::Itertools;
+
     use super::*;
 
     #[test]
     fn test_words() {
         assert!(runners().any(|v| v.name == "HTTP"));
+    }
+
+    #[test]
+    fn test_flags_from_string_flags() {
+        let flags: Vec<Flag> = words()
+            .into_iter()
+            .filter_map(|w| match w {
+                ReservedWord::Flag(f) => Some(f),
+                _ => None,
+            })
+            .collect();
+        let flags_str = flags
+            .clone()
+            .into_iter()
+            .filter_map(|f| Some(f.name))
+            .join(",");
+
+        assert_eq!(flags, flags_from_str_flags(&flags_str));
     }
 }

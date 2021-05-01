@@ -1,3 +1,4 @@
+use ::mysql::Error as MySQLError;
 use migrations::Migration;
 use runner::{MigrationResult, MigrationState};
 
@@ -35,7 +36,10 @@ pub enum Error {
 
     // An error was encountered running some query in a database
     // or something.
-    QueryFailed { reason: String },
+    QueryFailed {
+        reason: Option<MySQLError>,
+        msg: String,
+    },
 }
 
 impl From<std::io::Error> for Error {
