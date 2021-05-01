@@ -85,18 +85,10 @@ impl MigrationList for MySQL {
 
         let migrations = match self
             .conn()
-            .query_map::<(String, String, String, bool), _, _, Result<Migration, Error>>(
+            .query_map::<(String, String, String, bool), _, _, Migration>(
                 q,
-                |(version, flags, configuration_name, built_in)| -> Result<Migration, Error> {
-
-                  let q = format!("SELECT `direction`, `source` FROM {t} WHERE version = {v}", t = MIGRATION_STEPS_TABLE_NAME, v = version);
-                  let steps = self
-            .conn()
-              .query_map::<(String, String), _, _, Result<(Direction, MigrationStep), Error>>(q, |(direction, source)| {
-                Ok((Direction::Up, MigrationStep{path: PathBuf::from("..."), source: String::from("...")}))
-            });
-
-                    Ok(Migration {
+                |(version, flags, configuration_name, built_in)| -> Migration {
+                    Migration {
                         built_in,
                         configuration_name,
                         date_time: chrono::NaiveDateTime::parse_from_str(
@@ -106,7 +98,7 @@ impl MigrationList for MySQL {
                         .unwrap(),
                         flags: crate::reserved::flags_from_str_flags(&flags),
                         steps: std::collections::HashMap::new(),
-                    })
+                    }
                 },
             ) {
             Ok(migrations) => migrations.into_iter(),
@@ -118,9 +110,37 @@ impl MigrationList for MySQL {
             }
         };
 
-        let m: Vec<Migration> = migrations.filter_map(|mr| mr.ok()).collect();
+        let migrations_with_steps: Vec<Migration> = migrations
+            .map(|m| {
+                let q = format!(
+                    "SELECT `direction`, `source`, `path` FROM {t} WHERE version = {v}",
+                    t = MIGRATION_STEPS_TABLE_NAME,
+                    v = m
+                        .date_time
+                        .format(crate::migrations::FORMAT_STR)
+                        .to_string(),
+                );
+                let _steps = self
+                    .conn()
+                    .query_map::<(String, String), _, _, Result<(Direction, MigrationStep), Error>>(
+                        q,
+                        |(_direction, _source)| {
+                            todo! {};
+                            // Ok((
+                            //     Direction::Up,
+                            //     MigrationStep {
+                            //         path: PathBuf::from("..."),
+                            //         source: String::from("..."),
+                            //     },
+                            // ))
+                        },
+                    );
+                // m.steps = steps;
+                m
+            })
+            .collect();
 
-        Ok(m.into_iter())
+        Ok(migrations_with_steps.into_iter())
     }
 }
 
