@@ -1,5 +1,5 @@
 use ::mysql::Error as MySQLError;
-use migrations::Migration;
+pub use migrations::{Direction, Migration, MigrationStep, MigrationSteps};
 use runner::{MigrationResult, MigrationState};
 
 pub mod config;

@@ -2,7 +2,13 @@ use super::{Error, Migration, MigrationList, MigrationStorage};
 use std::vec::IntoIter;
 
 pub struct InMemoryMigrations {
-    m: Vec<Migration>,
+    pub m: Vec<Migration>,
+}
+
+impl InMemoryMigrations {
+    pub fn new() -> Self {
+        InMemoryMigrations { m: vec![] }
+    }
 }
 
 impl MigrationList for InMemoryMigrations {

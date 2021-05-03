@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use super::{Error, IntoIter, Migration, MigrationList, MigrationStorage};
 use crate::{
-    config::RunnerConfiguration,
+    config::{Configuration, RunnerConfiguration},
     migrations::{Direction, MigrationStep},
 };
 use log::{debug, info, trace};
@@ -16,6 +16,28 @@ const MIGRATION_STEPS_TABLE_NAME: &str = "mitre_migration_steps";
 struct MySQL {
     conn: mysql::Conn,
     config: RunnerConfiguration,
+}
+
+impl MySQL {
+    pub fn new(config: RunnerConfiguration) -> Result<Self, Error> {
+        let opts = match mysql::Opts::from(
+            mysql::OptsBuilder::new()
+                .ip_or_hostname(config.ip_or_hostname.clone())
+                .user(config.username.clone())
+                // NOTE: Do not specify database name here, otherwise we cannot
+                // connect until the database exists. Makes it difficult to
+                // bootstrap.
+                // .db_name(config.database.clone())
+                .pass(config.password.clone()),
+        ) {
+          Ok(opts) => opts,
+          Err(e) => return Err(Error::QueryFailed{reason: Some(e), msg: String::from("Checking for MySQL schema existance")}),
+        };
+        Ok(MySQL {
+            conn: mysql::Conn::new(opts)?,
+            config: config,
+        })
+    }
 }
 
 impl MySQL {
@@ -167,7 +189,7 @@ impl MigrationStorage for MySQL {
                 None => {
                     return Err(Error::QueryFailed {
                         reason: None {},
-                        msg: String::from("No result (empty Option<T>) from table presense check"),
+                        msg: String::from("No result from table presense check"),
                     })
                 }
             },
