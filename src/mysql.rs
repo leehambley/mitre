@@ -152,6 +152,33 @@ impl MigrationList for MySQL {
 }
 
 impl MigrationStorage for MySQL {
+    #[cfg(test)]
+    fn reset(&mut self) -> Result<(), Error> {
+        let database = match &self.config.database {
+            Some(database) => database.clone(),
+            None => return Err(Error::ConfigurationIncomplete),
+        };
+        match self
+            .conn()
+            .exec_first::<bool, _, _>("DROP DATABASE IF EXISTS = ?)", (&database,))
+        {
+            Ok(r) => match r {
+                Some(_) => Ok(()),
+                None => {
+                    return Err(Error::QueryFailed {
+                        reason: None {},
+                        msg: String::from("No result (empty Option<T>) from table presense check"),
+                    })
+                }
+            },
+            Err(e) => {
+                return Err(Error::QueryFailed {
+                    reason: Some(e),
+                    msg: String::from("Checking for MySQL table existance"),
+                })
+            }
+        }
+    }
     fn add(&mut self, _: Migration) -> Result<(), Error> {
         todo!();
     }

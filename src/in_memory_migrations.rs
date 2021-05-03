@@ -12,6 +12,11 @@ impl MigrationList for InMemoryMigrations {
 }
 
 impl MigrationStorage for InMemoryMigrations {
+    #[cfg(test)]
+    fn reset(&mut self) -> Result<(), Error> {
+        self.m = vec![];
+        Ok(())
+    }
     fn add(&mut self, _: Migration) -> Result<(), Error> {
         Ok(())
     }
