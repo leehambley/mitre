@@ -2,6 +2,7 @@ use crate::config::{ConfigurationName, RunnerConfiguration};
 use crate::reserved::{Flag, Runner};
 use core::cmp::Ordering;
 use std::collections::HashMap;
+use std::convert::From;
 use std::path::PathBuf;
 
 pub mod built_in_migrations;
@@ -13,6 +14,17 @@ pub enum Direction {
     Up,
     Down,
     Change,
+}
+
+impl From<String> for Direction {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "up" => Direction::Up,
+            "down" => Direction::Down,
+            "change" => Direction::Change,
+            _ => panic!("Unknown direction {:#?}", s),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

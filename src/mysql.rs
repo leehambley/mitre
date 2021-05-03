@@ -83,7 +83,7 @@ impl MigrationList for MySQL {
 
         let q = format!("SELECT `version`, `flags`, `configuration_name`, `built_in` FROM {t} ORDER BY version ASC", t = MIGRATION_STATE_TABLE_NAME);
 
-        let migrations = match self
+        let mut migrations = match self
             .conn()
             .query_map::<(String, String, String, bool), _, _, Migration>(
                 q,
@@ -101,7 +101,7 @@ impl MigrationList for MySQL {
                     }
                 },
             ) {
-            Ok(migrations) => migrations.into_iter(),
+            Ok(migrations) => migrations,
             Err(e) => {
                 return Err(Error::QueryFailed {
                     reason: Some(e),
@@ -110,37 +110,44 @@ impl MigrationList for MySQL {
             }
         };
 
-        let migrations_with_steps: Vec<Migration> = migrations
-            .map(|m| {
-                let q = format!(
-                    "SELECT `direction`, `source`, `path` FROM {t} WHERE version = {v}",
-                    t = MIGRATION_STEPS_TABLE_NAME,
-                    v = m
-                        .date_time
-                        .format(crate::migrations::FORMAT_STR)
-                        .to_string(),
-                );
-                let _steps = self
-                    .conn()
-                    .query_map::<(String, String), _, _, Result<(Direction, MigrationStep), Error>>(
-                        q,
-                        |(_direction, _source)| {
-                            todo! {};
-                            // Ok((
-                            //     Direction::Up,
-                            //     MigrationStep {
-                            //         path: PathBuf::from("..."),
-                            //         source: String::from("..."),
-                            //     },
-                            // ))
-                        },
-                    );
-                // m.steps = steps;
-                m
-            })
-            .collect();
+        for m in &mut migrations {
+            let q = format!(
+                "SELECT `direction`, `source`, `path` FROM {t} WHERE version = {v}",
+                t = MIGRATION_STEPS_TABLE_NAME,
+                v = m
+                    .date_time
+                    .format(crate::migrations::FORMAT_STR)
+                    .to_string(),
+            );
 
-        Ok(migrations_with_steps.into_iter())
+            let steps = match self
+                .conn()
+                .query_map::<(String, String, String), _, _, (Direction, MigrationStep)>(
+                    q,
+                    |(direction, source, path)| {
+                        (
+                            Direction::from(direction),
+                            MigrationStep {
+                                source,
+                                path: PathBuf::from(path),
+                            },
+                        )
+                    },
+                ) {
+                Ok(steps) => steps,
+                Err(e) => {
+                    return Err(Error::QueryFailed {
+                        reason: Some(e),
+                        msg: String::from("Querying list of MySQL stored migrations"),
+                    })
+                }
+            };
+            for (direction, step) in steps {
+                m.steps.insert(direction, step);
+            }
+        }
+
+        Ok(migrations.into_iter())
     }
 }
 

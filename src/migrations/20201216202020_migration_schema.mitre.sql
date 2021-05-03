@@ -43,12 +43,17 @@ CREATE TABLE `{{migration_state_database_name}}`.`{{migration_steps_table_name}}
   -- by mistake
   `source` MEDIUMBLOB NOT NULL CHECK (`source` <> ''),
 
+  -- The *relative* path to the migrations. Please take every care to ensure
+  -- that nothing platform|user|environment specific shows up here.
+  `path` BLOB NOT NULL CHECK (`path` <> ''), 
+
   PRIMARY KEY (`version`, `direction`),
 
   CONSTRAINT `fk_migration_version`
     FOREIGN KEY (`version`) REFERENCES `{{migration_state_database_name}}`.`{{migration_steps_table_name}}` (`version`)
 
-)
+) ENGINE=InnoDB;
+-- ENGINE=InnoDB is the default, but let's be explicit.
 
 -- Finalize
 COMMIT;
