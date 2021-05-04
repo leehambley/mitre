@@ -12,6 +12,7 @@ pub mod state_store;
 pub mod ui;
 
 mod mysql;
+pub use self::mysql::MySQL;
 
 mod engine;
 mod in_memory_migrations;

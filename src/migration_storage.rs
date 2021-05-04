@@ -11,10 +11,33 @@ pub trait MigrationStorage: MigrationList {
 #[cfg(test)]
 mod tests {
 
-    use super::super::{Direction, MigrationStep, MigrationSteps};
+    use super::super::{Direction, MigrationStep, MigrationSteps, MigrationStorage};
     use super::*;
-    use crate::{migrations::FORMAT_STR, reserved, InMemoryMigrations};
+    use crate::{
+        config::RunnerConfiguration, migrations::FORMAT_STR, reserved, InMemoryMigrations, MySQL,
+    };
     use std::{array::IntoIter, collections::HashMap, iter::FromIterator, path::PathBuf};
+
+    fn test_mysql_storage_configuration() -> RunnerConfiguration {
+        RunnerConfiguration {
+            _runner: String::from("mysql"),
+            database_number: None {},
+            database: Some(String::from("mitre_test")),
+            index: None {},
+            ip_or_hostname: Some(String::from("127.0.0.1")),
+            password: Some(String::from("example")),
+            port: None {},
+            username: Some(String::from("root")),
+        }
+    }
+
+    fn mysql_migration_storage() -> Box<dyn MigrationStorage> {
+        Box::new(MySQL::new(test_mysql_storage_configuration()).unwrap())
+    }
+
+    fn in_memory_migration_storage() -> Box<dyn MigrationStorage> {
+        Box::new(InMemoryMigrations::new())
+    }
 
     fn migration_fixture() -> Vec<Migration> {
         vec![Migration {
@@ -44,10 +67,10 @@ mod tests {
     #[test]
     // Returns a tuple of implementation name and the test error, if any
     fn test_all_known_implementations() -> Result<(), (String, String)> {
-        let mut impls = HashMap::<String, MigrationStorage>::from_iter(IntoIter::new([(
-            String::from("InMemory"),
-            InMemoryMigrations::new(),
-        )]));
+        let mut impls = HashMap::<String, Box<dyn MigrationStorage>>::from_iter(IntoIter::new([
+            (String::from("InMemory"), in_memory_migration_storage()),
+            (String::from("MySQL"), mysql_migration_storage()),
+        ]));
         for (name, implementation) in &mut impls {
             match lists_what_it_stores(implementation) {
                 Err(e) => return Err((name.clone(), e)),
@@ -56,9 +79,12 @@ mod tests {
         }
         Ok(())
     }
-    fn lists_what_it_stores(ms: &mut impl MigrationStorage) -> Result<(), String> {
+    fn lists_what_it_stores(ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
         for migration in migration_fixture() {
-            ms.add(migration);
+            match ms.add(migration) {
+                Err(e) => return Err(format!("error: {:#?}", e)),
+                _ => {}
+            };
         }
         Ok(())
     }

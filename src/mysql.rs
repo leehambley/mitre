@@ -13,14 +13,14 @@ use mysql::prelude::Queryable;
 const MIGRATION_STATE_TABLE_NAME: &str = "mitre_migration_state";
 const MIGRATION_STEPS_TABLE_NAME: &str = "mitre_migration_steps";
 
-struct MySQL {
+pub struct MySQL {
     conn: mysql::Conn,
     config: RunnerConfiguration,
 }
 
 impl MySQL {
     pub fn new(config: RunnerConfiguration) -> Result<Self, Error> {
-        let opts = match mysql::Opts::from(
+        let opts = mysql::Opts::from(
             mysql::OptsBuilder::new()
                 .ip_or_hostname(config.ip_or_hostname.clone())
                 .user(config.username.clone())
@@ -29,12 +29,17 @@ impl MySQL {
                 // bootstrap.
                 // .db_name(config.database.clone())
                 .pass(config.password.clone()),
-        ) {
-          Ok(opts) => opts,
-          Err(e) => return Err(Error::QueryFailed{reason: Some(e), msg: String::from("Checking for MySQL schema existance")}),
-        };
+        );
         Ok(MySQL {
-            conn: mysql::Conn::new(opts)?,
+            conn: match mysql::Conn::new(opts) {
+                Ok(conn) => conn,
+                Err(e) => {
+                    return Err(Error::QueryFailed {
+                        reason: Some(e),
+                        msg: String::from("Checking for MySQL schema existance"),
+                    })
+                }
+            },
             config: config,
         })
     }
