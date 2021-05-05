@@ -23,7 +23,8 @@ impl MigrationStorage for InMemoryMigrations {
         self.m = vec![];
         Ok(())
     }
-    fn add(&mut self, _: Migration) -> Result<(), Error> {
+    fn add(&mut self, m: Migration) -> Result<(), Error> {
+        self.m.push(m.clone());
         Ok(())
     }
     fn remove(&mut self, _: Migration) -> Result<(), Error> {

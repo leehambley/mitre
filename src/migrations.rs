@@ -1,6 +1,7 @@
 use crate::config::{ConfigurationName, RunnerConfiguration};
 use crate::reserved::{Flag, Runner};
 use core::cmp::Ordering;
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::convert::From;
 use std::path::PathBuf;
@@ -63,6 +64,15 @@ pub struct Migration {
     pub built_in: bool,
     pub flags: Vec<Flag>,
     pub configuration_name: ConfigurationName,
+}
+
+impl Migration {
+    pub fn version(&self) -> String {
+        self.date_time.format(FORMAT_STR).to_string()
+    }
+    pub fn flags_as_string(&self) -> String {
+        self.flags.iter().filter_map(|f| Some(f.name)).join(",")
+    }
 }
 
 impl<'a> PartialOrd for Migration {
