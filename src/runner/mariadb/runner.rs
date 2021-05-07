@@ -60,7 +60,7 @@ impl Runner for MariaDb {
         );
         Ok(MariaDb {
             conn: Conn::new(opts)?,
-            config: config,
+            config,
         })
     }
 
@@ -95,7 +95,7 @@ impl Runner for MariaDb {
             Ok(str) => Ok(str),
             Err(e) => Err(RunnerError::TemplateError {
                 reason: e.to_string(),
-                template: tpl.clone(),
+                template: tpl,
             }),
         }?;
         trace!("template rendered to string successfully: {:?}", parsed);

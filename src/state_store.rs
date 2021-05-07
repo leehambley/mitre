@@ -98,7 +98,7 @@ impl StateStore {
     //
     // Please make sure to add any new implementations to both places if the runner
     // is both a state store and a runner!
-    pub fn from_config<'a>(c: &Configuration) -> Result<Self, Error> {
+    pub fn from_config(c: &Configuration) -> Result<Self, Error> {
         match c.get("mitre") {
             Some(mc) => {
                 if mc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
@@ -149,24 +149,18 @@ impl StateStore {
                     (false, Some(up_step), None) => {
                         let (migration_result, migration) =
                             self.apply_migration_step(migration.clone(), up_step);
-                        match migration_result {
-                            MigrationResult::Failure { reason: _ } => {
-                                warn!("migration {:?} failed, will stop applying", migration);
-                                stop_applying = true;
-                            }
-                            _ => {}
+                        if let MigrationResult::Failure { reason: _ } = migration_result {
+                            warn!("migration {:?} failed, will stop applying", migration);
+                            stop_applying = true;
                         }
                         (migration_result, migration)
                     }
                     (false, None, Some(change_step)) => {
                         let (migration_result, migration) =
                             self.apply_migration_step(migration.clone(), change_step);
-                        match migration_result {
-                            MigrationResult::Failure { reason: _ } => {
-                                warn!("migration {:?} failed, will stop applying", migration);
-                                stop_applying = true;
-                            }
-                            _ => {}
+                        if let MigrationResult::Failure { reason: _ } = migration_result {
+                            warn!("migration {:?} failed, will stop applying", migration);
+                            stop_applying = true;
                         }
                         (migration_result, migration)
                     }

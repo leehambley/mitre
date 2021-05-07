@@ -71,7 +71,7 @@ impl Migration {
         self.date_time.format(FORMAT_STR).to_string()
     }
     pub fn flags_as_string(&self) -> String {
-        self.flags.iter().filter_map(|f| Some(f.name)).join(",")
+        self.flags.iter().map(|f| f.name).join(",")
     }
 }
 

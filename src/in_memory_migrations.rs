@@ -11,6 +11,12 @@ impl InMemoryMigrations {
     }
 }
 
+impl Default for InMemoryMigrations {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MigrationList for InMemoryMigrations {
     fn all(&mut self) -> Result<IntoIter<Migration>, Error> {
         Ok(self.m.clone().into_iter())
@@ -24,10 +30,12 @@ impl MigrationStorage for InMemoryMigrations {
         Ok(())
     }
     fn add(&mut self, m: Migration) -> Result<(), Error> {
-        self.m.push(m.clone());
+        self.m.push(m);
         Ok(())
     }
-    fn remove(&mut self, _: Migration) -> Result<(), Error> {
+    fn remove(&mut self, m: Migration) -> Result<(), Error> {
+        let index = self.m.iter().position(|x| *x == m).unwrap();
+        self.m.remove(index);
         Ok(())
     }
 }

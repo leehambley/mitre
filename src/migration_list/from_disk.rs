@@ -189,7 +189,7 @@ impl<'a> MigrationFinder<'a> {
                     buffer
                 };
 
-                steps.insert(direction, MigrationStep { source, path });
+                steps.insert(direction, MigrationStep { path, source });
                 Some(()) // redundant, just for filter_map and ? above
             })
             .collect::<()>(); // force us to do the work, else is lazy
@@ -459,7 +459,7 @@ mod tests {
         match from_disk(&config).all() {
             Err(e) => Err(format!("Error: {:?}", e)),
             Ok(migrations) => {
-                assert_eq!(migrations.len(), 4);
+                assert_eq!(migrations.len(), 3); // built-in migrations are being deprecated
                 Ok(())
             }
         }

@@ -61,7 +61,7 @@ pub fn from_stored_migration(
         built_in: false,
         date_time,
         flags: vec![], // TODO: fill me
-        configuration_name: String::from(config_name),
+        configuration_name: config_name,
     }
 }
 

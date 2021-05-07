@@ -32,7 +32,9 @@ mod tests {
     }
 
     fn mysql_migration_storage() -> Box<dyn MigrationStorage> {
-        Box::new(MySQL::new(test_mysql_storage_configuration()).unwrap())
+        let mut mysql = MySQL::new(test_mysql_storage_configuration()).unwrap();
+        mysql.reset().unwrap(); // boom
+        Box::new(mysql)
     }
 
     fn in_memory_migration_storage() -> Box<dyn MigrationStorage> {

@@ -149,8 +149,8 @@ pub fn flags() -> impl Iterator<Item = Flag> {
 }
 
 /// Given a list like "a,b", returns the matching Flags{}
-pub fn flags_from_str_flags(s: &String) -> Vec<Flag> {
-    s.split(",")
+pub fn flags_from_str_flags(s: &str) -> Vec<Flag> {
+    s.split(',')
         .filter_map(|p| {
             words().into_iter().find_map(|w| match w {
                 ReservedWord::Flag(f) => match f.name == p {
@@ -201,7 +201,7 @@ mod tests {
             .clone()
             .into_iter()
             .filter_map(|f| Some(f.name))
-            .join(",");
+            .join(',');
 
         assert_eq!(flags, flags_from_str_flags(&flags_str));
     }

@@ -2,10 +2,12 @@ use std::path::PathBuf;
 
 use super::{Error, IntoIter, Migration, MigrationList, MigrationStorage};
 use crate::{
-    config::{Configuration, RunnerConfiguration},
+    config::RunnerConfiguration,
     migrations::{Direction, MigrationStep},
 };
 use log::{debug, error, info, trace};
+use std::collections::HashMap;
+use std::iter::FromIterator;
 
 use crate::migrations::FORMAT_STR;
 use mysql::prelude::Queryable;
@@ -41,26 +43,51 @@ impl MySQL {
                     })
                 }
             },
-            config: config,
+            config,
         })
     }
-}
 
-impl MySQL {
     fn conn(&mut self) -> &mut mysql::Conn {
         debug!("select_db {:?}", self.config.database);
         match &self.config.database {
-            Some(database) => {
-                match self.conn.select_db(&database) {
-                    true => trace!("select_db {:?} succeeded", database),
-                    false => info!("select_db {:?} failed", database),
-                }
-                ()
-            }
+            Some(database) => match self.conn.select_db(&database) {
+                true => trace!("select_db {:?} succeeded", database),
+                false => info!("select_db {:?} failed", database),
+            },
             None => info!("no database name provided, mysql driver might have a problem"),
         }
         &mut self.conn
     }
+
+    fn bootstrap_migrations(&self) -> Vec<Migration> {
+        vec![Migration {
+            date_time: chrono::Utc::now().naive_utc(),
+            built_in: true,
+            flags: vec![],
+            configuration_name: String::from("mitre"),
+            // Rust 1.51.0 is 🔥
+            // https://stackoverflow.com/a/27582993/119669
+            steps: HashMap::<Direction, MigrationStep>::from_iter(std::array::IntoIter::new([
+                (
+                    Direction::Up,
+                    MigrationStep {
+                        path: PathBuf::from("built/in/migration"),
+                        source: String::from(include_str!(
+                            "migrations/bootstrap_mysql_migration_storage.sql"
+                        )),
+                    },
+                ),
+                (
+                    Direction::Down,
+                    MigrationStep {
+                        path: PathBuf::from("built/in/migration"),
+                        source: String::from("DROP DATABASE IF EXISTS `{{database_name}}`;"),
+                    },
+                ),
+            ])),
+        }]
+    }
+
     fn bootstrap(&mut self) -> Result<(), Error> {
         // https://doc.rust-lang.org/std/macro.include_str.html
         let bootstrap_steps = vec![include_str!(
@@ -268,21 +295,13 @@ impl MigrationStorage for MySQL {
         };
         match self
             .conn()
-            .exec_first::<bool, _, _>("DROP DATABASE IF EXISTS = ?)", (&database,))
+            .query_drop(format!("DROP DATABASE IF EXISTS {};", &database))
         {
-            Ok(r) => match r {
-                Some(_) => Ok(()),
-                None => {
-                    return Err(Error::QueryFailed {
-                        reason: None {},
-                        msg: String::from("No result from table presense check"),
-                    })
-                }
-            },
+            Ok(()) => Ok(()),
             Err(e) => {
                 return Err(Error::QueryFailed {
                     reason: Some(e),
-                    msg: String::from("Checking for MySQL table existance"),
+                    msg: String::from("Dropping database in reset"),
                 })
             }
         }

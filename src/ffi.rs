@@ -225,7 +225,7 @@ unsafe extern "C" fn free_config_from_file(c: *mut Configuration) {
 #[no_mangle]
 unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut MigrationStates {
     let rc = Box::from_raw(c);
-    let migrations = match crate::migration_list::from_disk(&rc.clone()).all() {
+    let migrations = match crate::migration_list::from_disk(&rc).all() {
         Ok(migrations) => migrations,
         Err(e) => {
             error!("could not list migrations using config {:?}", e);
@@ -233,7 +233,7 @@ unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut Migratio
         }
     };
 
-    let migration_states = match StateStore::from_config(&rc.clone()) {
+    let migration_states = match StateStore::from_config(&rc) {
         Ok(mut ss) => match ss.diff(migrations.collect()) {
             Ok(diff_results) => {
                 let mut num_migration_states: usize = 0;
