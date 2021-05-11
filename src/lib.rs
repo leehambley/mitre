@@ -14,11 +14,13 @@ pub mod ui;
 mod mysql;
 pub use self::mysql::MySQL;
 
+mod driver;
 mod engine;
 mod in_memory_migrations;
 pub mod migration_list;
 mod migration_storage;
 
+pub use driver::{Driver, DriverResult};
 pub use engine::Engine;
 pub use in_memory_migrations::InMemoryMigrations;
 pub use migration_list::{IntoIter, MigrationList};
@@ -41,6 +43,10 @@ pub enum Error {
         reason: Option<MySQLError>,
         msg: String,
     },
+
+    // Migration probably contains Up+Change or some other illegal
+    // combination of steps.
+    MalformedMigration,
 }
 
 impl From<std::io::Error> for Error {

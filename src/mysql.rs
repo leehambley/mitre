@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 
-use super::{Error, IntoIter, Migration, MigrationList, MigrationStorage};
+use super::{Driver, DriverResult, Error, IntoIter, Migration, MigrationList, MigrationStorage};
 use crate::{
     config::RunnerConfiguration,
     migrations::{Direction, MigrationStep},
 };
 use log::{debug, error, info, trace};
+use mustache::MapBuilder;
 use std::collections::HashMap;
 use std::iter::FromIterator;
 
@@ -67,7 +68,7 @@ impl MySQL {
             configuration_name: String::from("mitre"),
             // Rust 1.51.0 is 🔥
             // https://stackoverflow.com/a/27582993/119669
-            steps: HashMap::<Direction, MigrationStep>::from_iter(std::array::IntoIter::new([
+            steps: std::array::IntoIter::new([
                 (
                     Direction::Up,
                     MigrationStep {
@@ -84,15 +85,12 @@ impl MySQL {
                         source: String::from("DROP DATABASE IF EXISTS `{{database_name}}`;"),
                     },
                 ),
-            ])),
+            ])
+            .collect(),
         }]
     }
 
-    fn bootstrap(&mut self) -> Result<(), Error> {
-        // https://doc.rust-lang.org/std/macro.include_str.html
-        let bootstrap_steps = vec![include_str!(
-            "migrations/bootstrap_mysql_migration_storage.sql"
-        )];
+    fn template_ctx(&self) -> Result<mustache::Data, Error> {
         let database = match &self.config.database {
             Some(database) => database,
             None => {
@@ -102,67 +100,90 @@ impl MySQL {
                 })
             }
         };
-        let template_ctx = mustache::MapBuilder::new()
+        Ok(mustache::MapBuilder::new()
             .insert_str("database_name", database)
             .insert_str("migrations_table", MIGRATION_STATE_TABLE_NAME)
             .insert_str("migration_steps_table", MIGRATION_STEPS_TABLE_NAME)
-            .build();
+            .build())
+    }
 
-        for (i, bootstrap_step) in bootstrap_steps.iter().enumerate() {
-            trace!(
-                "about to apply bootstrapping query {}/{} {:#?}",
-                bootstrap_step,
-                i + 1,
-                bootstrap_steps.len()
-            );
-            let q = match mustache::compile_str(bootstrap_step)
-                .unwrap()
-                .render_data_to_string(&template_ctx)
-            {
-                Ok(q) => q,
-                Err(_e) => {
-                    return Err(Error::QueryFailed {
-                        reason: None {},
-                        msg: String::from(
-                            "couldn't render Mustache template of bootstrap statement",
-                        ),
-                    })
-                }
-            };
-            debug!("rendered bootstrap query is {:?}", q);
-            match self.conn.query_iter(q) {
-                Ok(mut res) => {
-                    info!(
-                        "Applied bootstrapping query {}/{} successfully",
-                        i + 1,
-                        bootstrap_steps.len()
+    // Statements does not imply _prepared_ statements
+    // in the name because a &str may contain multiple expressions
+    fn apply_statements(&mut self, query: &str) -> Result<(), Error> {
+        let q = match mustache::compile_str(query)
+            .unwrap()
+            .render_data_to_string(&self.template_ctx()?)
+        {
+            Ok(q) => q,
+            Err(_e) => {
+                return Err(Error::QueryFailed {
+                    reason: None {},
+                    msg: String::from("couldn't render Mustache template of queries"),
+                })
+            }
+        };
+        debug!("rendered query is {:?}", q);
+        match self.conn.query_iter(q) {
+            Ok(mut res) => {
+                info!("ran query successfully",);
+                while let Some(result_set) = res.next_set() {
+                    let result_set = result_set.expect("boom");
+                    debug!(
+                        "Result set _ meta: rows {}, last insert id {:?}, warnings {} info_str {}",
+                        result_set.affected_rows(),
+                        result_set.last_insert_id(),
+                        result_set.warnings(),
+                        result_set.info_str(),
                     );
-                    while let Some(result_set) = res.next_set() {
-                        let result_set = result_set.expect("boom");
-                        debug!(
-                  "Result set _ meta: rows {}, last insert id {:?}, warnings {} info_str {}",
-                  result_set.affected_rows(),
-                  result_set.last_insert_id(),
-                  result_set.warnings(),
-                  result_set.info_str(),
-              );
-                    }
                 }
-                Err(e) => {
-                    error!(
-                        "applying bootstrapping query {}/{} failed {:?}",
-                        e,
-                        i + 1,
-                        bootstrap_steps.len()
-                    );
-                    return Err(Error::QueryFailed {
-                        reason: Some(e),
-                        msg: String::from("Could not run the mysql query for bootstrapping"),
-                    });
-                }
-            };
+                Ok(())
+            }
+            Err(e) => {
+                error!("running query failed {:?}", e,);
+                Err(Error::QueryFailed {
+                    reason: Some(e),
+                    msg: String::from("Could not run the mysql query for bootstrapping"),
+                })
+            }
+        }
+    }
+
+    fn bootstrap(&mut self) -> Result<(), Error> {
+        for bootstrap_migration in self.bootstrap_migrations().iter() {
+            self.apply(bootstrap_migration)?;
         }
         Ok(())
+    }
+
+    fn apply(&mut self, m: &Migration) -> Result<DriverResult, Error> {
+        let change = m.steps.get(&Direction::Change);
+        let up = m.steps.get(&Direction::Up);
+        let s = match (change, up) {
+            (Some(_), Some(_)) => return Err(Error::MalformedMigration),
+            (None, None) => return Err(Error::MalformedMigration),
+            (None, Some(up)) => up,
+            (Some(change), None) => change,
+        };
+        self.apply_statements(&s.source)?;
+        Ok(DriverResult::Success)
+    }
+
+    fn unapply(&mut self, m: &Migration) -> Result<DriverResult, Error> {
+        let s = match m.steps.get(&Direction::Down) {
+            Some(down) => down,
+            None => return Ok(DriverResult::NothingToDo),
+        };
+        self.apply_statements(&s.source)?;
+        Ok(DriverResult::Success)
+    }
+}
+
+impl Driver for MySQL {
+    fn apply(&mut self, m: &Migration) -> Result<DriverResult, Error> {
+        self.apply(m)
+    }
+    fn unapply(&mut self, m: &Migration) -> Result<DriverResult, Error> {
+        self.unapply(m)
     }
 }
 
@@ -289,22 +310,10 @@ impl MigrationList for MySQL {
 impl MigrationStorage for MySQL {
     #[cfg(test)]
     fn reset(&mut self) -> Result<(), Error> {
-        let database = match &self.config.database {
-            Some(database) => database.clone(),
-            None => return Err(Error::ConfigurationIncomplete),
-        };
-        match self
-            .conn()
-            .query_drop(format!("DROP DATABASE IF EXISTS {};", &database))
-        {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                return Err(Error::QueryFailed {
-                    reason: Some(e),
-                    msg: String::from("Dropping database in reset"),
-                })
-            }
+        for bootstrap_migration in self.bootstrap_migrations().iter().rev() {
+            self.unapply(bootstrap_migration)?;
         }
+        Ok(())
     }
 
     // https://docs.rs/mysql/20.1.0/mysql/index.html#transaction

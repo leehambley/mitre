@@ -201,7 +201,7 @@ mod tests {
             .clone()
             .into_iter()
             .filter_map(|f| Some(f.name))
-            .join(',');
+            .join(",");
 
         assert_eq!(flags, flags_from_str_flags(&flags_str));
     }
