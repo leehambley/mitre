@@ -6,9 +6,6 @@ use crate::{
     migrations::{Direction, MigrationStep},
 };
 use log::{debug, error, info, trace};
-use mustache::MapBuilder;
-use std::collections::HashMap;
-use std::iter::FromIterator;
 
 use crate::migrations::FORMAT_STR;
 use mysql::prelude::Queryable;

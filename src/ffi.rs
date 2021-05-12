@@ -1,10 +1,11 @@
 use log::{error, trace, warn};
 use std::ffi::{CStr, CString};
-// rust-analyzer has a bug here showing a false warning about unresolved import
-// https://github.com/rust-analyzer/rust-analyzer/issues/6038
+
 use crate::MigrationList;
 use std::os::raw::c_char;
 
+// rust-analyzer has a bug here showing a false warning about unresolved import
+// https://github.com/rust-analyzer/rust-analyzer/issues/6038
 pub use std::os::unix::ffi::OsStrExt;
 
 // Allows use of .diff() on unknown impl StateStore
