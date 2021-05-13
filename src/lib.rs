@@ -1,33 +1,37 @@
-use ::mysql::Error as MySQLError;
-pub use migrations::{Direction, Migration, MigrationStep, MigrationSteps};
-use runner::{MigrationResult, MigrationState};
-
 pub mod config;
-pub mod exit_code;
 pub mod ffi;
 pub mod migrations;
 pub mod reserved;
-pub mod runner;
 pub mod state_store;
 pub mod ui;
-
-mod mysql;
-pub use self::mysql::MySQL;
 
 mod driver;
 mod engine;
 mod in_memory_migrations;
-pub mod migration_list;
+mod migration_list;
 mod migration_storage;
+mod mysql;
+mod runner;
 
+// Public reuse defines the public API so that all other
+// modules can simply reuse these types without knowing
+// where they come from. The concept of Driver, DriverResult,
+// Migration, MigrationStateTuple, etc all belong here.
+pub use self::mysql::MySQL; // self:: required due to name conflict with MySQL crate.
 pub use driver::{Driver, DriverResult};
 pub use engine::Engine;
 pub use in_memory_migrations::InMemoryMigrations;
-pub use migration_list::{IntoIter, MigrationList};
+pub use migration_list::{from_disk as migration_list_from_disk, IntoIter, MigrationList};
 pub use migration_storage::MigrationStorage;
+pub use migrations::{
+    Direction, Migration, MigrationStep, MigrationSteps, FORMAT_STR as TIMESTAMP_FORMAT_STR,
+};
+pub use runner::from_config as runner_from_config;
+pub use runner::{MigrationResult, MigrationState};
 
 pub type MigrationStateTuple = (MigrationState, Migration);
 pub type MigrationResultTuple = (MigrationResult, Migration);
+
 #[derive(Debug)]
 pub enum Error {
     Io(std::io::Error),
@@ -40,7 +44,7 @@ pub enum Error {
     // An error was encountered running some query in a database
     // or something.
     QueryFailed {
-        reason: Option<MySQLError>,
+        reason: Option<::mysql::Error>,
         msg: String,
     },
 

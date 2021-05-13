@@ -7,7 +7,7 @@ use tabular::{Row, Table};
 use mitre::config;
 use mitre::migrations;
 use mitre::reserved;
-use mitre::runner::from_config as runner_from_config;
+use mitre::runner_from_config;
 use mitre::state_store::StateStore;
 use mitre::ui::start_web_ui;
 
@@ -214,7 +214,7 @@ mitre --help
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow
-            match mitre::migration_list::from_disk(&config).all() {
+            match mitre::migration_list_from_disk(&config).all() {
                 Err(e) => error!("Error: {:?}", e),
                 Ok(migrations) => {
                     for (migration_state, m) in mdb.diff(migrations.collect()).expect("boom") {
@@ -252,7 +252,7 @@ mitre --help
         }
 
         Some("migrate") => {
-            match mitre::migration_list::from_disk(&config).all() {
+            match mitre::migration_list_from_disk(&config).all() {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
                     let mut mdb = StateStore::from_config(&config)
@@ -279,7 +279,7 @@ mitre --help
         }
 
         Some("down") => {
-            match mitre::migration_list::from_disk(&config).all() {
+            match mitre::migration_list_from_disk(&config).all() {
                 Err(e) => panic!("Error: {:?}", e),
                 Ok(migrations) => {
                     let mut mdb = StateStore::from_config(&config)
@@ -307,7 +307,7 @@ mitre --help
 
         Some("ui") => {
             info!("Starting webserver");
-            match mitre::migration_list::from_disk(&config).all() {
+            match mitre::migration_list_from_disk(&config).all() {
                 Ok(migrations) => {
                     info!("Opening webserver");
                     // TODO: Add a flag to enable / disable open

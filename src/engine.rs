@@ -45,25 +45,32 @@ impl Engine {
     }
 
     fn apply(
-        // TODO: This should maybe get a _filtered_ list, or some query plan?
         src: impl MigrationList,
         dest: impl MigrationStorage,
+        // TODO: This should maybe get a _filtered_ list, or some query plan? (some kind of Up|Change, or !Data|Long?)
     ) -> Result<IntoIter<MigrationStateTuple>, Error> {
+        let _ = Engine::diff(src, dest)?;
         Ok(vec![].into_iter())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::{Direction, InMemoryMigrations, Migration, MigrationStep, MigrationStorage};
+    use super::super::{
+        Direction, InMemoryMigrations, Migration, MigrationStep, MigrationStorage,
+        TIMESTAMP_FORMAT_STR,
+    };
     use super::*;
-    use crate::migrations::FORMAT_STR;
     use log::trace;
     use std::path::PathBuf;
 
     fn fixture() -> Vec<Migration> {
         vec![Migration {
-            date_time: chrono::NaiveDateTime::parse_from_str("20210511204055", FORMAT_STR).unwrap(),
+            date_time: chrono::NaiveDateTime::parse_from_str(
+                "20210511204055",
+                TIMESTAMP_FORMAT_STR,
+            )
+            .unwrap(),
             steps: std::array::IntoIter::new([
                 (
                     Direction::Up,
