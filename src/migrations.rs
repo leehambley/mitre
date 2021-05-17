@@ -1,5 +1,4 @@
-use crate::config::{ConfigurationName, RunnerConfiguration};
-use crate::reserved::{Flag, Runner};
+use super::{ConfigurationName, Error, Flag, Runner, RunnerConfiguration};
 use core::cmp::Ordering;
 use itertools::Itertools;
 use std::collections::HashMap;
@@ -72,6 +71,15 @@ impl Migration {
     }
     pub fn flags_as_string(&self) -> String {
         self.flags.iter().map(|f| f.name).join(",")
+    }
+    pub fn validate(&self) -> Option<Error> {
+        match (
+            self.steps.get(&Direction::Up),
+            self.steps.get(&Direction::Change),
+        ) {
+            (Some(_), Some(_)) => Some(Error::MalformedMigration),
+            _ => None,
+        }
     }
 }
 

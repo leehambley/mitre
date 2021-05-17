@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use super::{Driver, DriverResult, Error, IntoIter, Migration, MigrationList, MigrationStorage};
-use crate::{
-    config::RunnerConfiguration,
+use super::{
     migrations::{Direction, MigrationStep},
+    Driver, DriverResult, Error, IntoIter, Migration, MigrationList, MigrationStorage, NamedDriver,
+    RunnerConfiguration, StepDriver,
 };
 use log::{debug, error, info, trace};
 
@@ -395,5 +395,11 @@ impl MigrationStorage for MySQL {
 
     fn remove(&mut self, _: Migration) -> Result<(), Error> {
         todo!();
+    }
+}
+
+impl NamedDriver for MySQL {
+    fn name() -> &'static str {
+        "mysql"
     }
 }

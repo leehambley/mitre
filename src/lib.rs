@@ -18,7 +18,8 @@ mod runner;
 // where they come from. The concept of Driver, DriverResult,
 // Migration, MigrationStateTuple, etc all belong here.
 pub use self::mysql::MySQL; // self:: required due to name conflict with MySQL crate.
-pub use driver::{Driver, DriverResult};
+pub use config::{ConfigurationName, RunnerConfiguration};
+pub use driver::{Driver, DriverResult, NamedDriver, StepDriver};
 pub use engine::Engine;
 pub use in_memory_migrations::InMemoryMigrations;
 pub use migration_list::{from_disk as migration_list_from_disk, IntoIter, MigrationList};
@@ -26,6 +27,7 @@ pub use migration_storage::MigrationStorage;
 pub use migrations::{
     Direction, Migration, MigrationStep, MigrationSteps, FORMAT_STR as TIMESTAMP_FORMAT_STR,
 };
+pub use reserved::{Flag, Runner};
 pub use runner::from_config as runner_from_config;
 pub use runner::{MigrationResult, MigrationState};
 

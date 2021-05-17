@@ -1,5 +1,6 @@
 use super::{
-    Error, Migration, MigrationList, MigrationState, MigrationStateTuple, MigrationStorage,
+    Error, Migration, MigrationList, MigrationResult, MigrationResultTuple, MigrationState,
+    MigrationStateTuple, MigrationStorage,
 };
 use itertools::Itertools;
 use std::vec::IntoIter;
@@ -48,9 +49,19 @@ impl Engine {
         src: impl MigrationList,
         dest: impl MigrationStorage,
         // TODO: This should maybe get a _filtered_ list, or some query plan? (some kind of Up|Change, or !Data|Long?)
-    ) -> Result<IntoIter<MigrationStateTuple>, Error> {
-        let _ = Engine::diff(src, dest)?;
-        Ok(vec![].into_iter())
+    ) -> Result<IntoIter<MigrationResultTuple>, Error> {
+        let work_list = Engine::diff(src, dest)?;
+        Ok(work_list
+            .map({
+                |(state, migration)| match state {
+                    MigrationState::Pending => (MigrationResult::Success, migration),
+                    _ => {
+                        todo!("boom")
+                    }
+                }
+            })
+            .collect::<MigrationResultTuple>()
+            .into_iter())
     }
 }
 
