@@ -4,8 +4,12 @@ pub use std::vec::IntoIter;
 pub mod from_disk;
 pub use from_disk::from_disk;
 
+// TODO: this type is redundant now we know how to reference
+// a `impl Iterator<T>` from a trait, we can can _simply_ use
+// that.
 pub trait MigrationList {
-    fn all(&mut self) -> Result<IntoIter<Migration>, Error>;
+    type Iterator: Iterator<Item = Migration>;
+    fn all(&mut self) -> Result<Self::Iterator, Error>;
 }
 
 #[cfg(test)]

@@ -1,5 +1,4 @@
 use super::{Error, Migration, MigrationList, MigrationStorage};
-use std::vec::IntoIter;
 
 pub struct InMemoryMigrations {
     pub m: Vec<Migration>,
@@ -18,7 +17,8 @@ impl Default for InMemoryMigrations {
 }
 
 impl MigrationList for InMemoryMigrations {
-    fn all(&mut self) -> Result<IntoIter<Migration>, Error> {
+    type Iterator = std::vec::IntoIter<Migration>;
+    fn all(&mut self) -> Result<Self::Iterator, Error> {
         Ok(self.m.clone().into_iter())
     }
 }

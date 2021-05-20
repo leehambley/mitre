@@ -3,7 +3,6 @@ use super::{
     MigrationStateTuple, MigrationStorage,
 };
 use itertools::Itertools;
-use std::vec::IntoIter;
 
 pub struct Engine {}
 
@@ -12,7 +11,7 @@ impl Engine {
     pub fn diff(
         mut src: impl MigrationList,
         mut dest: impl MigrationStorage,
-    ) -> Result<IntoIter<MigrationStateTuple>, Error> {
+    ) -> Result<impl Iterator<Item = MigrationStateTuple>, Error> {
         let uniq_fn = |m: &Migration| m.date_time;
         let tuple_uniq_fn = |m: &MigrationStateTuple| m.1.date_time;
         let cmp_fn = |l: &Migration, r: &Migration| l.cmp(r);
@@ -40,28 +39,23 @@ impl Engine {
             .chain(pending)
             .chain(applied)
             .sorted_by(tuple_cmp_fn)
-            .unique_by(tuple_uniq_fn)
-            .collect_vec()
-            .into_iter())
+            .unique_by(tuple_uniq_fn))
     }
 
-    fn apply(
+    fn apply<T>(
         src: impl MigrationList,
         dest: impl MigrationStorage,
         // TODO: This should maybe get a _filtered_ list, or some query plan? (some kind of Up|Change, or !Data|Long?)
-    ) -> Result<IntoIter<MigrationResultTuple>, Error> {
-        let work_list = Engine::diff(src, dest)?;
-        Ok(work_list
-            .map({
-                |(state, migration)| match state {
-                    MigrationState::Pending => (MigrationResult::Success, migration),
-                    _ => {
-                        todo!("boom")
-                    }
+    ) -> Result<impl Iterator<Item = MigrationResultTuple>, Error> {
+        let work_list = Engine::diff(src, dest)?.into_iter();
+        Ok(work_list.map({
+            |(state, migration)| match state {
+                MigrationState::Pending => (MigrationResult::Success, migration),
+                _ => {
+                    todo!("boom")
                 }
-            })
-            .collect::<MigrationResultTuple>()
-            .into_iter())
+            }
+        }))
     }
 }
 

@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use super::{
     migrations::{Direction, MigrationStep},
-    Driver, DriverResult, Error, IntoIter, Migration, MigrationList, MigrationStorage, NamedDriver,
-    RunnerConfiguration, StepDriver,
+    Driver, DriverResult, Error, Migration, MigrationList, MigrationStorage, NamedDriver,
+    RunnerConfiguration,
 };
 use log::{debug, error, info, trace};
 
@@ -185,6 +185,8 @@ impl Driver for MySQL {
 }
 
 impl MigrationList for MySQL {
+    type Iterator = std::vec::IntoIter<Migration>;
+
     // It is important that this function return with an emtpy list when
     // the MySQL tables have not been bootstrapped yet to trigger the built-in migrations
     // to run.
@@ -197,7 +199,7 @@ impl MigrationList for MySQL {
     // This implementation is a bit over-careful, we could simply bypass the schema and table
     // checks, technically that would all still be an empty list, but having clear error
     // codes should make for a more useful piece of software in general, so we keep it.
-    fn all(&mut self) -> Result<IntoIter<Migration>, Error> {
+    fn all(&mut self) -> Result<Self::Iterator, Error> {
         let database = match &self.config.database {
             Some(database) => database.clone(),
             None => return Err(Error::ConfigurationIncomplete),

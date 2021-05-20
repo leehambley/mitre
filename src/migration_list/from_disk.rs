@@ -41,6 +41,7 @@ pub struct MigrationFinder<'a> {
 }
 
 impl<'a> MigrationList for MigrationFinder<'a> {
+    type Iterator = std::vec::IntoIter<Migration>;
     fn all(&mut self) -> Result<IntoIter<Migration>, Error> {
         let mut m = self.built_in_migrations();
         m.extend(self.migrations_in_dir()?);
