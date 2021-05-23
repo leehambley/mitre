@@ -31,13 +31,15 @@ mod tests {
         }
     }
 
-    fn mysql_migration_storage() -> Box<dyn MigrationStorage> {
+    fn mysql_migration_storage(
+    ) -> Box<dyn MigrationStorage<Iterator = std::vec::IntoIter<Migration>>> {
         let mut mysql = MySQL::new(test_mysql_storage_configuration()).unwrap();
         mysql.reset().unwrap(); // boom
         Box::new(mysql)
     }
 
-    fn in_memory_migration_storage() -> Box<dyn MigrationStorage> {
+    fn in_memory_migration_storage(
+    ) -> Box<dyn MigrationStorage<Iterator = std::vec::IntoIter<Migration>>> {
         Box::new(InMemoryMigrations::new())
     }
 
@@ -69,7 +71,7 @@ mod tests {
     #[test]
     // Returns a tuple of implementation name and the test error, if any
     fn test_all_known_implementations() -> Result<(), (String, String)> {
-        let mut impls = HashMap::<String, Box<dyn MigrationStorage>>::from_iter(IntoIter::new([
+        let mut impls = HashMap::<String, _>::from_iter(IntoIter::new([
             (String::from("InMemory"), in_memory_migration_storage()),
             (String::from("MySQL"), mysql_migration_storage()),
         ]));
@@ -81,7 +83,9 @@ mod tests {
         }
         Ok(())
     }
-    fn lists_what_it_stores(ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
+    fn lists_what_it_stores(
+        ms: &mut Box<dyn MigrationStorage<Iterator = std::vec::IntoIter<Migration>>>,
+    ) -> Result<(), String> {
         for migration in migration_fixture() {
             match ms.add(migration) {
                 Err(e) => return Err(format!("error: {:#?}", e)),

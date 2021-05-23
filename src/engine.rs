@@ -42,7 +42,7 @@ impl Engine {
             .unique_by(tuple_uniq_fn))
     }
 
-    fn apply<T>(
+    fn apply(
         src: impl MigrationList,
         dest: impl MigrationStorage,
         // TODO: This should maybe get a _filtered_ list, or some query plan? (some kind of Up|Change, or !Data|Long?)
@@ -62,8 +62,8 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::super::{
-        Direction, InMemoryMigrations, Migration, MigrationStep, MigrationStorage,
-        TIMESTAMP_FORMAT_STR,
+        Direction, InMemoryMigrations, Migration, MigrationStateTuple, MigrationStep,
+        MigrationStorage, TIMESTAMP_FORMAT_STR,
     };
     use super::*;
     use log::trace;
@@ -120,8 +120,9 @@ mod tests {
     fn test_diff_lists_unknown_dest_migrations_as_pending() -> Result<(), String> {
         match Engine::diff(non_empty_migration_list(), empty_migration_list()) {
             Ok(r) => {
-                assert_eq!(r.len(), fixture().len());
-                for (state, _migration) in r {
+                let r_vec = r.collect::<Vec<MigrationStateTuple>>();
+                assert_eq!(r_vec.len(), fixture().len());
+                for (state, _migration) in r_vec {
                     assert_eq!(MigrationState::Pending, state);
                 }
                 Ok(())
@@ -134,8 +135,9 @@ mod tests {
     fn test_diff_lists_unknown_src_migrations_as_orphaned() -> Result<(), String> {
         match Engine::diff(empty_migration_list(), non_empty_migration_list()) {
             Ok(r) => {
-                assert_eq!(r.len(), fixture().len());
-                for (state, _migration) in r {
+                let r_vec = r.collect::<Vec<MigrationStateTuple>>();
+                assert_eq!(r_vec.len(), fixture().len());
+                for (state, _migration) in r_vec {
                     assert_eq!(MigrationState::Orphaned, state);
                 }
                 Ok(())
@@ -148,8 +150,9 @@ mod tests {
     fn test_diff_lists_all_known_in_src_dest_migrations_as_applied() -> Result<(), String> {
         match Engine::diff(non_empty_migration_list(), non_empty_migration_list()) {
             Ok(r) => {
-                assert_eq!(r.len(), fixture().len());
-                for (state, _migration) in r {
+                let r_vec = r.collect::<Vec<MigrationStateTuple>>();
+                assert_eq!(r_vec.len(), fixture().len());
+                for (state, _migration) in r_vec {
                     assert_eq!(MigrationState::Applied, state);
                 }
                 Ok(())
