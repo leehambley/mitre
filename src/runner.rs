@@ -86,6 +86,8 @@ pub enum MigrationState {
     Pending,
     Applied,
     Orphaned,
+
+    FilteredOut,
 }
 
 impl std::fmt::Display for MigrationState {
@@ -94,6 +96,7 @@ impl std::fmt::Display for MigrationState {
             MigrationState::Pending => write!(f, "Pending"),
             MigrationState::Applied => write!(f, "Applied"),
             MigrationState::Orphaned => write!(f, "Orphaned"),
+            MigrationState::FilteredOut => write!(f, "Filtered Out"),
         }
     }
 }

@@ -1,17 +1,13 @@
-use chrono::Local;
 use clap::{crate_authors, App, Arg};
 use log::{error, info, trace, warn};
 use std::path::Path;
 use tabular::{Row, Table};
 
-use mitre::config;
-use mitre::migrations;
-use mitre::reserved;
-use mitre::runner_from_config;
-use mitre::state_store::StateStore;
 use mitre::ui::start_web_ui;
-
-use mitre::MigrationList;
+use mitre::{
+    config, migration_list_from_disk, migration_storage_from_config, migrations, reserved,
+    runner_from_config, state_store::StateStore, Engine, MigrationList, MigrationStorage,
+};
 
 fn main() {
     env_logger::Builder::new()
@@ -252,30 +248,36 @@ mitre --help
         }
 
         Some("migrate") => {
-            match mitre::migration_list_from_disk(&config).all() {
-                Err(e) => panic!("Error: {:?}", e),
-                Ok(migrations) => {
-                    let mut mdb = StateStore::from_config(&config)
-                        .expect("must be able to instance mariadb state store");
-                    match mdb.up(migrations.collect(), None) {
-                        Ok(r) => {
-                            let mut table = Table::new("{:>}  {:<}");
-                            for (result, migration) in r {
-                                table.add_row(
-                                    Row::new().with_cell(format!("{:?}", result)).with_cell(
-                                        migration
-                                            .date_time
-                                            .format(crate::migrations::FORMAT_STR)
-                                            .to_string(),
-                                    ),
-                                );
-                            }
-                            print!("{}", table);
-                        }
-                        Err(e) => println!("up() had an error {:?}", e),
-                    }
+            let src = migration_list_from_disk(&config);
+
+            let dest = match migration_storage_from_config(&config) {
+                Ok(dest) => dest,
+                Err(e) => {
+                    error!("Error initializing storage: {:?}", e);
+                    std::process::exit(124);
                 }
             };
+
+            match Engine::apply(src, *dest, None {}) {
+                Err(e) => {
+                    error!("Error initializing storage: {:?}", e);
+                    std::process::exit(124);
+                }
+                Ok(r) => {
+                    let mut table = Table::new("{:>}  {:<}");
+                    for (result, migration) in r {
+                        table.add_row(
+                            Row::new().with_cell(format!("{:?}", result)).with_cell(
+                                migration
+                                    .date_time
+                                    .format(crate::migrations::FORMAT_STR)
+                                    .to_string(),
+                            ),
+                        );
+                    }
+                    print!("{}", table);
+                }
+            }
         }
 
         Some("down") => {
@@ -348,7 +350,7 @@ mitre --help
 
             match config.get(key) {
                 Some(runner_config) => {
-                    let timestamp = Local::now().format(crate::migrations::FORMAT_STR);
+                    let timestamp = chrono::Local::now().format(crate::migrations::FORMAT_STR);
 
                     let runner =
                         runner_from_config(runner_config).expect("could not create runner");

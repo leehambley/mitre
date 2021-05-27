@@ -1,3 +1,5 @@
+use crate::Direction;
+
 use super::{
     Error, Migration, MigrationList, MigrationResult, MigrationResultTuple, MigrationState,
     MigrationStateTuple, MigrationStorage,
@@ -42,10 +44,10 @@ impl Engine {
             .unique_by(tuple_uniq_fn))
     }
 
-    fn apply(
+    pub fn apply(
         src: impl MigrationList,
         dest: impl MigrationStorage,
-        // TODO: This should maybe get a _filtered_ list, or some query plan? (some kind of Up|Change, or !Data|Long?)
+        _work_filter: Option<Vec<&Direction>>,
     ) -> Result<impl Iterator<Item = MigrationResultTuple>, Error> {
         let work_list = Engine::diff(src, dest)?.into_iter();
         Ok(work_list.map({

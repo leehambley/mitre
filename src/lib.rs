@@ -18,12 +18,12 @@ mod runner;
 // where they come from. The concept of Driver, DriverResult,
 // Migration, MigrationStateTuple, etc all belong here.
 pub use self::mysql::MySQL; // self:: required due to name conflict with MySQL crate.
-pub use config::{ConfigurationName, RunnerConfiguration};
+pub use config::{Configuration, ConfigurationName, RunnerConfiguration};
 pub use driver::{Driver, DriverResult, NamedDriver, StepDriver};
 pub use engine::Engine;
 pub use in_memory_migrations::InMemoryMigrations;
 pub use migration_list::{from_disk as migration_list_from_disk, MigrationList};
-pub use migration_storage::MigrationStorage;
+pub use migration_storage::{from_config as migration_storage_from_config, MigrationStorage};
 pub use migrations::{
     Direction, Migration, MigrationStep, MigrationSteps, FORMAT_STR as TIMESTAMP_FORMAT_STR,
 };
@@ -53,6 +53,14 @@ pub enum Error {
     // Migration probably contains Up+Change or some other illegal
     // combination of steps.
     MalformedMigration,
+
+    // No mitre config provided, so we cannot initialize anything
+    NoMitreConfigProvided,
+
+    // UnsupportedRunnerSpecified
+    // mitre config is correct, but the _runner field is set to a value
+    // we do not support.
+    UnsupportedRunnerSpecified,
 }
 
 impl From<std::io::Error> for Error {

@@ -170,6 +170,7 @@ impl StateStore {
                     Some(down_step) => self.unapply_migration_step(migration.clone(), down_step),
                     None => (MigrationResult::IrreversibleMigration, migration),
                 },
+                MigrationState::FilteredOut => (MigrationResult::NothingToDo, migration),
                 MigrationState::Applied => (MigrationResult::AlreadyApplied, migration),
             })
             .collect())
@@ -303,7 +304,9 @@ impl StateStore {
                                 None => (MigrationResult::IrreversibleMigration, migration),
                             }
                         }
-                        MigrationState::Pending => (MigrationResult::NothingToDo, migration),
+                        MigrationState::Pending | MigrationState::FilteredOut => {
+                            (MigrationResult::NothingToDo, migration)
+                        }
                     }
                 },
             )

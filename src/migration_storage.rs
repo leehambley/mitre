@@ -1,4 +1,19 @@
-use super::{Error, Migration, MigrationList};
+use super::{Configuration, Error, Migration, MigrationList, MySQL};
+
+pub fn from_config(
+    c: &Configuration,
+) -> Result<Box<dyn MigrationStorage<Iterator = std::vec::IntoIter<Migration>>>, Error> {
+    if let Some(config) = c.get("mitre") {
+        if config._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
+            let storage = MySQL::new(config.clone())?;
+            Ok(Box::new(storage))
+        } else {
+            Err(Error::UnsupportedRunnerSpecified)
+        }
+    } else {
+        Err(Error::NoMitreConfigProvided)
+    }
+}
 
 pub trait MigrationStorage: MigrationList {
     #[cfg(test)]
