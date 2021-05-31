@@ -258,7 +258,7 @@ mitre --help
                 }
             };
 
-            match Engine::apply(src, *dest, None {}) {
+            match Engine::apply(src, dest, None {}) {
                 Err(e) => {
                     error!("Error initializing storage: {:?}", e);
                     std::process::exit(124);

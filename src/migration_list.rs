@@ -8,8 +8,9 @@ pub use from_disk::from_disk;
 // a `impl Iterator<T>` from a trait, we can can _simply_ use
 // that.
 pub trait MigrationList {
-    type Iterator: Iterator<Item = Migration>;
-    fn all(&mut self) -> Result<Self::Iterator, Error>;
+    type Item;
+    type IntoIter: Iterator<Item = Self::Item>;
+    fn all(&mut self) -> Result<Box<dyn Iterator<Item = Self::Item>>, Error>;
 }
 
 #[cfg(test)]

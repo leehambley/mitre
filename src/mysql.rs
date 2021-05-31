@@ -185,7 +185,8 @@ impl Driver for MySQL {
 }
 
 impl MigrationList for MySQL {
-    type Iterator = std::vec::IntoIter<Migration>;
+    type Item = Migration;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
 
     // It is important that this function return with an emtpy list when
     // the MySQL tables have not been bootstrapped yet to trigger the built-in migrations
@@ -199,7 +200,7 @@ impl MigrationList for MySQL {
     // This implementation is a bit over-careful, we could simply bypass the schema and table
     // checks, technically that would all still be an empty list, but having clear error
     // codes should make for a more useful piece of software in general, so we keep it.
-    fn all(&mut self) -> Result<Self::Iterator, Error> {
+    fn all(&mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'static)>, Error> {
         let database = match &self.config.database {
             Some(database) => database.clone(),
             None => return Err(Error::ConfigurationIncomplete),
@@ -233,7 +234,7 @@ impl MigrationList for MySQL {
                 schema_exists, table_exists
             );
             info!("early return with empty migration list, we appear not to be initialized");
-            return Ok(vec![].into_iter());
+            return Ok(Box::new(vec![].into_iter()));
         }
 
         let q = format!("SELECT `version`, `flags`, `configuration_name`, `built_in` FROM {t} ORDER BY version ASC", t = MIGRATION_STATE_TABLE_NAME);
@@ -302,7 +303,7 @@ impl MigrationList for MySQL {
             }
         }
 
-        Ok(migrations.into_iter())
+        Ok(Box::new(migrations.into_iter()))
     }
 }
 
