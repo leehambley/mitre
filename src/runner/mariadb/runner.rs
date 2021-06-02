@@ -1,13 +1,42 @@
-use super::{MariaDb, MARIADB_MIGRATION_STATE_TABLE_NAME};
+use super::MARIADB_MIGRATION_STATE_TABLE_NAME;
 use crate::config::RunnerConfiguration;
 use crate::migrations::MigrationStep;
-use crate::runner::{
-    Error as RunnerError, MigrationFileExtension, MigrationTemplate, Runner, RunnersHashMap,
-};
+use crate::runner::{Error as RunnerError, MigrationFileExtension, MigrationTemplate, Runner};
 use indoc::indoc;
+use log::{debug, info, trace};
 use mustache::MapBuilder;
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};
+
+pub struct MariaDb {
+    conn: Conn,
+    config: RunnerConfiguration,
+}
+
+impl MariaDb {
+    // This methoe exists in two places, almost certainly a code-smell.
+    pub fn select_db(&mut self) -> bool {
+        match &self.config.database {
+            Some(database) => {
+                trace!("select_db database name is {}", database);
+                match &self.conn.select_db(&database) {
+                    true => {
+                        trace!("select_db successfully using {}", database);
+                        true
+                    }
+                    false => {
+                        trace!("could not switch to {} (may not exist yet?)", database);
+                        false
+                    }
+                }
+            }
+            None => {
+                trace!("select_db no database name provided");
+                false
+            }
+        }
+    }
+}
 
 impl Runner for MariaDb {
     fn new_runner(config: RunnerConfiguration) -> Result<MariaDb, RunnerError> {
@@ -31,8 +60,7 @@ impl Runner for MariaDb {
         );
         Ok(MariaDb {
             conn: Conn::new(opts)?,
-            runner_config: config,
-            runners: RunnersHashMap::new(),
+            config,
         })
     }
 
@@ -49,21 +77,30 @@ impl Runner for MariaDb {
             )
             .insert_str(
                 "mariadb_migration_state_database_name",
-                self.runner_config.database.as_ref().unwrap(),
+                self.config.database.as_ref().unwrap(),
             )
             .build();
 
         trace!("rendering template to string from {:?}", ms.path);
-        let parsed = match ms.content.render_data_to_string(&template_ctx) {
+        let tpl = match ms.content() {
+            Ok(tpl) => tpl,
+            Err(e) => {
+                return Err(RunnerError::TemplateError {
+                    reason: e.to_string(),
+                    template: mustache::compile_str("").unwrap(),
+                })
+            }
+        };
+        let parsed = match tpl.render_data_to_string(&template_ctx) {
             Ok(str) => Ok(str),
             Err(e) => Err(RunnerError::TemplateError {
                 reason: e.to_string(),
-                template: ms.content.clone(),
+                template: tpl,
             }),
         }?;
         trace!("template rendered to string successfully: {:?}", parsed);
 
-        debug!("executing query");
+        debug!("executing query {}", parsed);
         match self.conn.query_iter(parsed) {
             Ok(mut res) => {
                 // TODO: do something more with QueryResult
@@ -72,10 +109,14 @@ impl Runner for MariaDb {
                     res.warnings(),
                     res.info_str()
                 );
+                // TODO: With a fault in one of the migrations, it's possible to get stuck
+                // here seemingly indefinitely, go ahead, add a stray comma after one of the
+                // columns in the migration_schema.mitre.sql and watch this hang forever
+                // waiting for a res.next_set() that never seems to come.
                 while let Some(result_set) = res.next_set() {
                     let result_set = result_set.expect("boom");
                     info!(
-                        "Result set meta: rows {}, last insert id {:?}, warnings {} info_str {}",
+                        "Result set _ meta: rows {}, last insert id {:?}, warnings {} info_str {}",
                         result_set.affected_rows(),
                         result_set.last_insert_id(),
                         result_set.warnings(),

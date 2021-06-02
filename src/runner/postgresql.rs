@@ -44,11 +44,17 @@ impl Runner for PostgreSql {
 
     fn apply(&mut self, ms: &MigrationStep) -> Result<(), Error> {
         let template_ctx = MapBuilder::new().build();
-        let parsed = match ms.content.render_data_to_string(&template_ctx) {
-            Ok(str) => Ok(str),
+        let parsed = match ms.content() {
+            Ok(tpl) => match tpl.render_data_to_string(&template_ctx) {
+                Ok(str) => Ok(str),
+                Err(e) => Err(Error::TemplateError {
+                    reason: e.to_string(),
+                    template: tpl,
+                }),
+            },
             Err(e) => Err(Error::TemplateError {
                 reason: e.to_string(),
-                template: ms.content.clone(),
+                template: mustache::compile_str("no template").unwrap(),
             }),
         }?;
         match self.client.simple_query(&parsed) {

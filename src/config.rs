@@ -5,6 +5,7 @@
 extern crate yaml_rust;
 
 use super::reserved;
+use log::trace;
 use std::collections::HashMap;
 use std::fmt;
 use std::io;

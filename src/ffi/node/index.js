@@ -68,6 +68,7 @@ const Configuration = Struct({
   // to do anything with this pointer outside Rust.
   _rust_config: "pointer",
 });
+
 const ConfigurationPtr = ref.refType(Configuration);
 
 global.libmitre = ffi.Library("./target/debug/libmitre", {
@@ -75,11 +76,6 @@ global.libmitre = ffi.Library("./target/debug/libmitre", {
   config_from_file: [ConfigurationPtr, [ref.types.CString]],
   diff: [MigrationStatesPtr, ["pointer"]],
 });
-
-function ffiArray(array, length) {
-  array.length = length;
-  return array;
-}
 
 // https://github.com/search?q=ffi.Library&type=Code&l=JavaScript
 global.mitre = {

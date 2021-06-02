@@ -1,9 +1,9 @@
 use crate::config;
 use crate::migrations::Migration;
-use crate::runner::mariadb::MariaDb;
 use crate::state_store::StateStore;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
+use log::info;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -24,7 +24,7 @@ struct MigrationsTemplate<'a> {
 
 struct AppData {
     migrations: Mutex<Vec<Migration>>,
-    state_store: Mutex<MariaDb>,
+    state_store: Mutex<Box<StateStore>>,
 }
 
 async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
@@ -40,7 +40,7 @@ async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
                 built_in: m.built_in,
                 date_time: format!("{:?}", m.date_time),
                 path: format!("{:?}", s.path),
-                runner_name: m.runner_and_config.runner.name.to_string(),
+                runner_name: m.configuration_name.to_string(),
                 direction: format!("{:?}", direction),
             })
         })
@@ -66,9 +66,9 @@ pub async fn start_web_ui(
             .wrap(Logger::new("%a %{User-Agent}i %r %s %b %Dms %U"))
             .data(AppData {
                 migrations: Mutex::new(migrations.clone()),
-                state_store: Mutex::new(
-                    MariaDb::new_state_store(&config).expect("could not make state store"),
-                ),
+                state_store: Mutex::new(Box::new(
+                    StateStore::from_config(&config).expect("could not make state store"),
+                )),
             })
             .route("/", web::get().to(index))
     })

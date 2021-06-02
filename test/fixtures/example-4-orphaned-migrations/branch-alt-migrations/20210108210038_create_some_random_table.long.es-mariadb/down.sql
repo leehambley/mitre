@@ -1,0 +1,1 @@
+DROP some_random_table;

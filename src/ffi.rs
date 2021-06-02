@@ -1,8 +1,12 @@
+use log::{error, trace, warn};
 use std::ffi::{CStr, CString};
+
+use crate::MigrationList;
 use std::os::raw::c_char;
+
 // rust-analyzer has a bug here showing a false warning about unresolved import
 // https://github.com/rust-analyzer/rust-analyzer/issues/6038
-use std::os::unix::ffi::OsStrExt;
+pub use std::os::unix::ffi::OsStrExt;
 
 // Allows use of .diff() on unknown impl StateStore
 // result type.
@@ -222,7 +226,8 @@ unsafe extern "C" fn free_config_from_file(c: *mut Configuration) {
 #[no_mangle]
 unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut MigrationStates {
     let rc = Box::from_raw(c);
-    let migrations = match crate::migrations::migrations(&rc.clone()) {
+    let mut migrations_from_disk = crate::migration_list_from_disk(&rc);
+    let migrations = match migrations_from_disk.all() {
         Ok(migrations) => migrations,
         Err(e) => {
             error!("could not list migrations using config {:?}", e);
@@ -230,8 +235,8 @@ unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut Migratio
         }
     };
 
-    let migration_states = match crate::state_store::from_config(&rc.clone()) {
-        Ok(mut ss) => match ss.diff(migrations) {
+    let migration_states = match StateStore::from_config(&rc) {
+        Ok(mut ss) => match ss.diff(migrations.collect()) {
             Ok(diff_results) => {
                 let mut num_migration_states: usize = 0;
                 let mut migration_states: Vec<MigrationState> = vec![];

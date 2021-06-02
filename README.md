@@ -209,6 +209,11 @@ with adding indexes to databases which may/not need to be run at deploy time.
 - The entire concept of deploy-time is weird with containerized applications
 and autoscaling.
 
+## Blog ideas
+
+- why not having structure.<ext> like Rails
+- why no separate "seeds" (hint: flags)
+
 ## TODO:
 
 - Ensure the migrations all have a matching runner defined.
