@@ -47,7 +47,7 @@ mod tests {
     fn mysql_migration_storage() -> Box<dyn MigrationStorage> {
         let mut mysql = MySQL::new(test_mysql_storage_configuration()).unwrap();
         mysql.reset().unwrap(); // boom
-        mysql
+        Box::new(mysql)
     }
 
     fn in_memory_migration_storage() -> Box<dyn MigrationStorage> {
@@ -82,29 +82,19 @@ mod tests {
     #[test]
     // Returns a tuple of implementation name and the test error, if any
     fn test_all_known_implementations() -> Result<(), (String, String)> {
-        let mut impls =
-            HashMap::<String, Box<dyn Iterator<Item = Migration>>>::from_iter(IntoIter::new([
-                (
-                    String::from("InMemory"),
-                    in_memory_migration_storage().all(),
-                ),
-                (String::from("MySQL"), mysql_migration_storage().all()),
-            ]));
-        // let mut impls = HashMap::<String, _>::from_iter(IntoIter::new([
-        //     (String::from("InMemory"), in_memory_migration_storage()),
-        //     (String::from("MySQL"), mysql_migration_storage()),
-        // ]));
-        // for (name, implementation) in &mut impls {
-        //     match lists_what_it_stores(implementation) {
-        //         Err(e) => return Err((name.clone(), e)),
-        //         _ => {}
-        //     };
-        // }
+        let mut impls = HashMap::<String, Box<dyn MigrationStorage>>::from_iter(IntoIter::new([
+            (String::from("InMemory"), in_memory_migration_storage()),
+            (String::from("MySQL"), mysql_migration_storage()),
+        ]));
+        for (name, implementation) in &mut impls {
+            match lists_what_it_stores(implementation) {
+                Err(e) => return Err((name.clone(), e)),
+                _ => {}
+            };
+        }
         Ok(())
     }
-    fn lists_what_it_stores(
-        ms: &mut Box<dyn MigrationStorage<Iterator = std::vec::IntoIter<Migration>>>,
-    ) -> Result<(), String> {
+    fn lists_what_it_stores(ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
         for migration in migration_fixture() {
             match ms.add(migration) {
                 Err(e) => return Err(format!("error: {:#?}", e)),

@@ -455,10 +455,10 @@ mod tests {
             Err(e) => Err(format!("couldn't make config {}", e))?,
         };
 
-        match from_disk(&config).all() {
+        match from_disk(&config.clone()).all() {
             Err(e) => Err(format!("Error: {:?}", e)),
             Ok(migrations) => {
-                assert_eq!(migrations.len(), 3); // built-in migrations are being deprecated
+                assert_eq!(migrations.collect::<Vec<Migration>>().len(), 3); // built-in migrations are being deprecated
                 Ok(())
             }
         }
