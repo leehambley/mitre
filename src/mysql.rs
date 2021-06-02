@@ -185,8 +185,6 @@ impl Driver for MySQL {
 }
 
 impl MigrationList for MySQL {
-    type Item = Migration;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
 
     // It is important that this function return with an emtpy list when
     // the MySQL tables have not been bootstrapped yet to trigger the built-in migrations

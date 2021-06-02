@@ -1,15 +1,10 @@
 use super::{Configuration, Error, Migration, MigrationList, MySQL};
 
-pub fn from_config(
-    c: &Configuration,
-) -> Result<
-    Box<dyn MigrationStorage<Item = Migration, IntoIter = std::vec::IntoIter<Migration>>>,
-    Error,
-> {
+pub fn from_config(c: &Configuration) -> Result<impl MigrationStorage, Error> {
     if let Some(config) = c.get("mitre") {
         if config._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
             let storage = MySQL::new(config.clone())?;
-            Ok(Box::new(storage))
+            Ok(storage)
         } else {
             Err(Error::UnsupportedRunnerSpecified)
         }
@@ -49,17 +44,15 @@ mod tests {
         }
     }
 
-    // fn mysql_migration_storage(
-    // ) -> Box<dyn MigrationStorage<Iterator = std::vec::IntoIter<Migration>>> {
-    //     let mut mysql = MySQL::new(test_mysql_storage_configuration()).unwrap();
-    //     mysql.reset().unwrap(); // boom
-    //     Box::new(mysql)
-    // }
+    fn mysql_migration_storage() -> Box<dyn MigrationStorage> {
+        let mut mysql = MySQL::new(test_mysql_storage_configuration()).unwrap();
+        mysql.reset().unwrap(); // boom
+        mysql
+    }
 
-    // fn in_memory_migration_storage(
-    // ) -> Box<dyn MigrationStorage<Iterator = std::vec::IntoIter<Migration>>> {
-    //     Box::new(InMemoryMigrations::new())
-    // }
+    fn in_memory_migration_storage() -> Box<dyn MigrationStorage> {
+        Box::new(InMemoryMigrations::new())
+    }
 
     fn migration_fixture() -> Vec<Migration> {
         vec![Migration {

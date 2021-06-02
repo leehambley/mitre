@@ -7,7 +7,6 @@ use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 use std::string::String;
-use std::vec::IntoIter;
 
 use crate::config::Configuration;
 use crate::migrations::built_in_migrations::BuiltInMigrations;
@@ -41,9 +40,7 @@ pub struct MigrationFinder<'a> {
 }
 
 impl<'a> MigrationList for MigrationFinder<'a> {
-    type Item = Migration;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-    fn all(&mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'static)>, Error> {
+    fn all<'b>(&'b mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'b)>, Error> {
         let mut m = self.built_in_migrations();
         m.extend(self.migrations_in_dir()?);
         Ok(Box::new(m.into_iter()))

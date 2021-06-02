@@ -2,15 +2,13 @@ use super::{Error, Migration};
 pub use std::vec::IntoIter;
 
 pub mod from_disk;
-pub use from_disk::from_disk;
+pub use from_disk::from_disk; // TODO: necessary?
 
-// TODO: this type is redundant now we know how to reference
-// a `impl Iterator<T>` from a trait, we can can _simply_ use
-// that.
+// Prefer having a MigrationList trait, as here all() can return a Result<T, E> where
+// with a pure Iterator<Item=Migration> we would lose that ability (and maybe have
+// to use a Iterator<Item=<Result<Migration, E>> or)
 pub trait MigrationList {
-    type Item;
-    type IntoIter: Iterator<Item = Self::Item>;
-    fn all(&mut self) -> Result<Box<dyn Iterator<Item = Self::Item>>, Error>;
+    fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error>;
 }
 
 #[cfg(test)]

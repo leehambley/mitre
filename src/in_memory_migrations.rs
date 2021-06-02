@@ -17,8 +17,6 @@ impl Default for InMemoryMigrations {
 }
 
 impl MigrationList for InMemoryMigrations {
-    type Item = Migration;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
     fn all(&mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'static)>, Error> {
         Ok(Box::new(self.m.clone().into_iter()))
     }
