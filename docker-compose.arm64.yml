@@ -3,16 +3,8 @@ version: "3.1"
 
 services:
 
-  mariadb:
-    image: mariadb:latest
-    restart: always
-    environment:
-      - MYSQL_ROOT_PASSWORD=example
-    ports:
-      - 3306:3306
-
   postgres:
-    image: postgres
+    image: amd64/postgres
     restart: always
     environment:
       - POSTGRES_PASSWORD=example
@@ -20,21 +12,21 @@ services:
       - 5432:5432
 
   mysql:
-    image: mysql
+    image: amd64/mysql
     restart: always
     environment:
       - MYSQL_ROOT_PASSWORD=example
     ports:
-      - 3307:3306
+      - 3306:3306
 
   redis:
-    image: redis
+    image: amd64/redis
     restart: always
     ports:
       - 6379:6379
 
   es:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.9.0
+    image: amd64/elasticsearch:7.9.0
     restart: always
     environment:
       - bootstrap.memory_lock=true
@@ -46,3 +38,4 @@ services:
         hard: -1
     ports:
       - 9200:9200
+ 
