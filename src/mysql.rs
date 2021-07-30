@@ -48,7 +48,7 @@ impl MySQL {
     fn conn(&mut self) -> &mut mysql::Conn {
         debug!("select_db {:?}", self.config.database);
         match &self.config.database {
-            Some(database) => match self.conn.select_db(&database) {
+            Some(database) => match self.conn.select_db(database) {
                 true => trace!("select_db {:?} succeeded", database),
                 false => info!("select_db {:?} failed", database),
             },

@@ -49,7 +49,7 @@ impl Engine {
         dest: impl MigrationStorage,
         _work_filter: Option<Vec<&Direction>>,
     ) -> Result<impl Iterator<Item = MigrationResultTuple>, Error> {
-        let work_list = Engine::diff(src, dest)?.into_iter();
+        let work_list = Engine::diff(src, dest)?;
         Ok(work_list.map({
             |(state, migration)| match state {
                 MigrationState::Pending => (MigrationResult::Success, migration),

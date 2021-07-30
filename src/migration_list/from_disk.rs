@@ -56,10 +56,10 @@ impl<'a> MigrationFinder {
             match entry {
                 Ok(e) => match e.metadata() {
                     Ok(m) => match m.is_file() {
-                        true => migrations.extend(self.migration_from_file(&e.path())?),
+                        true => migrations.extend(self.migration_from_file(e.path())?),
                         false => match m.is_dir() {
                             true => {
-                                migrations.extend(self.migration_from_dir(&e.path())?);
+                                migrations.extend(self.migration_from_dir(e.path())?);
                             }
                             false => {
                                 debug!(

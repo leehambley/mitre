@@ -34,19 +34,19 @@ pub enum Error {
     },
 
     /// Template error such as a syntax error.
-    TemplateError {
+    Template {
         reason: String,
         template: mustache::Template,
     },
 
     /// TODO: Describe these
-    ErrorRunningMigration {
+    RunningMigration {
         cause: String,
     },
 
     /// We successfully ran the migration, but we didn't succeed in
     /// recording the status
-    ErrorRecordingMigrationResult {
+    RecordingMigrationResult {
         cause: String,
     },
 

@@ -147,7 +147,7 @@ extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
 
     let r_path = std::path::Path::new(path_as_str);
 
-    let config = match crate::config::Configuration::from_file(&r_path) {
+    let config = match crate::config::Configuration::from_file(r_path) {
         Ok(config) => config,
         Err(e) => {
             warn!("Error: {:?}: {:#?}", e, r_path);

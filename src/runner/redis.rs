@@ -20,7 +20,7 @@ pub enum Error {
     Redis(redis_raw::RedisError),
 
     // (reason, the template)
-    TemplateError {
+    Template {
         reason: String,
         template: mustache::Template,
     },
@@ -72,7 +72,7 @@ impl Runner for Redis {
         let template_ctx = MapBuilder::new().build();
         let parsed = match ms.content.render_data_to_string(&template_ctx) {
             Ok(str) => Ok(str),
-            Err(e) => Err(Error::TemplateError {
+            Err(e) => Err(Error::Template {
                 reason: e.to_string(),
                 template: ms.content.clone(),
             }),
