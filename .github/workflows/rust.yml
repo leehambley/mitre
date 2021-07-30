@@ -26,7 +26,7 @@ jobs:
 
     services:
       mariadb:
-        image: mariadb:latest
+        image: mysql:latest
         env:
           MYSQL_ROOT_PASSWORD: example
         ports:
