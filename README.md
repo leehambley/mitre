@@ -225,3 +225,8 @@ and autoscaling.
 ## Contributing
 
 Please install [pre-commit](https://pre-commit.com/#install) and run `pre-commit install` in this repo to install the commit checks.
+
+### Testing
+
+1. Start the test databases with `docker-compose up -d` (on Silicon run `docker-compose up -f docker-compose.silicon.yml -d`)
+2. Run `cargo test`
