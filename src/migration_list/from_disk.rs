@@ -31,8 +31,8 @@ use super::{Error, MigrationList};
 ///
 /// Ideally provide an absolute path. When giving a relative path in the config (e.g ".") the relative
 /// path should be appended to the (ideally) absolute path.
-pub fn from_disk(config: &Configuration) -> MigrationFinder {
-    MigrationFinder { config }
+pub fn from_disk(config: Configuration) -> MigrationFinder<'static> {
+    MigrationFinder { config: &config.clone() }
 }
 
 pub struct MigrationFinder<'a> {

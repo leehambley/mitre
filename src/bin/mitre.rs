@@ -4,10 +4,15 @@ use std::path::Path;
 use tabular::{Row, Table};
 
 use mitre::ui::start_web_ui;
-use mitre::{
-    config, migration_list_from_disk, migration_storage_from_config, migrations, reserved,
-    runner_from_config, state_store::StateStore, Engine, MigrationList, MigrationStorage,
-};
+use mitre::{Configuration, Engine, MigrationList, MigrationStorage, config, migration_list_from_disk, migration_storage_from_config, migrations, reserved, runner_from_config};
+
+fn migration_list<'a>(c: &'a Configuration) -> impl MigrationList<'a> {
+    migration_list_from_disk(c)
+}
+
+fn migration_storage(c: &Configuration) -> impl MigrationStorage {
+    migration_storage_from_config(c).expect("should be able to make migration storage")
+}
 
 fn main() {
     env_logger::Builder::new()
@@ -199,7 +204,7 @@ mitre --help
                     .with_cell("Direction"),
             );
 
-            let mut mdb = match StateStore::from_config(&config) {
+            let mut mdb = match migration_storage_from_config(&config) {
                 Ok(mdb) => Ok(mdb),
                 Err(reason) => {
                     warn!("Error instantiating mdb {:?}", reason);

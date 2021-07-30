@@ -2,7 +2,6 @@ use crate::config::RunnerConfiguration;
 use crate::migrations::Migration;
 use crate::migrations::MigrationStep;
 use log::trace;
-use std::collections::HashMap;
 
 pub mod mariadb;
 pub mod postgresql;
@@ -79,7 +78,6 @@ impl std::fmt::Display for Error {
 }
 
 pub type BoxedRunner = Box<dyn Runner>;
-pub type RunnersHashMap = HashMap<crate::config::ConfigurationName, BoxedRunner>;
 
 #[derive(PartialEq, Debug)]
 pub enum MigrationState {

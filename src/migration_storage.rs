@@ -21,6 +21,30 @@ pub trait MigrationStorage: MigrationList {
     fn remove(&mut self, _: Migration) -> Result<(), Error>;
 }
 
+// Implementation of MigrationList MigrationStorage for &mut dyn Box<MigrationStorage>
+// 
+// The types are a bit hairy here, but both MigrationList and MigrationStorage
+// imply &mut becasue all their methods are _potentially_ mutative (storage can store
+// new things and modify socket connections etc, the migration list itself can be stateful
+// such as having internal filesystem cursors, or similar)
+impl MigrationList for &mut Box<dyn MigrationStorage> {
+    fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error> {
+        (**self).all()
+    }
+}
+impl MigrationStorage for &mut Box<dyn MigrationStorage> {
+    #[cfg(test)]
+    fn reset(&mut self) -> Result<(), Error> {
+        (**self).reset()
+    }
+    fn add(&mut self, m: Migration) -> Result<(), Error> {
+        (**self).add(m)
+    }
+    fn remove(&mut self, m: Migration) -> Result<(), Error> {
+        (**self).remove(m)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
