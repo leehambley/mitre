@@ -31,15 +31,17 @@ use super::{Error, MigrationList};
 ///
 /// Ideally provide an absolute path. When giving a relative path in the config (e.g ".") the relative
 /// path should be appended to the (ideally) absolute path.
-pub fn from_disk(config: Configuration) -> MigrationFinder<'static> {
-    MigrationFinder { config: &config.clone() }
+pub fn from_disk(config: &Configuration) -> MigrationFinder {
+    MigrationFinder {
+        config: config.clone(),
+    }
 }
 
-pub struct MigrationFinder<'a> {
-    config: &'a Configuration,
+pub struct MigrationFinder {
+    config: Configuration,
 }
 
-impl<'a> MigrationList for MigrationFinder<'a> {
+impl<'a> MigrationList for MigrationFinder {
     fn all<'b>(&'b mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'b)>, Error> {
         let mut m = self.built_in_migrations();
         m.extend(self.migrations_in_dir()?);
@@ -47,7 +49,7 @@ impl<'a> MigrationList for MigrationFinder<'a> {
     }
 }
 
-impl<'a> MigrationFinder<'a> {
+impl<'a> MigrationFinder {
     fn migrations_in_dir(&self) -> Result<Vec<Migration>, Error> {
         let mut migrations: Vec<Migration> = vec![];
         for entry in ignore::Walk::new(&self.config.migrations_directory) {
@@ -81,11 +83,7 @@ impl<'a> MigrationFinder<'a> {
 
     // Given a file this will return a single step. Standalone step
     // files are considered to be irreversible "change" migrations
-    fn migation_step_from_file(
-        &self,
-        path: &'a Path,
-        d: Direction,
-    ) -> Result<MigrationSteps, Error> {
+    fn migation_step_from_file(&self, path: &Path, d: Direction) -> Result<MigrationSteps, Error> {
         let source = {
             let mut file = File::open(path)?;
             let mut buffer = String::new();

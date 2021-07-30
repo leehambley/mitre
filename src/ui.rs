@@ -1,7 +1,7 @@
 use crate::migrations::Migration;
 use crate::{
-    config, migration_list_from_disk, migration_storage_from_config, Engine, MigrationList,
-    MigrationStorage, Configuration
+    config, migration_list_from_disk, migration_storage_from_config, Configuration, Engine,
+    MigrationList, MigrationStorage,
 };
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
@@ -66,7 +66,6 @@ pub async fn start_web_ui(
     info!("mig {:?}", migrations);
     let listen = "127.0.0.1:8000";
     let server = HttpServer::new(move || {
-        
         let config = Box::new(config::from_file(&config_file).expect("could not read config"));
         let c: &'static Configuration = Box::leak(config);
 
@@ -75,8 +74,7 @@ pub async fn start_web_ui(
             .data(AppData {
                 migration_list: Mutex::new(Box::new(migration_list_from_disk(c))),
                 migration_storage: Mutex::new(Box::new(
-                    migration_storage_from_config(c)
-                        .expect("could not make migration storage"),
+                    migration_storage_from_config(c).expect("could not make migration storage"),
                 )),
             })
             .route("/", web::get().to(index))

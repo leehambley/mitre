@@ -1,18 +1,14 @@
 use clap::{crate_authors, App, Arg};
-use log::{error, info, trace, warn};
+use log::{error, info, trace};
 use std::path::Path;
 use tabular::{Row, Table};
 
 use mitre::ui::start_web_ui;
-use mitre::{Configuration, Engine, MigrationList, MigrationStorage, config, migration_list_from_disk, migration_storage_from_config, migrations, reserved, runner_from_config};
-
-fn migration_list<'a>(c: &'a Configuration) -> impl MigrationList<'a> {
-    migration_list_from_disk(c)
-}
-
-fn migration_storage(c: &Configuration) -> impl MigrationStorage {
-    migration_storage_from_config(c).expect("should be able to make migration storage")
-}
+use mitre::{
+    config, migration_list_from_disk, migration_storage_from_config, migrations, reserved,
+    runner_from_config, Configuration, Direction, Engine, MigrationList, MigrationResultTuple,
+    MigrationStorage,
+};
 
 fn main() {
     env_logger::Builder::new()
@@ -204,21 +200,12 @@ mitre --help
                     .with_cell("Direction"),
             );
 
-            let mut mdb = match migration_storage_from_config(&config) {
-                Ok(mdb) => Ok(mdb),
-                Err(reason) => {
-                    warn!("Error instantiating mdb {:?}", reason);
-                    Err(reason)
-                }
-            }
-            .expect("must be able to instance mariadb state store");
-
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow
-            match mitre::migration_list_from_disk(&config).all() {
+            match Engine::diff(migration_list(&config), migration_storage(&config)) {
                 Err(e) => error!("Error: {:?}", e),
                 Ok(migrations) => {
-                    for (migration_state, m) in mdb.diff(migrations.collect()).expect("boom") {
+                    for (migration_state, m) in migrations {
                         m.clone().steps.into_iter().for_each(|(direction, s)| {
                             table.add_row(
                                 Row::new()
@@ -252,65 +239,47 @@ mitre --help
             std::process::exit(1);
         }
 
-        Some("migrate") => {
-            let src = migration_list_from_disk(&config);
-
-            let dest = match migration_storage_from_config(&config) {
-                Ok(dest) => dest,
-                Err(e) => {
-                    error!("Error initializing storage: {:?}", e);
-                    std::process::exit(124);
-                }
-            };
-
-            match Engine::apply(src, dest, None {}) {
-                Err(e) => {
-                    error!("Error initializing storage: {:?}", e);
-                    std::process::exit(124);
-                }
-                Ok(r) => {
-                    let mut table = Table::new("{:>}  {:<}");
-                    for (result, migration) in r {
-                        table.add_row(
-                            Row::new().with_cell(format!("{:?}", result)).with_cell(
-                                migration
-                                    .date_time
-                                    .format(crate::migrations::FORMAT_STR)
-                                    .to_string(),
-                            ),
-                        );
-                    }
-                    print!("{}", table);
-                }
+        Some("migrate") => match apply(&config, Some(vec![&Direction::Up])) {
+            Err(e) => {
+                error!("Error applying migrations (direction: up): {:?}", e);
+                std::process::exit(124);
             }
-        }
-
-        Some("down") => {
-            match mitre::migration_list_from_disk(&config).all() {
-                Err(e) => panic!("Error: {:?}", e),
-                Ok(migrations) => {
-                    let mut mdb = StateStore::from_config(&config)
-                        .expect("must be able to instance mariadb state store");
-                    match mdb.down(migrations.collect(), None) {
-                        Ok(r) => {
-                            let mut table = Table::new("{:>}  {:<}");
-                            for (result, migration) in r {
-                                table.add_row(
-                                    Row::new().with_cell(format!("{:?}", result)).with_cell(
-                                        migration
-                                            .date_time
-                                            .format(crate::migrations::FORMAT_STR)
-                                            .to_string(),
-                                    ),
-                                );
-                            }
-                            print!("{}", table);
-                        }
-                        Err(e) => println!("up() had an error {:?}", e),
-                    }
+            Ok(r) => {
+                let mut table = Table::new("{:>}  {:<}");
+                for (result, migration) in r {
+                    table.add_row(
+                        Row::new().with_cell(format!("{:?}", result)).with_cell(
+                            migration
+                                .date_time
+                                .format(crate::migrations::FORMAT_STR)
+                                .to_string(),
+                        ),
+                    );
                 }
-            };
-        }
+                print!("{}", table);
+            }
+        },
+
+        Some("down") => match apply(&config, Some(vec![&Direction::Down])) {
+            Err(e) => {
+                error!("Error applying migrations (direction: down): {:?}", e);
+                std::process::exit(124);
+            }
+            Ok(r) => {
+                let mut table = Table::new("{:>}  {:<}");
+                for (result, migration) in r {
+                    table.add_row(
+                        Row::new().with_cell(format!("{:?}", result)).with_cell(
+                            migration
+                                .date_time
+                                .format(crate::migrations::FORMAT_STR)
+                                .to_string(),
+                        ),
+                    );
+                }
+                print!("{}", table);
+            }
+        },
 
         Some("ui") => {
             info!("Starting webserver");
@@ -405,6 +374,21 @@ mitre --help
         }
         _ => {} // Either no subcommand or one not tested for...
     }
+}
+
+fn migration_list(c: &Configuration) -> impl MigrationList {
+    migration_list_from_disk(c)
+}
+
+fn migration_storage(c: &Configuration) -> impl MigrationStorage {
+    migration_storage_from_config(c).expect("should be able to make migration storage")
+}
+
+fn apply(
+    c: &Configuration,
+    work_list: Option<Vec<&Direction>>,
+) -> Result<impl Iterator<Item = MigrationResultTuple>, mitre::Error> {
+    Engine::apply(migration_list(c), migration_storage(c), work_list)
 }
 
 #[cfg(test)]

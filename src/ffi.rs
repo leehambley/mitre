@@ -229,7 +229,7 @@ unsafe extern "C" fn free_config_from_file(c: *mut Configuration) {
 #[no_mangle]
 unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut MigrationStates {
     let rc = Box::from_raw(c);
-    let migrations_from_disk = migration_list_from_disk(rc.clone());
+    let migrations_from_disk = migration_list_from_disk(&rc);
 
     let migration_states = match migration_storage_from_config(&rc) {
         Ok(migration_storage) => match Engine::diff(migrations_from_disk, migration_storage) {
