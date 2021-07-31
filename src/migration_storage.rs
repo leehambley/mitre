@@ -86,7 +86,7 @@ mod tests {
                     Direction::Up,
                     MigrationStep {
                         path: PathBuf::from("/foo/up.sql"),
-                        source: String::from("CREATE TABLE foo"),
+                        source: String::from("CREATE TABLE foo (id int)"),
                     },
                 ),
                 (
@@ -106,20 +106,23 @@ mod tests {
     #[test]
     // Returns a tuple of implementation name and the test error, if any
     fn test_all_known_implementations() -> Result<(), (String, String)> {
-        let mut impls = HashMap::<String, Box<dyn MigrationStorage>>::from_iter(IntoIter::new([
+        let impls = HashMap::<String, Box<dyn MigrationStorage>>::from_iter(IntoIter::new([
             (String::from("InMemory"), in_memory_migration_storage()),
             (String::from("MySQL"), mysql_migration_storage()),
         ]));
-        for (name, implementation) in &mut impls {
-            match lists_what_it_stores(implementation) {
+        for (name, mut implementation) in impls {
+            println!("testing {}", name);
+            match lists_what_it_stores(&mut implementation) {
                 Err(e) => return Err((name.clone(), e)),
                 _ => {}
             };
         }
         Ok(())
     }
-    fn lists_what_it_stores(ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
+    fn lists_what_it_stores(mut ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
+        println!("int test what it stores with");
         for migration in migration_fixture() {
+            println!("about to add migration {:?}", migration);
             match ms.add(migration) {
                 Err(e) => return Err(format!("error: {:#?}", e)),
                 _ => {}

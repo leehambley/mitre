@@ -12,7 +12,11 @@ CREATE TABLE IF NOT EXISTS `{{database_name}}`.`{{migrations_table}}` (
   -- Not exactly a property of a migration, but metadata
   -- stored when we store a migration in here via the MigrationStorage
   -- trait.
-  `stored_at` DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  --
+  -- Note no default here, using a UTC default *requires* MySQL 8.0.13
+  -- or above, or MariaDB, let's just always provide it from Mitre
+  -- https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-types-defaults-explicit
+  `stored_at` DATETIME NOT NULL,
 
   -- Flags e.g `sorted,comma,separated,nospaces`
   `flags` TINYTEXT NOT NULL,

@@ -49,6 +49,10 @@ pub enum Error {
         msg: String,
     },
 
+    ConnectionError {
+        msg: String,
+    },
+
     // Migration probably contains Up+Change or some other illegal
     // combination of steps.
     MalformedMigration,
