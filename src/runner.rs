@@ -3,12 +3,12 @@ use crate::migrations::Migration;
 use crate::migrations::MigrationStep;
 use log::trace;
 
-pub mod mariadb;
+pub mod mysql;
 pub mod postgresql;
 
 #[derive(Debug)]
 pub enum Error {
-    MariaDb(mysql::Error),
+    MySql(::mysql::Error),
     PostgreSql(postgres::error::Error),
 
     /// No configuration provided for the runner, which is a problem
@@ -59,9 +59,9 @@ pub enum Error {
     MigrationHasFailed(String, Migration),
 }
 
-impl From<mysql::Error> for Error {
-    fn from(err: mysql::Error) -> Error {
-        Error::MariaDb(err)
+impl From<::mysql::Error> for Error {
+    fn from(err: ::mysql::Error) -> Error {
+        Error::MySql(err)
     }
 }
 
@@ -114,7 +114,7 @@ pub enum MigrationResult {
 pub fn from_config(rc: &RunnerConfiguration) -> Result<BoxedRunner, Error> {
     trace!("Getting runner from config {:?}", rc);
     if rc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
-        return Ok(Box::new(mariadb::runner::MariaDb::new_runner(rc.clone())?));
+        return Ok(Box::new(mysql::runner::MySql::new_runner(rc.clone())?));
     }
     if rc._runner.to_lowercase() == crate::reserved::POSTGRESQL.to_lowercase() {
         return Ok(Box::new(postgresql::PostgreSql::new_runner(rc.clone())?));

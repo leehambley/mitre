@@ -1,4 +1,3 @@
-use super::MARIADB_MIGRATION_STATE_TABLE_NAME;
 use crate::config::RunnerConfiguration;
 use crate::migrations::MigrationStep;
 use crate::runner::{Error as RunnerError, MigrationFileExtension, MigrationTemplate, Runner};
@@ -8,12 +7,12 @@ use mustache::MapBuilder;
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder};
 
-pub struct MariaDb {
+pub struct MySql {
     conn: Conn,
     config: RunnerConfiguration,
 }
 
-impl MariaDb {
+impl MySql {
     // This methoe exists in two places, almost certainly a code-smell.
     pub fn select_db(&mut self) -> bool {
         match &self.config.database {
@@ -38,8 +37,8 @@ impl MariaDb {
     }
 }
 
-impl Runner for MariaDb {
-    fn new_runner(config: RunnerConfiguration) -> Result<MariaDb, RunnerError> {
+impl Runner for MySql {
+    fn new_runner(config: RunnerConfiguration) -> Result<MySql, RunnerError> {
         let runner_name = String::from(crate::reserved::MARIA_DB).to_lowercase();
         if config._runner.to_lowercase() != runner_name {
             return Err(RunnerError::RunnerNameMismatch {
@@ -58,7 +57,7 @@ impl Runner for MariaDb {
                 // .db_name(config.database.clone())
                 .pass(config.password.clone()),
         );
-        Ok(MariaDb {
+        Ok(MySql {
             conn: Conn::new(opts)?,
             config,
         })
@@ -72,11 +71,7 @@ impl Runner for MariaDb {
         self.select_db();
         let template_ctx = MapBuilder::new()
             .insert_str(
-                "mariadb_migration_state_table_name",
-                MARIADB_MIGRATION_STATE_TABLE_NAME,
-            )
-            .insert_str(
-                "mariadb_migration_state_database_name",
+                "TODO_AM_I_EVEN_USED",
                 self.config.database.as_ref().unwrap(),
             )
             .build();

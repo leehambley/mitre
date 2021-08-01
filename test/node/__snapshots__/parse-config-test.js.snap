@@ -12,8 +12,8 @@ Object {
     "port": 0,
     "username": "",
   },
-  "es-mariadb": Object {
-    "_runner": "mariadb",
+  "es-mysql": Object {
+    "_runner": "mysql",
     "database": "mitre",
     "databaseNumber": 0,
     "index": "",
@@ -33,7 +33,7 @@ Object {
     "username": "root",
   },
   "mitre": Object {
-    "_runner": "mariadb",
+    "_runner": "mysql",
     "database": "mitre",
     "databaseNumber": 0,
     "index": "",

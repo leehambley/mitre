@@ -1,7 +1,7 @@
 -- Bootstrap the database
 CREATE DATABASE IF NOT EXISTS `{{database_name}}` CHARACTER SET utf8 COLLATE utf8_bin;
 
--- Table name must agree with the constant in the mariadb.rs 
+-- Create the migration storage table (migrations)
 CREATE TABLE IF NOT EXISTS `{{database_name}}`.`{{migrations_table}}` (
 
   -- TIMESTMAP is YYYYMMDDHHMMSS just like migration filenames
@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS `{{database_name}}`.`{{migrations_table}}` (
 ) ENGINE=InnoDB;
 -- ENGINE=InnoDB is the default, but let's be explicit.
 
+-- Create the migration storage table (steps)
 CREATE TABLE IF NOT EXISTS `{{database_name}}`.`{{migration_steps_table}}` (
 
   -- Version must match `mitre_migration_steps`'s column of the 

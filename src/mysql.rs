@@ -61,6 +61,7 @@ impl MySQL {
     }
 
     fn bootstrap_migrations(&self) -> Vec<Migration> {
+        log::trace!("getting bootstrap migrations");
         vec![Migration {
             date_time: chrono::Utc::now().naive_utc(),
             built_in: true,

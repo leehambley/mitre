@@ -2,8 +2,8 @@
 
 migrations_directory: "branch-main-migrations/"
 
-es-mariadb: &es-mariadb
-  _runner: mariadb
+es-mysql: &es-mysql
+  _runner: mysql
   database: mitre_test_fixture_four
   ip_or_hostname: 127.0.0.1
   password: example
@@ -15,10 +15,10 @@ es-mariadb: &es-mariadb
 # where migrations are cached in a data store.
 #
 # Here we use the YAML "anchors" [1] feature
-# to conveniently reuse the es-mariadb configuration
+# to conveniently reuse the es-mysql configuration
 # properties to store our migration information
-# in our principle mariadb instance.
+# in our principle mysql instance.
 #
 # [1]: https://yaml.org/spec/1.2/spec.html#id2765878
 mitre:
- <<: *es-mariadb
+ <<: *es-mysql

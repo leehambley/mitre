@@ -28,7 +28,7 @@ pub enum Error {
     RunnerNameMismatch {
         expected: String,
         found: String,
-    }, // TODO: this is the same as the MariaDB & PostgreSQL one
+    }, // TODO: this is the same as the MySQL & PostgreSQL one
 }
 
 impl From<redis_raw::RedisError> for Error {

@@ -122,8 +122,8 @@ pub enum ConfigProblem {
 }
 
 /// Alias for a String when using a configuration name, e.g "mitre" is expected to refer to a
-/// key in the configured runners map which refers to a MariaDB runner. ConfigurationName
-/// is an important concept in case more than one MariaDB runner is in the config.
+/// key in the configured runners map which refers to a MySQL runner. ConfigurationName
+/// is an important concept in case more than one MySQL runner is in the config.
 pub type ConfigurationName = String;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -138,7 +138,7 @@ pub struct RunnerConfiguration {
     // serde::Deserialize compatibility
     pub _runner: String,
 
-    pub database: Option<String>, // used by MariaDB, MySQL, PostgreSQL runners
+    pub database: Option<String>, // used by MySQL, PostgreSQL runners
 
     pub index: Option<String>, // used by ElasticSearch
 
@@ -478,7 +478,7 @@ mod tests {
           ---
           migrations_dir: "./migrations/here"
           a:
-            _runner: mariadb
+            _runner: mysql
             database: mitre
             ip_or_hostname: 127.0.0.1
             logLevel: debug
@@ -497,7 +497,7 @@ mod tests {
         };
 
         let rc_config_a = RunnerConfiguration {
-            _runner: String::from("mariadb"),
+            _runner: String::from("mysql"),
             database: Some(String::from("mitre")),
             ip_or_hostname: Some(String::from("127.0.0.1")),
             // log_level: Some(String::from("debug")),
@@ -549,7 +549,7 @@ mod tests {
           ---
           # migrations_directory: "." # is implied here because of the default value
           mitre:
-            _runner: mariadb
+            _runner: mysql
         "#};
 
         let tmp_dir = TempDir::new("example").expect("must be able to make tmpdir");

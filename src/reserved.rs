@@ -57,8 +57,10 @@ pub const HTTP: &str = "HTTP";
 pub const ELASTICSEARCH: &str = "Elasticsearch";
 /// Const "Kafka". **Currently not supported.**
 pub const KAFKA: &str = "Kafka";
-/// Const "MariaDB". Prefer this name over MySQL due to Oracle. This package supports MariaDB and MySQL insofar as they are interoperable.
+/// Const "MariaDB". Reserve this along side MySQL
 pub const MARIA_DB: &str = "MariaDB";
+/// Const "MySQL". Prefered over MariaDB due to commonness of usage.
+pub const MYSQL: &str = "MySQL";
 /// Const "Python3". No Python 2 support is planned. **Currently not supported.**
 pub const PYTHON_3: &str = "Python3";
 /// Const "Rails". Target the latest version of Rails. **Currently not supported.**
@@ -73,8 +75,13 @@ pub fn words() -> Vec<ReservedWord> {
     vec![
     ReservedWord::Runner(Runner {
         name: MARIA_DB,
-        desc: "MariaDB by the MariaDB Foundation",
+        desc: "Synonym of MySQL, please prefer MySQL keyword in general",
         exts: vec!["sql"],
+    }),
+    ReservedWord::Runner(Runner {
+      name: MYSQL,
+      desc: "MySQL by Oracle",
+      exts: vec!["sql"],
     }),
     ReservedWord::Runner(Runner {
         name: REDIS,
