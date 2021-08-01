@@ -1,3 +1,4 @@
+use chrono::prelude::*;
 use std::path::PathBuf;
 
 use super::{
@@ -46,14 +47,16 @@ impl MySQL {
     }
 
     fn conn(&mut self) -> &mut mysql::Conn {
+        trace!("accessing db connection");
         debug!("select_db {:?}", self.config.database);
         match &self.config.database {
-            Some(database) => match self.conn.select_db(&database) {
+            Some(database) => match self.conn.select_db(database) {
                 true => trace!("select_db {:?} succeeded", database),
                 false => info!("select_db {:?} failed", database),
             },
             None => info!("no database name provided, mysql driver might have a problem"),
         }
+        trace!("returning db connection");
         &mut self.conn
     }
 
@@ -119,20 +122,28 @@ impl MySQL {
                 })
             }
         };
-        debug!("rendered query is {:?}", q);
-        match self.conn.query_iter(q) {
-            Ok(mut res) => {
+
+        let result = match self.conn().query_iter(q) {
+            Ok(mut result) => {
                 info!("ran query successfully",);
-                while let Some(result_set) = res.next_set() {
+                trace!("consuming query results");
+                while let Some(result_set) = result.next_set() {
                     let result_set = result_set.expect("boom");
                     debug!(
-                        "Result set _ meta: rows {}, last insert id {:?}, warnings {} info_str {}",
+                        "Result: affected rows {} last insert id \"{:?}\" num warnings {} info_str {:?}",
                         result_set.affected_rows(),
                         result_set.last_insert_id(),
                         result_set.warnings(),
                         result_set.info_str(),
                     );
+                    for row in result_set {
+                        match row {
+                            Ok(row) => log::debug!("query result {:?}", row),
+                            Err(e) => log::error!("query err: {}", e),
+                        }
+                    }
                 }
+                trace!("results all consumed");
                 Ok(())
             }
             Err(e) => {
@@ -142,7 +153,9 @@ impl MySQL {
                     msg: String::from("Could not run the mysql query for bootstrapping"),
                 })
             }
-        }
+        };
+
+        result
     }
 
     fn bootstrap(&mut self) -> Result<(), Error> {
@@ -185,7 +198,6 @@ impl Driver for MySQL {
 }
 
 impl MigrationList for MySQL {
-
     // It is important that this function return with an emtpy list when
     // the MySQL tables have not been bootstrapped yet to trigger the built-in migrations
     // to run.
@@ -332,17 +344,22 @@ impl MigrationStorage for MySQL {
           REPLACE INTO {} 
           (
             `version`, 
+            `stored_at`,
             `flags`, 
             `configuration_name`, 
             `built_in`
           ) 
-          VALUES ( ?, ?, ?, ? );",
+          VALUES ( ?, ?, ?, ?, ? );",
             MIGRATION_STATE_TABLE_NAME
         );
+
+        let utc: DateTime<Utc> = Utc::now();
+
         match tx.exec_drop(
             q,
             (
                 m.version(),
+                utc.to_rfc3339(),
                 m.flags_as_string(),
                 &m.configuration_name,
                 m.built_in,

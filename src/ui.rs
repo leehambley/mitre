@@ -1,9 +1,12 @@
-use crate::config;
 use crate::migrations::Migration;
-use crate::state_store::StateStore;
+use crate::{
+    config, migration_list_from_disk, migration_storage_from_config, Configuration, Engine,
+    MigrationList, MigrationStorage,
+};
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
 use log::info;
+use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -23,17 +26,19 @@ struct MigrationsTemplate<'a> {
 }
 
 struct AppData {
-    migrations: Mutex<Vec<Migration>>,
-    state_store: Mutex<Box<StateStore>>,
+    migration_list: Mutex<Box<dyn MigrationList>>,
+    migration_storage: Mutex<Box<dyn MigrationStorage>>,
 }
 
 async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
-    let migrations = data.migrations.lock().unwrap();
-    let mut state_store = data.state_store.lock().unwrap();
+    let mut migration_list = data.migration_list.lock().unwrap();
+    let mut migration_storage = data.migration_storage.lock().unwrap();
 
     let mut v: Vec<MigrationTableRow> = Vec::new();
 
-    for (migration_state, m) in state_store.diff(migrations.to_vec()).expect("boom") {
+    for (migration_state, m) in
+        Engine::diff(migration_list.deref_mut(), migration_storage.deref_mut()).expect("boom")
+    {
         m.clone().steps.into_iter().for_each(|(direction, s)| {
             v.push(MigrationTableRow {
                 state: format!("{:?}", migration_state),
@@ -60,14 +65,16 @@ pub async fn start_web_ui(
 ) -> Result<(), std::io::Error> {
     info!("mig {:?}", migrations);
     let listen = "127.0.0.1:8000";
-    let config = config::from_file(&config_file).expect("could not read config");
     let server = HttpServer::new(move || {
+        let config = Box::new(config::from_file(&config_file).expect("could not read config"));
+        let c: &'static Configuration = Box::leak(config);
+
         App::new()
             .wrap(Logger::new("%a %{User-Agent}i %r %s %b %Dms %U"))
             .data(AppData {
-                migrations: Mutex::new(migrations.clone()),
-                state_store: Mutex::new(Box::new(
-                    StateStore::from_config(&config).expect("could not make state store"),
+                migration_list: Mutex::new(Box::new(migration_list_from_disk(c))),
+                migration_storage: Mutex::new(Box::new(
+                    migration_storage_from_config(c).expect("could not make migration storage"),
                 )),
             })
             .route("/", web::get().to(index))

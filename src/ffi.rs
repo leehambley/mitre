@@ -1,16 +1,19 @@
+use crate::{migration_list_from_disk, migration_storage_from_config, Engine};
+
 use log::{error, trace, warn};
 use std::ffi::{CStr, CString};
-
-use crate::MigrationList;
 use std::os::raw::c_char;
 
 // rust-analyzer has a bug here showing a false warning about unresolved import
 // https://github.com/rust-analyzer/rust-analyzer/issues/6038
 pub use std::os::unix::ffi::OsStrExt;
 
-// Allows use of .diff() on unknown impl StateStore
-// result type.
-use crate::state_store::StateStore;
+// pub to avoid unused import warning
+//
+// importing the traits allows them to be used
+// here on opaque types.
+pub use crate::MigrationList;
+pub use crate::MigrationStorage;
 
 type LoggingFunction = extern "C" fn(*mut c_char);
 #[derive(Debug, Copy, Clone)]
@@ -144,7 +147,7 @@ extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
 
     let r_path = std::path::Path::new(path_as_str);
 
-    let config = match crate::config::Configuration::from_file(&r_path) {
+    let config = match crate::config::Configuration::from_file(r_path) {
         Ok(config) => config,
         Err(e) => {
             warn!("Error: {:?}: {:#?}", e, r_path);
@@ -226,17 +229,10 @@ unsafe extern "C" fn free_config_from_file(c: *mut Configuration) {
 #[no_mangle]
 unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut MigrationStates {
     let rc = Box::from_raw(c);
-    let mut migrations_from_disk = crate::migration_list_from_disk(&rc);
-    let migrations = match migrations_from_disk.all() {
-        Ok(migrations) => migrations,
-        Err(e) => {
-            error!("could not list migrations using config {:?}", e);
-            return std::ptr::null_mut();
-        }
-    };
+    let migrations_from_disk = migration_list_from_disk(&rc);
 
-    let migration_states = match StateStore::from_config(&rc) {
-        Ok(mut ss) => match ss.diff(migrations.collect()) {
+    let migration_states = match migration_storage_from_config(&rc) {
+        Ok(migration_storage) => match Engine::diff(migrations_from_disk, migration_storage) {
             Ok(diff_results) => {
                 let mut num_migration_states: usize = 0;
                 let mut migration_states: Vec<MigrationState> = vec![];

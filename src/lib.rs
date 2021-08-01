@@ -2,7 +2,6 @@ pub mod config;
 pub mod ffi;
 pub mod migrations;
 pub mod reserved;
-pub mod state_store;
 pub mod ui;
 
 mod driver;
@@ -47,6 +46,10 @@ pub enum Error {
     // or something.
     QueryFailed {
         reason: Option<::mysql::Error>,
+        msg: String,
+    },
+
+    ConnectionError {
         msg: String,
     },
 

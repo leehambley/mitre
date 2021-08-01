@@ -19,7 +19,7 @@ impl MariaDb {
         match &self.config.database {
             Some(database) => {
                 trace!("select_db database name is {}", database);
-                match &self.conn.select_db(&database) {
+                match &self.conn.select_db(database) {
                     true => {
                         trace!("select_db successfully using {}", database);
                         true
@@ -85,7 +85,7 @@ impl Runner for MariaDb {
         let tpl = match ms.content() {
             Ok(tpl) => tpl,
             Err(e) => {
-                return Err(RunnerError::TemplateError {
+                return Err(RunnerError::Template {
                     reason: e.to_string(),
                     template: mustache::compile_str("").unwrap(),
                 })
@@ -93,7 +93,7 @@ impl Runner for MariaDb {
         };
         let parsed = match tpl.render_data_to_string(&template_ctx) {
             Ok(str) => Ok(str),
-            Err(e) => Err(RunnerError::TemplateError {
+            Err(e) => Err(RunnerError::Template {
                 reason: e.to_string(),
                 template: tpl,
             }),
@@ -127,7 +127,7 @@ impl Runner for MariaDb {
             }
             Err(e) => {
                 trace!("applying parsed query failed {:?}", e);
-                Err(RunnerError::ErrorRunningMigration {
+                Err(RunnerError::RunningMigration {
                     cause: e.to_string(),
                 })
             }

@@ -47,12 +47,12 @@ impl Runner for PostgreSql {
         let parsed = match ms.content() {
             Ok(tpl) => match tpl.render_data_to_string(&template_ctx) {
                 Ok(str) => Ok(str),
-                Err(e) => Err(Error::TemplateError {
+                Err(e) => Err(Error::Template {
                     reason: e.to_string(),
                     template: tpl,
                 }),
             },
-            Err(e) => Err(Error::TemplateError {
+            Err(e) => Err(Error::Template {
                 reason: e.to_string(),
                 template: mustache::compile_str("no template").unwrap(),
             }),
