@@ -71,7 +71,7 @@ pub async fn start_web_ui(
 
         App::new()
             .wrap(Logger::new("%a %{User-Agent}i %r %s %b %Dms %U"))
-            .data(AppData {
+            .app_data(AppData {
                 migration_list: Mutex::new(Box::new(migration_list_from_disk(c))),
                 migration_storage: Mutex::new(Box::new(
                     migration_storage_from_config(c).expect("could not make migration storage"),
