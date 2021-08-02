@@ -21,37 +21,14 @@ pub trait MigrationStorage: MigrationList {
     fn remove(&mut self, _: Migration) -> Result<(), Error>;
 }
 
-// Implementation of MigrationList MigrationStorage for &mut dyn Box<MigrationStorage>
-//
-// The types are a bit hairy here, but both MigrationList and MigrationStorage
-// imply &mut becasue all their methods are _potentially_ mutative (storage can store
-// new things and modify socket connections etc, the migration list itself can be stateful
-// such as having internal filesystem cursors, or similar)
-impl MigrationList for &mut Box<dyn MigrationStorage> {
-    fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error> {
-        (**self).all()
-    }
-}
-impl MigrationStorage for &mut Box<dyn MigrationStorage> {
-    #[cfg(test)]
-    fn reset(&mut self) -> Result<(), Error> {
-        (**self).reset()
-    }
-    fn add(&mut self, m: Migration) -> Result<(), Error> {
-        (**self).add(m)
-    }
-    fn remove(&mut self, m: Migration) -> Result<(), Error> {
-        (**self).remove(m)
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
     use super::super::{Direction, MigrationStep, MigrationSteps, MigrationStorage};
     use super::*;
     use crate::{
-        config::RunnerConfiguration, migrations::FORMAT_STR, reserved, InMemoryMigrations, MySQL,
+        migrations::FORMAT_STR, reserved, runner::Configuration as RunnerConfiguration,
+        InMemoryMigrations, MySQL,
     };
     use std::{array::IntoIter, collections::HashMap, iter::FromIterator, path::PathBuf};
 
@@ -86,7 +63,7 @@ mod tests {
                     Direction::Up,
                     MigrationStep {
                         path: PathBuf::from("/foo/up.sql"),
-                        source: String::from("CREATE TABLE foo (id int)"),
+                        source: String::from("CREATE TABLE foo"),
                     },
                 ),
                 (
@@ -106,23 +83,20 @@ mod tests {
     #[test]
     // Returns a tuple of implementation name and the test error, if any
     fn test_all_known_implementations() -> Result<(), (String, String)> {
-        let impls = HashMap::<String, Box<dyn MigrationStorage>>::from_iter(IntoIter::new([
+        let mut impls = HashMap::<String, Box<dyn MigrationStorage>>::from_iter(IntoIter::new([
             (String::from("InMemory"), in_memory_migration_storage()),
             (String::from("MySQL"), mysql_migration_storage()),
         ]));
-        for (name, mut implementation) in impls {
-            println!("testing {}", name);
-            match lists_what_it_stores(&mut implementation) {
+        for (name, implementation) in &mut impls {
+            match lists_what_it_stores(implementation) {
                 Err(e) => return Err((name.clone(), e)),
                 _ => {}
             };
         }
         Ok(())
     }
-    fn lists_what_it_stores(mut ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
-        println!("int test what it stores with");
+    fn lists_what_it_stores(ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
         for migration in migration_fixture() {
-            println!("about to add migration {:?}", migration);
             match ms.add(migration) {
                 Err(e) => return Err(format!("error: {:#?}", e)),
                 _ => {}

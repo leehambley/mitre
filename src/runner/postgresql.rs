@@ -9,6 +9,11 @@ pub struct PostgreSql {
 }
 
 impl Runner for PostgreSql {
+    fn meta(&self) -> crate::reserved::Runner {
+        crate::reserved::runner_by_name(crate::reserved::POSTGRESQL)
+            .expect("reserved word not found")
+    }
+
     fn new_runner(config: RunnerConfiguration) -> Result<PostgreSql, Error> {
         // Ensure this is a proper config for this runner
         let runner_name = String::from(crate::reserved::POSTGRESQL).to_lowercase();

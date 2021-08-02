@@ -11,10 +11,29 @@ use std::string::String;
 use crate::config::Configuration;
 use crate::migrations::built_in_migrations::BuiltInMigrations;
 use crate::migrations::{Direction, Migration, MigrationStep};
-use crate::migrations::{MigrationSteps, RunnerAndConfiguration, FORMAT_STR};
-use crate::reserved::{flags, runner_by_name, Flag};
+use crate::migrations::{MigrationSteps, FORMAT_STR};
+use crate::reserved::{flags, runner_by_name as runner_meta_by_name, Flag};
+use crate::runner::Configuration as RunnerConfiguration;
+use crate::RunnerMeta;
 
 use super::{Error, MigrationList};
+
+/// RunnerMetaAndConfig is used to track the discovered runner and associated
+/// information when doing the initial sanity check on migrations. When we parse
+/// the migration filenames looking for the runner reserved words and the configuration
+/// name, we have all the context we need.
+///
+/// Note this struct is private to the migration lookup part of the module tree
+/// (it maybe can be moved higher at a later date) in order to prevent that migations
+/// have to know too much about runners. Rather take the configuraion name only into
+/// the migration fields and use it again later to look-up with the same configuration
+/// than tie together two disparate concepts (and complicate tests set-up, etc)
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RunnerMetaAndConfig<'a> {
+    pub meta: RunnerMeta<'a>,
+    pub config: RunnerConfiguration,
+    pub name: String,
+}
 
 /// List all migrations known in the given migrations_directory on the Configuration
 ///
@@ -149,7 +168,7 @@ impl<'a> MigrationFinder {
 
         // We're not interested in recursing here, simple dir read is fine
         let mut steps: MigrationSteps = HashMap::new();
-        let mut runner_and_config: Option<RunnerAndConfiguration> = None;
+        let mut runner_and_config: Option<RunnerMetaAndConfig> = None;
         let _ = fs::read_dir(dir)?
             .into_iter()
             .filter_map(|r| r.ok())
@@ -197,7 +216,7 @@ impl<'a> MigrationFinder {
             Some(rac) => Ok(vec![Migration {
                 built_in: false,
                 date_time,
-                configuration_name: rac.configuration_name,
+                configuration_name: rac.name,
                 flags: self.flags_from_filename(dir.to_str()),
                 steps,
             }]),
@@ -262,7 +281,7 @@ impl<'a> MigrationFinder {
                                     steps,
                                     built_in: true,
                                     flags: self.flags_from_filename(path.to_str()),
-                                    configuration_name: runner_and_config.configuration_name,
+                                    configuration_name: runner_and_config.name,
                                 })
                             }
                             Err(e) => {
@@ -311,7 +330,7 @@ impl<'a> MigrationFinder {
                             Ok(steps) => Ok(vec![Migration {
                                 built_in: false,
                                 date_time,
-                                configuration_name: runner_and_config.configuration_name,
+                                configuration_name: runner_and_config.name,
                                 flags: self.flags_from_filename(p.to_str()),
                                 steps,
                             }]),
@@ -338,7 +357,7 @@ impl<'a> MigrationFinder {
         &self,
         config_name: &str,
         ext: &str,
-    ) -> Result<RunnerAndConfiguration, String> {
+    ) -> Result<RunnerMetaAndConfig, String> {
         trace!(
             "checking for runner {:?} {:?} in {:?}",
             config_name,
@@ -346,16 +365,16 @@ impl<'a> MigrationFinder {
             self.config.configured_runners
         );
         match self.config.get(config_name) {
-            Some(config) => match runner_by_name(&config._runner) {
-                Some(runner) => match runner.exts.iter().find(|e| e == &&ext) {
-                    Some(_) => Ok(RunnerAndConfiguration {
-                        runner,
-                        runner_configuration: config.clone(),
-                        configuration_name: String::from(config_name),
+            Some(config) => match runner_meta_by_name(&config._runner) {
+                Some(runner_meta) => match runner_meta.exts.iter().find(|e| e == &&ext) {
+                    Some(_) => Ok(RunnerMetaAndConfig {
+                        meta: runner_meta,
+                        config: config.clone(),
+                        name: String::from(config_name),
                     }),
                     None => Err(format!(
                         "runner {} does not support ext {}",
-                        runner.name, ext
+                        runner_meta.name, ext
                     )),
                 },
                 None => Err(format!(

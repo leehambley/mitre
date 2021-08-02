@@ -2,9 +2,8 @@
 //! Relies on [`yaml rust`] for parsing because `serde_yaml` does not support
 //! [YAML anchors & tags](https://yaml.org/spec/1.2/spec.html#id2765878).
 
-extern crate yaml_rust;
-
 use super::reserved;
+use crate::runner::Configuration as RunnerConfiguration;
 use log::trace;
 use std::collections::HashMap;
 use std::fmt;
@@ -130,30 +129,6 @@ pub type ConfigurationName = String;
 pub struct Configuration {
     pub migrations_directory: PathBuf,
     pub configured_runners: HashMap<ConfigurationName, RunnerConfiguration>,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
-pub struct RunnerConfiguration {
-    // Runner is not optional, but we need to option it here to maintain
-    // serde::Deserialize compatibility
-    pub _runner: String,
-
-    pub database: Option<String>, // used by MySQL, PostgreSQL runners
-
-    pub index: Option<String>, // used by ElasticSearch
-
-    pub database_number: Option<u8>, // used by Redis runner
-
-    // Maybe this should have another name, we also would
-    // probably accept IPs or anything resolveable here.
-    pub ip_or_hostname: Option<String>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
-
-    // Max value for port on linux comes from `cat /proc/sys/net/ipv4/ip_local_port_range`
-    // u16 should be enough for most people most of the time.
-    pub port: Option<u16>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
-
-    pub username: Option<String>,
-    pub password: Option<String>,
 }
 
 impl Configuration {

@@ -160,8 +160,11 @@ impl MySQL {
     }
 
     fn bootstrap(&mut self) -> Result<(), Error> {
+        debug!("bootstrapping mysql driver");
         for bootstrap_migration in self.bootstrap_migrations().iter() {
+            trace!("applying {:?}", bootstrap_migration);
             self.apply(bootstrap_migration)?;
+            trace!("applying {:?}", bootstrap_migration);
         }
         Ok(())
     }
@@ -329,6 +332,7 @@ impl MigrationStorage for MySQL {
 
     // https://docs.rs/mysql/20.1.0/mysql/index.html#transaction
     fn add(&mut self, m: Migration) -> Result<(), Error> {
+        trace!("add about to bootstrap");
         self.bootstrap()?;
 
         // Note, that transaction will be rolled back implicitly on Drop, if not committed.

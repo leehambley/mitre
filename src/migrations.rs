@@ -1,4 +1,4 @@
-use super::{ConfigurationName, Error, Flag, Runner, RunnerConfiguration};
+use super::{ConfigurationName, Error, Flag};
 use core::cmp::Ordering;
 use itertools::Itertools;
 use std::collections::HashMap;
@@ -48,13 +48,6 @@ impl<'a> PartialOrd for MigrationStep {
 }
 
 pub type MigrationSteps = HashMap<Direction, MigrationStep>;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RunnerAndConfiguration {
-    pub runner: Runner,
-    pub runner_configuration: RunnerConfiguration,
-    pub configuration_name: String,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Migration {

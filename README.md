@@ -132,6 +132,21 @@ This allows maintaining a Mitre set-up with migrations from a number of
 projects to create a kind of meta-repository that contains the migrations from
 a number of projects together.
 
+## CLI Usage
+
+### Table Printing
+
+When running on a supported terminal, commands such as `mitre ls` will pretty-print
+a table using unicode's box drawing characters. You can get a simple text delimited
+output by passing the output through a pipe (so that stdout is not a tty).
+
+If you need to program against the textual output of the Mitre CLI please consider 
+very carefully because it's not even a little bit guaranteed to be stable.
+
+You can open an issue against the repostory to suggest some `-0` flag or something we
+can begin to accept which would provide null-byte delimted output, or some CSV flavor
+or something.
+
 ## Remembering which migrations ran
 
 Mitre tries to remember which migrations have been run, in the case of curl, or

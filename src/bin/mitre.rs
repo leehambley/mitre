@@ -1,13 +1,16 @@
 use clap::{crate_authors, App, Arg};
 use log::{error, info, trace};
+use std::io::Write;
 use std::path::Path;
 use tabular::{Row, Table};
 
+#[cfg(feature = "ui")]
 use mitre::ui::start_web_ui;
+
 use mitre::{
     config, migration_list_from_disk, migration_storage_from_config, migrations, reserved,
-    runner_from_config, Configuration, Direction, Engine, MigrationList, MigrationResultTuple,
-    MigrationStorage,
+    runner_from_runner_config, Configuration, Direction, Engine, MigrationList,
+    MigrationResultTuple, MigrationStorage,
 };
 
 fn main() {
@@ -282,22 +285,27 @@ mitre --help
         },
 
         Some("ui") => {
-            info!("Starting webserver");
-            match mitre::migration_list_from_disk(&config).all() {
-                Ok(migrations) => {
-                    info!("Opening webserver");
-                    // TODO: Add a flag to enable / disable open
-                    match start_web_ui(config_file.to_path_buf(), migrations.collect(), true) {
-                        Ok(_) => {
-                            info!("Closing webserver")
-                        }
-                        Err(err) => {
-                            info!("Error starting webserver {}", err)
+            #[cfg(not(feature = "ui"))]
+            error!("Mitre has been built without UI support");
+            #[cfg(feature = "ui")]
+            {
+                info!("Starting webserver");
+                match mitre::migration_list_from_disk(&config).all() {
+                    Ok(migrations) => {
+                        info!("Opening webserver");
+                        // TODO: Add a flag to enable / disable open
+                        match start_web_ui(config_file.to_path_buf(), migrations.collect(), true) {
+                            Ok(_) => {
+                                info!("Closing webserver")
+                            }
+                            Err(err) => {
+                                info!("Error starting webserver {}", err)
+                            }
                         }
                     }
-                }
-                Err(_) => {
-                    info!("Error finding migrations")
+                    Err(_) => {
+                        info!("Error finding migrations")
+                    }
                 }
             }
         }
@@ -327,7 +335,7 @@ mitre --help
                     let timestamp = chrono::Local::now().format(crate::migrations::FORMAT_STR);
 
                     let runner =
-                        runner_from_config(runner_config).expect("could not create runner");
+                        runner_from_runner_config(runner_config).expect("could not create runner");
                     let (up_template, down_template, extension) = runner.migration_template();
                     let target_path = migrations_dir.join(
                         format!(

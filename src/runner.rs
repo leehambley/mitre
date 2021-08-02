@@ -1,14 +1,42 @@
-use crate::config::RunnerConfiguration;
 use crate::migrations::Migration;
 use crate::migrations::MigrationStep;
-use log::trace;
+use crate::reserved::RunnerMeta;
 
+#[cfg(feature = "runner_mysql")]
 pub mod mysql;
+#[cfg(feature = "runner_postgres")]
 pub mod postgresql;
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
+pub struct Configuration {
+    // Runner is not optional, but we need to option it here to maintain
+    // serde::Deserialize compatibility
+    pub _runner: String,
+
+    pub database: Option<String>, // used by MySQL, PostgreSQL runners
+
+    pub index: Option<String>, // used by ElasticSearch
+
+    pub database_number: Option<u8>, // used by Redis runner
+
+    // Maybe this should have another name, we also would
+    // probably accept IPs or anything resolveable here.
+    pub ip_or_hostname: Option<String>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
+
+    // Max value for port on linux comes from `cat /proc/sys/net/ipv4/ip_local_port_range`
+    // u16 should be enough for most people most of the time.
+    pub port: Option<u16>, // used by cURL, MySQL, Redis, MySQL, PostgreSQL, ElasticSearch
+
+    pub username: Option<String>,
+    pub password: Option<String>,
+}
 
 #[derive(Debug)]
 pub enum Error {
+    #[cfg(feature = "runner_mysql")]
     MySql(::mysql::Error),
+
+    #[cfg(feature = "runner_postgres")]
     PostgreSql(postgres::error::Error),
 
     /// No configuration provided for the runner, which is a problem
@@ -59,12 +87,14 @@ pub enum Error {
     MigrationHasFailed(String, Migration),
 }
 
+#[cfg(feature = "runner_mysql")]
 impl From<::mysql::Error> for Error {
     fn from(err: ::mysql::Error) -> Error {
         Error::MySql(err)
     }
 }
 
+#[cfg(feature = "runner_postgres")]
 impl From<postgres::error::Error> for Error {
     fn from(err: postgres::error::Error) -> Error {
         Error::PostgreSql(err)
@@ -76,8 +106,6 @@ impl std::fmt::Display for Error {
         write!(f, "Runner Error {:?}", self)
     }
 }
-
-pub type BoxedRunner = Box<dyn Runner>;
 
 #[derive(PartialEq, Debug)]
 pub enum MigrationState {
@@ -109,13 +137,25 @@ pub enum MigrationResult {
     SkippedDueToEarlierError,
 }
 
-/// Analog the `from_config` in StateStora trait, which however does
-/// not box the StateStore result.
-pub fn from_config(rc: &RunnerConfiguration) -> Result<BoxedRunner, Error> {
-    trace!("Getting runner from config {:?}", rc);
-    if rc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
+/// A Boxed runner helps us with the trait objects
+/// and is practically a first-class citizen.
+pub type BoxedRunner = Box<dyn Runner>;
+
+/// Analog the `from_config` in MigrationStore trait, which however does
+/// not box the StateStore result. Takes a runner::Configuration and
+/// obeys the currently compiled in features to ensure that we have a single
+/// point runner factory.
+///
+/// In this place synonyms are taken taken for the runner drivers.
+pub fn from_config(rc: &Configuration) -> Result<BoxedRunner, Error> {
+    log::trace!("Getting runner from config {:?}", rc);
+    #[cfg(feature = "runner_mysql")]
+    if rc._runner.to_lowercase() == crate::reserved::MYSQL.to_lowercase()
+        || rc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase()
+    {
         return Ok(Box::new(mysql::runner::MySql::new_runner(rc.clone())?));
     }
+    #[cfg(feature = "runner_postgres")]
     if rc._runner.to_lowercase() == crate::reserved::POSTGRESQL.to_lowercase() {
         return Ok(Box::new(postgresql::PostgreSql::new_runner(rc.clone())?));
     }
@@ -126,7 +166,7 @@ pub type MigrationTemplate = &'static str;
 pub type MigrationFileExtension = &'static str;
 
 pub trait Runner {
-    fn new_runner(config: RunnerConfiguration) -> Result<Self, Error>
+    fn new_runner(config: Configuration) -> Result<Self, Error>
     where
         Self: Sized;
 
@@ -134,4 +174,8 @@ pub trait Runner {
 
     /// Returns tuple with up, down and file extension for the migration
     fn migration_template(&self) -> (MigrationTemplate, MigrationTemplate, MigrationFileExtension);
+
+    /// Provides metadata about this runner. Each runner implementation
+    /// must implement this.
+    fn meta(&self) -> RunnerMeta;
 }

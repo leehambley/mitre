@@ -9,7 +9,6 @@ use itertools::Itertools;
 pub struct Engine {}
 
 impl Engine {
-    // formerly state store
     pub fn diff(
         mut src: impl MigrationList,
         mut dest: impl MigrationStorage,
@@ -52,7 +51,11 @@ impl Engine {
         let work_list = Engine::diff(src, dest)?;
         Ok(work_list.map({
             |(state, migration)| match state {
-                MigrationState::Pending => (MigrationResult::Success, migration),
+                MigrationState::Pending => {
+                    // let r = runner_from_runner_config(migration);
+                    todo!();
+                    (MigrationResult::Success, migration)
+                }
                 _ => {
                     todo!("boom")
                 }

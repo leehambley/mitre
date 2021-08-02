@@ -1,5 +1,6 @@
-use crate::config::RunnerConfiguration;
 use crate::migrations::MigrationStep;
+use crate::reserved::RunnerMeta;
+use crate::runner::Configuration as RunnerConfiguration;
 use crate::runner::{Error as RunnerError, MigrationFileExtension, MigrationTemplate, Runner};
 use indoc::indoc;
 use log::{debug, info, trace};
@@ -38,6 +39,10 @@ impl MySql {
 }
 
 impl Runner for MySql {
+    fn meta(&self) -> RunnerMeta {
+        crate::reserved::runner_by_name(crate::reserved::MYSQL).expect("reserved word not found")
+    }
+
     fn new_runner(config: RunnerConfiguration) -> Result<MySql, RunnerError> {
         let runner_name = String::from(crate::reserved::MARIA_DB).to_lowercase();
         if config._runner.to_lowercase() != runner_name {

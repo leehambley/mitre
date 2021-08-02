@@ -17,8 +17,6 @@ tempdir = "0.3.7"
 tempfile = "3"
 
 [dependencies]
-actix-web = "4.0.0-beta.3"
-askama = { git = "https://github.com/leehambley/askama" }
 chrono = "0.4.13"
 clap = "3.0.0-beta.1"
 colored = "2.0.0"
@@ -29,23 +27,36 @@ indoc = "1.0"
 inflections = "1.1.1"
 iter-set = "2.0.1"
 itertools = "0.10.0"
-kafka = "0.8.0"
 log = "0.4"
 maplit = "1.0.2"
 mustache = "0.9.0"
-mysql = "21.0.0"
-postgres = "0.19.0"
 prettytable-rs = "^0.8"
-redis_raw = "1.0.1"
 regex = "1.4.3"
-reqwest = "0.11.2"
 rust-embed = {version ="5.9.0", features = ["debug-embed"] }
 serde = { version = "1.0" }
 serde_yaml = "0.8"
 tabular = "0.1.4"
-tokio = {version = "1.8.0", features=["rt", "net"]}
 webbrowser = "0.5.5"
 yaml-rust = "0.4"
+
+# Optional feature dependencies
+kafka = {version = "0.8.0", optional = true }
+mysql = { version = "21.0.0", optional = true }
+redis_raw = { version = "1.0.1", optional = true }
+reqwest = { version = "0.11.2", optional = true }
+postgres = {version = "0.19.0", optional = true}
+tokio = {version = "1.8.0", features=["rt", "net"], optional = true}
+actix-web = { version = "4.0.0-beta.3", optional = true }
+askama = { git = "https://github.com/leehambley/askama", optional = true }
+
+[features]
+default = ["runner_mysql"]
+ui = ["actix-web", "tokio", "askama"]
+runner_http  = ["reqwest"]
+runner_kafka = []
+runner_redis = []
+runner_mysql = ["mysql"]
+runner_postgres = ["postgres"]
 
 # Workaround for bitvec|funty issue with `const BITS` 
 # issue. 

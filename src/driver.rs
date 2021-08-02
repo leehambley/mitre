@@ -101,7 +101,7 @@ mod test {
     use std::stringify;
 
     #[cfg(test)]
-    fn malformed_migration(driver_name: &str) -> Migration {
+    fn malformed_migration(runner_name: &str) -> Migration {
         Migration {
             date_time: chrono::NaiveDateTime::parse_from_str(
                 "20210512201455",
@@ -134,11 +134,11 @@ mod test {
             .collect(),
             flags: vec![],
             built_in: false,
-            configuration_name: String::from(driver_name),
+            configuration_name: String::from(runner_name),
         }
     }
 
-    fn migration_runner_mismatch_migration(driver_name: &str) -> Migration {
+    fn migration_runner_mismatch_migration(runner_name: &str) -> Migration {
         Migration {
             date_time: chrono::NaiveDateTime::parse_from_str(
                 "20210512201455",
@@ -171,24 +171,24 @@ mod test {
             .collect(),
             flags: vec![],
             built_in: false,
-            configuration_name: String::from(driver_name),
+            configuration_name: String::from(runner_name),
         }
     }
 
     macro_rules! test_driver {
-        ($driver_name:ident, $setup:expr) => {
+        ($runner_name:ident, $setup:expr) => {
             // Rust-Analyzer look-up bug makes us use a custom import name
             // to avoid it incorrectly resolving the built-in concat_idents.
             // https://github.com/rust-analyzer/rust-analyzer/issues/8828
             concat_idents_from_crate!(
                 test_name = "test_",
-                $driver_name,
+                $runner_name,
                 "_driver_raises_malformed_error_when_migration_has_both_change_and_up_steps",
                 {
                     #[test]
                     fn test_name() -> Result<(), String> {
                         let mut driver = $setup;
-                        match driver.apply(&malformed_migration(stringify!($driver_name))) {
+                        match driver.apply(&malformed_migration(stringify!($runner_name))) {
                             Ok(_) => Err(format!("engine did not report malformed error",)),
                             Err(e) => match e {
                                 Error::MalformedMigration => Ok(()),
@@ -201,14 +201,14 @@ mod test {
             );
             concat_idents_from_crate!(
                 test_name = "test_",
-                $driver_name,
+                $runner_name,
                 "_raises_migration_runner_mismatch",
                 {
                     #[test]
                     fn test_name() -> Result<(), String> {
                         let mut driver = $setup;
                         match driver.apply(&migration_runner_mismatch_migration(stringify!(
-                            $driver_name
+                            $runner_name
                         ))) {
                             Ok(_) => Err(format!("engine did not report malformed error",)),
                             Err(e) => match e {
