@@ -36,7 +36,7 @@ pub use runner::{Configuration as RunnerConfiguration, MigrationResult, Migratio
 // _from_config factory helpers
 pub use migration_list::from_disk as migration_list_from_disk;
 pub use migration_storage::from_config as migration_storage_from_config;
-pub use runner::from_config as runner_from_runner_config;
+pub use runner::from_config as runner_from_config;
 
 pub type MigrationStateTuple = (MigrationState, Migration);
 pub type MigrationResultTuple = (MigrationResult, Migration);

@@ -1,6 +1,5 @@
 use clap::{crate_authors, App, Arg};
 use log::{error, info, trace};
-use std::io::Write;
 use std::path::Path;
 use tabular::{Row, Table};
 
@@ -9,8 +8,8 @@ use mitre::ui::start_web_ui;
 
 use mitre::{
     config, migration_list_from_disk, migration_storage_from_config, migrations, reserved,
-    runner_from_runner_config, Configuration, Direction, Engine, MigrationList,
-    MigrationResultTuple, MigrationStorage,
+    runner_from_config, Configuration, Direction, Engine, MigrationList, MigrationResultTuple,
+    MigrationStorage,
 };
 
 fn main() {
@@ -330,12 +329,10 @@ mitre --help
 
             let config = config::from_file(config_file).expect("cannot read config");
 
-            match config.get(key) {
-                Some(runner_config) => {
+            match runner_from_config(&config, &key.to_string()) {
+                Ok(runner) => {
                     let timestamp = chrono::Local::now().format(crate::migrations::FORMAT_STR);
 
-                    let runner =
-                        runner_from_runner_config(runner_config).expect("could not create runner");
                     let (up_template, down_template, extension) = runner.migration_template();
                     let target_path = migrations_dir.join(
                         format!(
@@ -375,8 +372,8 @@ mitre --help
                         }
                     }
                 }
-                None => {
-                    panic!("Could not find key {} in config", key)
+                Err(e) => {
+                    panic!("Error finding runner {}", e)
                 }
             }
         }
@@ -392,11 +389,11 @@ fn migration_storage(c: &Configuration) -> impl MigrationStorage {
     migration_storage_from_config(c).expect("should be able to make migration storage")
 }
 
-fn apply(
-    c: &Configuration,
+fn apply<'a>(
+    c: &'a Configuration,
     work_list: Option<Vec<&Direction>>,
-) -> Result<impl Iterator<Item = MigrationResultTuple>, mitre::Error> {
-    Engine::apply(migration_list(c), migration_storage(c), work_list)
+) -> Result<impl Iterator<Item = MigrationResultTuple> + 'a, mitre::Error> {
+    Engine::apply(c, migration_list(c), migration_storage(c), work_list)
 }
 
 #[cfg(test)]

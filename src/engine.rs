@@ -1,8 +1,8 @@
 use crate::Direction;
 
 use super::{
-    Error, Migration, MigrationList, MigrationResult, MigrationResultTuple, MigrationState,
-    MigrationStateTuple, MigrationStorage,
+    runner_from_config, Error, Migration, MigrationList, MigrationResult, MigrationResultTuple,
+    MigrationState, MigrationStateTuple, MigrationStorage,
 };
 use itertools::Itertools;
 
@@ -43,18 +43,38 @@ impl Engine {
             .unique_by(tuple_uniq_fn))
     }
 
-    pub fn apply(
-        src: impl MigrationList,
-        dest: impl MigrationStorage,
+    pub fn apply<'a>(
+        config: &'a crate::config::Configuration,
+        src: impl MigrationList + 'a,
+        dest: impl MigrationStorage + 'a,
         _work_filter: Option<Vec<&Direction>>,
-    ) -> Result<impl Iterator<Item = MigrationResultTuple>, Error> {
+    ) -> Result<impl Iterator<Item = MigrationResultTuple> + 'a, Error> {
         let work_list = Engine::diff(src, dest)?;
-        Ok(work_list.map({
-            |(state, migration)| match state {
+        let c = config.clone();
+        Ok(work_list.map(move |(state, migration)| {
+            log::debug!("checking migration {:?}", migration);
+            match state {
                 MigrationState::Pending => {
-                    // let r = runner_from_runner_config(migration);
-                    todo!();
-                    (MigrationResult::Success, migration)
+                    match runner_from_config(&c, &migration.configuration_name) {
+                        Ok(boxed_runner) => match boxed_runner.apply(migration) {
+                            Ok(_) => (MigrationResult::Success, migration),
+                            Err(e) => (
+                                MigrationResult::Failure {
+                                    reason: format!("{}", e),
+                                },
+                                migration,
+                            ),
+                        },
+                        Err(e) => {
+                            log::error!("Error getting runner from config {:?}", e);
+                            (
+                                MigrationResult::Failure {
+                                    reason: format!("{}", e),
+                                },
+                                migration,
+                            )
+                        }
+                    }
                 }
                 _ => {
                     todo!("boom")

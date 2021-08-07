@@ -14,9 +14,12 @@ pub enum DriverResult {
 pub trait NamedDriver {
     fn name() -> &'static str;
 }
-// A Driver that has no work to do must report NothingToDo (e.g trying
-// to unapply an irreversible migration, because this is a successful
-// no-op)
+/// [`Driver`] is trait which can be implemented for one or more
+/// technologies for which we manage migrations/schema changes.
+///
+/// Drivers which cannot unapply migrations (e.g HTTP) must report
+/// [`NothingToDo`] because this is a *successful* operation, but
+/// also a no-op.
 pub trait Driver: NamedDriver {
     // Apply will take a Migration and run any
     fn apply(&mut self, _: &Migration) -> Result<DriverResult, Error>;

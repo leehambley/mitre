@@ -76,13 +76,15 @@ impl Migration {
     }
 }
 
-impl<'a> PartialOrd for Migration {
+/// Implementaion of [`PartialOrd`] for [`Migration`] to ensure that
+/// they are sortable by datetime.
+impl PartialOrd for Migration {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.date_time.cmp(&other.date_time))
     }
 }
 
-impl<'a> Ord for Migration {
+impl Ord for Migration {
     fn cmp(&self, other: &Self) -> Ordering {
         self.date_time.cmp(&other.date_time)
     }

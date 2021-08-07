@@ -1,10 +1,9 @@
 //! Contains configuration loading, validation and parsing code
-//! Relies on [`yaml rust`] for parsing because `serde_yaml` does not support
+//! Relies on [`yaml_rust`] for parsing because [`serde_yaml`] does not support
 //! [YAML anchors & tags](https://yaml.org/spec/1.2/spec.html#id2765878).
 
 use super::reserved;
-use crate::runner::Configuration as RunnerConfiguration;
-use log::trace;
+use super::runner::Configuration as RunnerConfiguration;
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
@@ -299,7 +298,7 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
         .filter_map(|(k, v)| {
             if let Yaml::String(key) = k {
                 if key.as_str() == "migrations_directory" {
-                    trace!(
+                    log::trace!(
                         "setting migrations dir from entry in config file {:?} to {:?}",
                         key,
                         v
@@ -326,7 +325,7 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
                     // about the migrations_directory key, which we _do_ handle
                     // above.
                     if &Yaml::String(String::from("migrations_directory")) != k {
-                        trace!("key {:?} ignored in config file", k);
+                        log::trace!("key {:?} ignored in config file", k);
                     }
                     None {}
                 }

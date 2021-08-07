@@ -1,12 +1,13 @@
-use crate::migrations::Migration;
-use crate::migrations::MigrationStep;
-use crate::reserved::RunnerMeta;
+use super::{Migration, MigrationStep, RunnerMeta};
 
 #[cfg(feature = "runner_mysql")]
 pub mod mysql;
 #[cfg(feature = "runner_postgres")]
 pub mod postgresql;
 
+/// [`Runner`] specific configuration, there is
+/// also  [`crate::config::Configuration`] which holds
+/// the global configuration.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub struct Configuration {
     // Runner is not optional, but we need to option it here to maintain
@@ -79,7 +80,9 @@ pub enum Error {
     },
 
     // Couldn't make a runner from the config
-    CouldNotFindOrCreateRunner,
+    CouldNotFindOrCreateRunner {
+        config_name: String,
+    },
 
     /// Migrations may not contain both "up" and "change"
     MigrationContainsBothUpAndChange(Migration),
@@ -147,19 +150,48 @@ pub type BoxedRunner = Box<dyn Runner>;
 /// point runner factory.
 ///
 /// In this place synonyms are taken taken for the runner drivers.
-pub fn from_config(rc: &Configuration) -> Result<BoxedRunner, Error> {
-    log::trace!("Getting runner from config {:?}", rc);
+pub fn from_config(
+    c: &crate::config::Configuration,
+    config_name: &str,
+) -> Result<BoxedRunner, Error> {
+    log::debug!(
+        "Searching for runner {:?} in configured runners {:?}",
+        config_name,
+        c.configured_runners.keys(),
+    );
+
+    let rc = c
+        .configured_runners
+        .get(config_name)
+        .ok_or(Error::NoConfigForRunner {
+            name: config_name.to_string(),
+        })?;
+
     #[cfg(feature = "runner_mysql")]
+    log::trace!(
+        "comparing {} to {} and {}",
+        rc._runner.to_lowercase(),
+        crate::reserved::MYSQL.to_lowercase(),
+        crate::reserved::MARIA_DB.to_lowercase()
+    );
     if rc._runner.to_lowercase() == crate::reserved::MYSQL.to_lowercase()
         || rc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase()
     {
+        log::info!("matched, returning a MySQL runner");
         return Ok(Box::new(mysql::runner::MySql::new_runner(rc.clone())?));
     }
     #[cfg(feature = "runner_postgres")]
     if rc._runner.to_lowercase() == crate::reserved::POSTGRESQL.to_lowercase() {
         return Ok(Box::new(postgresql::PostgreSql::new_runner(rc.clone())?));
     }
-    Err(Error::CouldNotFindOrCreateRunner)
+    log::error!(
+        "There seems to be no avaiable (not compiled, not enabled) runner for {} (runner: {})",
+        config_name,
+        rc._runner,
+    );
+    Err(Error::CouldNotFindOrCreateRunner {
+        config_name: config_name.to_string(),
+    })
 }
 
 pub type MigrationTemplate = &'static str;
