@@ -3,7 +3,7 @@
 migrations_directory: "migrations/"
 
 es-mariadb: &es-mariadb
-  _runner: mariadb
+  _driver: mariadb
   database: mitre
   ip_or_hostname: 127.0.0.1
   password: example
@@ -11,11 +11,11 @@ es-mariadb: &es-mariadb
   username: root
 
 es-docker:
-  _runner: http
+  _driver: http
   ip_or_hostname: es
 
 es-postgres:
-  _runner: postgres
+  _driver: postgres
   ip_or_hostname: postgres
   username: root
   password: example

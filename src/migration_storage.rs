@@ -2,7 +2,7 @@ use super::{Configuration, Error, Migration, MigrationList, MySQL};
 
 pub fn from_config(c: &Configuration) -> Result<impl MigrationStorage, Error> {
     if let Some(config) = c.get("mitre") {
-        if config._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
+        if config._driver.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
             let storage = MySQL::new(config.clone())?;
             Ok(storage)
         } else {
@@ -34,7 +34,7 @@ mod tests {
 
     fn test_mysql_storage_configuration() -> RunnerConfiguration {
         RunnerConfiguration {
-            _runner: String::from("mysql"),
+            _driver: String::from("mysql"),
             database_number: None {},
             database: Some(String::from("mitre_test")),
             index: None {},

@@ -44,7 +44,7 @@ pub trait StepDriver: Driver {
 // Given a config YAML such as:
 // ---
 // es-mysql: &es-mysql
-//   _runner: mysql
+//   _driver: mysql
 //   database: mitre_test_fixture_four
 //   ip_or_hostname: 127.0.0.1
 //   password: example
@@ -58,7 +58,7 @@ pub trait StepDriver: Driver {
 // Calling this function with an invalid configuration
 // name (e.g es-foo) will return NoSuchConfiguration.
 //
-// Other errors can be returned when the value of _runner
+// Other errors can be returned when the value of _driver
 // is incorrect (e.g an unsupported runner due to conditional
 // features, or typos)
 //
@@ -85,12 +85,12 @@ pub fn from_config(
     #[cfg(feature = "runner_mysql")]
     log::trace!(
         "comparing {} to {} and {}",
-        rc._runner.to_lowercase(),
+        rc._driver.to_lowercase(),
         crate::reserved::MYSQL.to_lowercase(),
         crate::reserved::MARIA_DB.to_lowercase()
     );
-    if rc._runner.to_lowercase() == crate::reserved::MYSQL.to_lowercase()
-        || rc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase()
+    if rc._driver.to_lowercase() == crate::reserved::MYSQL.to_lowercase()
+        || rc._driver.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase()
     {
         log::info!("matched, returning a MySQL driver");
         return Ok(Box::new(MySQL::new(rc.clone())?));
@@ -98,7 +98,7 @@ pub fn from_config(
     log::error!(
         "There seems to be no avaiable (not compiled, not enabled) runner for {} (runner: {})",
         config_name,
-        rc._runner,
+        rc._driver,
     );
     Err(Error::UnsupportedDriverSpecified)
 }

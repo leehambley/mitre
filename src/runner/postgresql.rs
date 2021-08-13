@@ -17,10 +17,10 @@ impl Runner for PostgreSql {
     fn new_runner(config: RunnerConfiguration) -> Result<PostgreSql, Error> {
         // Ensure this is a proper config for this runner
         let runner_name = String::from(crate::reserved::POSTGRESQL).to_lowercase();
-        if config._runner.to_lowercase() != runner_name {
+        if config._driver.to_lowercase() != runner_name {
             return Err(Error::RunnerNameMismatch {
                 expected: runner_name,
-                found: config._runner,
+                found: config._driver,
             });
         };
 
@@ -95,7 +95,7 @@ mod tests {
 
     fn helper_create_runner_config() -> RunnerConfiguration {
         RunnerConfiguration {
-            _runner: String::from(crate::reserved::POSTGRESQL).to_lowercase(),
+            _driver: String::from(crate::reserved::POSTGRESQL).to_lowercase(),
             database_number: None,
             database: Some(format!(
                 "mitre_other_test_db_{}",

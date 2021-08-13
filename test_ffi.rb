@@ -7,7 +7,7 @@ module Mitre
 
   class RunnerConfiguration < FFI::Struct
     layout :configuration_name, :string,
-           :_runner, :string,
+           :_driver, :string,
            :database, :string,
            :index, :string,
            :database_number, :uint8,

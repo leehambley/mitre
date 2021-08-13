@@ -48,7 +48,7 @@ const MigrationResult = Struct({
 
 const RunnerConfig = Struct({
   configuration_name: ref.types.CString,
-  _runner: ref.types.CString,
+  _driver: ref.types.CString,
   database: ref.types.CString,
   index: ref.types.CString,
   database_number: ref.types.uint8,
@@ -118,7 +118,7 @@ global.mitre = {
     let cr = {};
     for (let i = 0; i < configured_drivers.length; i++) {
       cr[configured_drivers[i].configuration_name] = {
-        _runner: configured_drivers[i]._runner,
+        _driver: configured_drivers[i]._driver,
         database: configured_drivers[i].database,
         index: configured_drivers[i].index,
         databaseNumber: configured_drivers[i].database_number,

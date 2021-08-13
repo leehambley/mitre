@@ -70,7 +70,7 @@ pub enum Error {
     NoMitreConfigProvided,
 
     // UnsupportedDriverSpecified
-    // mitre config is correct, but the _runner field is set to a value
+    // mitre config is correct, but the _driver field is set to a value
     // we do not support.
     UnsupportedDriverSpecified,
 

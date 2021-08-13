@@ -3,7 +3,7 @@
 migrations_directory: "branch-main-migrations/"
 
 es-mysql: &es-mysql
-  _runner: mysql
+  _driver: mysql
   database: mitre_test_fixture_four
   ip_or_hostname: 127.0.0.1
   password: example

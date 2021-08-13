@@ -29,7 +29,7 @@ pub enum ConfigError {
     NoYamlHash,
     GetStringError,
     /// If we would parse with `serde_yaml` all fields on the [`RunnerConfiguration`] would be [`Option<T>`], however
-    /// we parse by hand, and we can specify that `_runner` is mandatory, which it is. Failing to provide it
+    /// we parse by hand, and we can specify that `_driver` is mandatory, which it is. Failing to provide it
     /// will cause an error. If a language binding is used, and the language provides the config, we may not have a parsing-time
     /// opportunity to notice this problem in the config file, so the [`ConfigProblem::UnsupportedDriverSpecified`] may manifest
     /// (e.g if the language binding provides an empty string for the runner).
@@ -162,11 +162,11 @@ impl RunnerConfiguration {
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         let mut vec = Vec::new();
 
-        if reserved::runner_by_name(&self._runner).is_none() {
+        if reserved::runner_by_name(&self._driver).is_none() {
             vec.push(ConfigProblem::UnsupportedDriverSpecified);
         }
 
-        if self._runner.to_lowercase() == reserved::REDIS.to_lowercase()
+        if self._driver.to_lowercase() == reserved::REDIS.to_lowercase()
             && self.database_number.is_none()
         {
             vec.push(ConfigProblem::NoDatabaseNumberSpecified)
@@ -258,7 +258,7 @@ pub fn default_config_to_file(p: &Path) -> Result<(), ConfigError> {
 
 
 my-mysql-db: &my-mysql-db
-  _runner: mysql
+  _driver: mysql
   database: mitre
   ip_or_hostname: 127.0.0.1
   logLevel: debug
@@ -268,7 +268,7 @@ my-mysql-db: &my-mysql-db
 
 # Curl Runner Data Stores can not be used as mitre config
 my-elasticsearch:
-  _runner: curl
+  _driver: curl
   ip_or_hostname: es
   protocol: http
   logLevel: debug
@@ -333,7 +333,7 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
         })
         .try_for_each(|(k, config_value)| {
             let c = RunnerConfiguration {
-                _runner: match dig_string(config_value, &String::from("_runner")) {
+                _driver: match dig_string(config_value, &String::from("_driver")) {
                     Some(s) => s,
                     None => {
                         return Err(ConfigError::NoRunnerSpecified {
@@ -452,7 +452,7 @@ mod tests {
           ---
           migrations_dir: "./migrations/here"
           a:
-            _runner: mysql
+            _driver: mysql
             database: mitre
             ip_or_hostname: 127.0.0.1
             logLevel: debug
@@ -471,7 +471,7 @@ mod tests {
         };
 
         let rc_config_a = RunnerConfiguration {
-            _runner: String::from("mysql"),
+            _driver: String::from("mysql"),
             database: Some(String::from("mitre")),
             ip_or_hostname: Some(String::from("127.0.0.1")),
             // log_level: Some(String::from("debug")),
@@ -497,7 +497,7 @@ mod tests {
         let yaml_docs = match YamlLoader::load_from_str(indoc! {r#"
           ---
           a:
-            _runner: foobarbaz
+            _driver: foobarbaz
         "#})
         {
             Ok(docs) => docs,
@@ -523,7 +523,7 @@ mod tests {
           ---
           # migrations_directory: "." # is implied here because of the default value
           mitre:
-            _runner: mysql
+            _driver: mysql
         "#};
 
         let tmp_dir = TempDir::new("example").expect("must be able to make tmpdir");
@@ -547,7 +547,7 @@ mod tests {
         let yaml_docs = match YamlLoader::load_from_str(indoc! {r#"
         ---
         a:
-          _runner: foobarbaz
+          _driver: foobarbaz
         "#})
         {
             Ok(docs) => docs,
@@ -560,7 +560,7 @@ mod tests {
         };
 
         let c = RunnerConfiguration {
-            _runner: String::from("foobarbaz"),
+            _driver: String::from("foobarbaz"),
             database: None {},
             ip_or_hostname: None {},
             password: None {},

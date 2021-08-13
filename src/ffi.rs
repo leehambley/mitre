@@ -80,7 +80,7 @@ struct Configuration {
 struct RunnerConfiguration {
     configuration_name: *mut c_char,
 
-    _runner: *mut c_char,
+    _driver: *mut c_char,
     database: *mut c_char,
     index: *mut c_char,
     database_number: u8,
@@ -161,7 +161,7 @@ extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
         configured_drivers.push(RunnerConfiguration {
             configuration_name: CString::new(configuration_name).unwrap().into_raw(),
 
-            _runner: CString::new(rc._runner).unwrap().into_raw(),
+            _driver: CString::new(rc._driver).unwrap().into_raw(),
             database: CString::new(rc.database.unwrap_or_default())
                 .unwrap()
                 .into_raw(),
@@ -206,7 +206,7 @@ unsafe extern "C" fn free_config_from_file(c: *mut Configuration) {
     );
     for rc in rcs {
         CString::from_raw(rc.configuration_name);
-        CString::from_raw(rc._runner);
+        CString::from_raw(rc._driver);
         CString::from_raw(rc.database);
         CString::from_raw(rc.index);
         CString::from_raw(rc.ip_or_hostname);

@@ -3,7 +3,7 @@
 exports[`parseConfig returns a parsed config by dir 1`] = `
 Object {
   "es-docker": Object {
-    "_runner": "http",
+    "_driver": "http",
     "database": "",
     "databaseNumber": 0,
     "index": "",
@@ -13,7 +13,7 @@ Object {
     "username": "",
   },
   "es-mysql": Object {
-    "_runner": "mysql",
+    "_driver": "mysql",
     "database": "mitre",
     "databaseNumber": 0,
     "index": "",
@@ -23,7 +23,7 @@ Object {
     "username": "root",
   },
   "es-postgres": Object {
-    "_runner": "postgres",
+    "_driver": "postgres",
     "database": "",
     "databaseNumber": 0,
     "index": "",
@@ -33,7 +33,7 @@ Object {
     "username": "root",
   },
   "mitre": Object {
-    "_runner": "mysql",
+    "_driver": "mysql",
     "database": "mitre",
     "databaseNumber": 0,
     "index": "",
