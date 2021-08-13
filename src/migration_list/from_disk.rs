@@ -362,7 +362,7 @@ impl<'a> MigrationFinder {
             "checking for runner {:?} {:?} in {:?}",
             config_name,
             ext,
-            self.config.configured_runners
+            self.config.configured_drivers
         );
         match self.config.get(config_name) {
             Some(config) => match runner_meta_by_name(&config._runner) {

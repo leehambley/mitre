@@ -31,7 +31,7 @@ pub enum ConfigError {
     /// If we would parse with `serde_yaml` all fields on the [`RunnerConfiguration`] would be [`Option<T>`], however
     /// we parse by hand, and we can specify that `_runner` is mandatory, which it is. Failing to provide it
     /// will cause an error. If a language binding is used, and the language provides the config, we may not have a parsing-time
-    /// opportunity to notice this problem in the config file, so the [`ConfigProblem::UnsupportedRunnerSpecified`] may manifest
+    /// opportunity to notice this problem in the config file, so the [`ConfigProblem::UnsupportedDriverSpecified`] may manifest
     /// (e.g if the language binding provides an empty string for the runner).
     NoRunnerSpecified {
         config_name: String,
@@ -95,7 +95,7 @@ pub enum ConfigProblem {
     /// Mitre should store state in the same database to which we are applying migrations.
     NoMitreConfiguration,
     /// Unsupported runner specified. See [crate::reserved] for supported runners.
-    UnsupportedRunnerSpecified,
+    UnsupportedDriverSpecified,
     /// Certain databases (e.g ElasticSearch) have a concept of an index. This configuration option
     /// is exposed as `{indexName}` within the templates of migrations targeting a runner where this
     /// concept applies.
@@ -127,7 +127,7 @@ pub type ConfigurationName = String;
 #[derive(Debug, PartialEq, Clone)]
 pub struct Configuration {
     pub migrations_directory: PathBuf,
-    pub configured_runners: HashMap<ConfigurationName, RunnerConfiguration>,
+    pub configured_drivers: HashMap<ConfigurationName, RunnerConfiguration>,
 }
 
 impl Configuration {
@@ -142,7 +142,7 @@ impl Configuration {
     pub fn validate(&self) -> Result<(), Vec<ConfigProblem>> {
         // TODO: write tests
         let mut problems = vec![];
-        if self.configured_runners.get("mitre").is_none() {
+        if self.configured_drivers.get("mitre").is_none() {
             problems.push(ConfigProblem::NoMitreConfiguration)
         }
 
@@ -154,7 +154,7 @@ impl Configuration {
     }
 
     pub fn get(&self, k: &str) -> Option<&RunnerConfiguration> {
-        self.configured_runners.get(k)
+        self.configured_drivers.get(k)
     }
 }
 
@@ -163,7 +163,7 @@ impl RunnerConfiguration {
         let mut vec = Vec::new();
 
         if reserved::runner_by_name(&self._runner).is_none() {
-            vec.push(ConfigProblem::UnsupportedRunnerSpecified);
+            vec.push(ConfigProblem::UnsupportedDriverSpecified);
         }
 
         if self._runner.to_lowercase() == reserved::REDIS.to_lowercase()
@@ -361,7 +361,7 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
         Err(e) => Err(e),
         Ok(_) => Ok(Configuration {
             migrations_directory: PathBuf::from(mig_dir),
-            configured_runners: hm,
+            configured_drivers: hm,
         }),
     }
 }
@@ -482,8 +482,8 @@ mod tests {
             index: None {},
         };
 
-        assert_eq!(1, config.configured_runners.keys().len());
-        assert_eq!(rc_config_a, config.configured_runners["a"]);
+        assert_eq!(1, config.configured_drivers.keys().len());
+        assert_eq!(rc_config_a, config.configured_drivers["a"]);
         assert_eq!(
             PathBuf::from(DEFAULT_MIGRATIONS_DIR),
             config.migrations_directory
@@ -570,19 +570,19 @@ mod tests {
             index: None {},
         };
 
-        assert_eq!(1, config.configured_runners.keys().len());
-        assert_eq!(c, config.configured_runners["a"]);
+        assert_eq!(1, config.configured_drivers.keys().len());
+        assert_eq!(c, config.configured_drivers["a"]);
 
         match c.validate() {
             Ok(_) => return Err("expected not-ok from validate"),
             Err(problems) => {
                 if problems
                     .iter()
-                    .any(|p| *p == ConfigProblem::UnsupportedRunnerSpecified)
+                    .any(|p| *p == ConfigProblem::UnsupportedDriverSpecified)
                 {
                     return Ok(());
                 } else {
-                    return Err("didn't find expected UnsupportedRunnerSpecified problem");
+                    return Err("didn't find expected UnsupportedDriverSpecified problem");
                 }
             }
         }

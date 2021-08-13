@@ -68,8 +68,8 @@ unsafe extern "C" fn init_logger(lc: *mut LogCallbacks) {
 #[repr(C)]
 struct Configuration {
     migrations_directory: *mut c_char,
-    configured_runners: *mut RunnerConfiguration,
-    number_of_configured_runners: usize,
+    configured_drivers: *mut RunnerConfiguration,
+    number_of_configured_drivers: usize,
     rust_config: *mut crate::config::Configuration,
 }
 
@@ -156,9 +156,9 @@ extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
     };
 
     // https://dev.to/leehambley/sending-complex-structs-to-ruby-from-rust-4e61
-    let mut configured_runners: Vec<RunnerConfiguration> = vec![];
-    for (configuration_name, rc) in config.configured_runners.clone() {
-        configured_runners.push(RunnerConfiguration {
+    let mut configured_drivers: Vec<RunnerConfiguration> = vec![];
+    for (configuration_name, rc) in config.configured_drivers.clone() {
+        configured_drivers.push(RunnerConfiguration {
             configuration_name: CString::new(configuration_name).unwrap().into_raw(),
 
             _runner: CString::new(rc._runner).unwrap().into_raw(),
@@ -186,9 +186,9 @@ extern "C" fn config_from_file(p: *const c_char) -> *mut Configuration {
         migrations_directory: CString::new(config.migrations_directory.to_str().expect(""))
             .unwrap()
             .into_raw(),
-        configured_runners: Box::into_raw(configured_runners.into_boxed_slice())
+        configured_drivers: Box::into_raw(configured_drivers.into_boxed_slice())
             as *mut RunnerConfiguration,
-        number_of_configured_runners: config.configured_runners.keys().len(),
+        number_of_configured_drivers: config.configured_drivers.keys().len(),
         rust_config: Box::into_raw(Box::new(config)),
     }))
 }
@@ -200,9 +200,9 @@ unsafe extern "C" fn free_config_from_file(c: *mut Configuration) {
     assert!(!c.is_null());
     let c: Box<Configuration> = Box::from_raw(c);
     let rcs: Vec<RunnerConfiguration> = Vec::from_raw_parts(
-        c.configured_runners,
-        c.number_of_configured_runners,
-        c.number_of_configured_runners,
+        c.configured_drivers,
+        c.number_of_configured_drivers,
+        c.number_of_configured_drivers,
     );
     for rc in rcs {
         CString::from_raw(rc.configuration_name);

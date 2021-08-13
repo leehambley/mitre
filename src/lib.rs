@@ -34,6 +34,7 @@ pub use reserved::{Flag, RunnerMeta};
 pub use runner::{Configuration as RunnerConfiguration, MigrationResult, MigrationState};
 
 // _from_config factory helpers
+pub use driver::from_config as driver_from_config;
 pub use migration_list::from_disk as migration_list_from_disk;
 pub use migration_storage::from_config as migration_storage_from_config;
 pub use runner::from_config as runner_from_config;
@@ -68,10 +69,15 @@ pub enum Error {
     // No mitre config provided, so we cannot initialize anything
     NoMitreConfigProvided,
 
-    // UnsupportedRunnerSpecified
+    // UnsupportedDriverSpecified
     // mitre config is correct, but the _runner field is set to a value
     // we do not support.
-    UnsupportedRunnerSpecified,
+    UnsupportedDriverSpecified,
+
+    // NoSuchConfiguration the
+    NoSuchConfiguration {
+        configuration_name: String,
+    },
 }
 
 impl From<std::io::Error> for Error {

@@ -1,8 +1,8 @@
 use crate::Direction;
 
 use super::{
-    runner_from_config, Error, Migration, MigrationList, MigrationResult, MigrationResultTuple,
-    MigrationState, MigrationStateTuple, MigrationStorage,
+    driver_from_config, runner_from_config, Error, Migration, MigrationList, MigrationResult,
+    MigrationResultTuple, MigrationState, MigrationStateTuple, MigrationStorage,
 };
 use itertools::Itertools;
 
@@ -56,15 +56,16 @@ impl Engine {
             match state {
                 MigrationState::Pending => {
                     match runner_from_config(&c, &migration.configuration_name) {
-                        Ok(boxed_runner) => match boxed_runner.apply(migration) {
-                            Ok(_) => (MigrationResult::Success, migration),
-                            Err(e) => (
-                                MigrationResult::Failure {
-                                    reason: format!("{}", e),
-                                },
-                                migration,
-                            ),
-                        },
+                        Ok(_) => (MigrationResult::Success, migration),
+                        // Ok(boxed_runner) => match boxed_runner.apply(migration) {
+                        //     Ok(_) => (MigrationResult::Success, migration),
+                        //     Err(e) => (
+                        //         MigrationResult::Failure {
+                        //             reason: format!("{}", e),
+                        //         },
+                        //         migration,
+                        //     ),
+                        // },
                         Err(e) => {
                             log::error!("Error getting runner from config {:?}", e);
                             (

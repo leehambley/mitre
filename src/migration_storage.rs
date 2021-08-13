@@ -6,7 +6,7 @@ pub fn from_config(c: &Configuration) -> Result<impl MigrationStorage, Error> {
             let storage = MySQL::new(config.clone())?;
             Ok(storage)
         } else {
-            Err(Error::UnsupportedRunnerSpecified)
+            Err(Error::UnsupportedDriverSpecified)
         }
     } else {
         Err(Error::NoMitreConfigProvided)

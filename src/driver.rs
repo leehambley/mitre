@@ -1,4 +1,9 @@
-use super::{Direction, Error, Migration, MigrationStep};
+use super::{Error, Migration, MigrationStep, MySQL};
+
+#[cfg(test)]
+pub mod noop;
+#[cfg(test)]
+pub mod succeed_or_fail;
 
 pub enum DriverResult {
     // Sucessfully applied the migration
@@ -12,7 +17,9 @@ pub enum DriverResult {
 // All drivers are required to define a name, and
 // it must be matched in the configuration
 pub trait NamedDriver {
-    fn name() -> &'static str;
+    fn name() -> &'static str
+    where
+        Self: Sized;
 }
 /// [`Driver`] is trait which can be implemented for one or more
 /// technologies for which we manage migrations/schema changes.
@@ -29,66 +36,71 @@ pub trait Driver: NamedDriver {
 // Subtrait for convenience about a driver that only runs a single step.
 // mostly used to keep implementations tidy and reusable.
 // The trait doesn't make sense alone, so only allow this to be a convenience
-// for existing drivers. (e.g NoopDriver doesn't need this)
+// for existing drivers. (e.g noop::Driver doesn't need this)
 pub trait StepDriver: Driver {
     fn run(&mut self, _: &MigrationStep) -> Result<DriverResult, Error>;
 }
 
-pub struct NoopDriver {}
+// Given a config YAML such as:
+// ---
+// es-mysql: &es-mysql
+//   _runner: mysql
+//   database: mitre_test_fixture_four
+//   ip_or_hostname: 127.0.0.1
+//   password: example
+//   port: 3306
+//   username: root
+// This function takes the parsed configuration
+// and a name (e.g es-mysql) and will use the
+// configuration to instantiate a new MySQL driver
+// and return it boxed.
+//
+// Calling this function with an invalid configuration
+// name (e.g es-foo) will return NoSuchConfiguration.
+//
+// Other errors can be returned when the value of _runner
+// is incorrect (e.g an unsupported runner due to conditional
+// features, or typos)
+//
+// Some drivers may return an error if all configuration is
+// correct but the server is not responding, or credentials
+// are incorrect.
+pub fn from_config(
+    c: &crate::config::Configuration,
+    config_name: &str,
+) -> Result<Box<dyn Driver>, Error> {
+    log::debug!(
+        "Searching for runner {:?} in configured runners {:?}",
+        config_name,
+        c.configured_drivers.keys(),
+    );
 
-impl NamedDriver for NoopDriver {
-    fn name() -> &'static str {
-        "noop"
-    }
-}
+    let rc = c
+        .configured_drivers
+        .get(config_name)
+        .ok_or(Error::NoSuchConfiguration {
+            configuration_name: config_name.to_string(),
+        })?;
 
-impl Driver for NoopDriver {
-    fn apply(&mut self, m: &Migration) -> Result<DriverResult, Error> {
-        match (m.steps.get(&Direction::Up), m.steps.get(&Direction::Change)) {
-            (Some(_), Some(_)) => Err(Error::MalformedMigration),
-            _ => Ok(DriverResult::NothingToDo),
-        }
+    #[cfg(feature = "runner_mysql")]
+    log::trace!(
+        "comparing {} to {} and {}",
+        rc._runner.to_lowercase(),
+        crate::reserved::MYSQL.to_lowercase(),
+        crate::reserved::MARIA_DB.to_lowercase()
+    );
+    if rc._runner.to_lowercase() == crate::reserved::MYSQL.to_lowercase()
+        || rc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase()
+    {
+        log::info!("matched, returning a MySQL driver");
+        return Ok(Box::new(MySQL::new(rc.clone())?));
     }
-    fn unapply(&mut self, _: &Migration) -> Result<DriverResult, Error> {
-        Ok(DriverResult::NothingToDo)
-    }
-}
-
-pub struct SucceedOrFailDriver {}
-
-impl NamedDriver for SucceedOrFailDriver {
-    fn name() -> &'static str {
-        "succeed_or_fail"
-    }
-}
-
-impl Driver for SucceedOrFailDriver {
-    // If the migration step source is SUCCEED it returns Success
-    // else it returns
-    fn apply(&mut self, m: &Migration) -> Result<DriverResult, Error> {
-        match (m.steps.get(&Direction::Up), m.steps.get(&Direction::Change)) {
-            (Some(_), Some(_)) => Err(Error::MalformedMigration),
-            _ => Ok(DriverResult::NothingToDo),
-        }?;
-        Ok(DriverResult::NothingToDo)
-    }
-    fn unapply(&mut self, _: &Migration) -> Result<DriverResult, Error> {
-        Ok(DriverResult::NothingToDo)
-    }
-}
-
-impl StepDriver for SucceedOrFailDriver {
-    fn run(&mut self, ms: &MigrationStep) -> Result<DriverResult, Error> {
-        match ms.source.as_str() {
-            "NOTHING_TO_DO" => Ok(DriverResult::NothingToDo),
-            "SUCCESS" => Ok(DriverResult::Success),
-            "MIGRATION_RUNNER_MISMATCH" => Ok(DriverResult::MigrationRunnerMismatch),
-            _ => panic!(
-                "succeed or fail driver can't handle the source {}",
-                ms.source
-            ),
-        }
-    }
+    log::error!(
+        "There seems to be no avaiable (not compiled, not enabled) runner for {} (runner: {})",
+        config_name,
+        rc._runner,
+    );
+    Err(Error::UnsupportedDriverSpecified)
 }
 
 // Test that all drivers raise malformed migration when the migration
@@ -227,9 +239,9 @@ mod test {
     }
 
     // The first :ident must
-    test_driver!(noop, { NoopDriver {} });
-    test_driver!(succeed_or_fail, { SucceedOrFailDriver {} });
-    test_driver!(mysql, { SucceedOrFailDriver {} });
+    test_driver!(noop, { noop::Driver {} });
+    test_driver!(succeed_or_fail, { succeed_or_fail::Driver {} });
+    test_driver!(mysql, { succeed_or_fail::Driver {} });
 
     // test that apply tries "up", and falls-back to "change" on apply
 

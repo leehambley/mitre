@@ -109,7 +109,6 @@ impl std::fmt::Display for Error {
         write!(f, "Runner Error {:?}", self)
     }
 }
-
 #[derive(PartialEq, Debug)]
 pub enum MigrationState {
     Pending,
@@ -157,11 +156,11 @@ pub fn from_config(
     log::debug!(
         "Searching for runner {:?} in configured runners {:?}",
         config_name,
-        c.configured_runners.keys(),
+        c.configured_drivers.keys(),
     );
 
     let rc = c
-        .configured_runners
+        .configured_drivers
         .get(config_name)
         .ok_or(Error::NoConfigForRunner {
             name: config_name.to_string(),

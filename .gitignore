@@ -3,3 +3,4 @@ mitre.yml
 .vscode
 /target
 node_modules
+docker-compose.yml

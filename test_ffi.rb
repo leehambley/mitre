@@ -20,7 +20,7 @@ module Mitre
   class Configuration < FFI::Struct
     layout :migrations_directory,:string,
            :configured_runner, :pointer,
-           :number_of_configured_runners, :uint8
+           :number_of_configured_drivers, :uint8
   end
 
   extend FFI::Library
