@@ -1,8 +1,8 @@
 use crate::Direction;
 
 use super::{
-    driver_from_config, runner_from_config, Error, Migration, MigrationList, MigrationResult,
-    MigrationResultTuple, MigrationState, MigrationStateTuple, MigrationStorage,
+    driver_from_config, Error, Migration, MigrationList, MigrationResult, MigrationResultTuple,
+    MigrationState, MigrationStateTuple, MigrationStorage,
 };
 use itertools::Itertools;
 
@@ -55,22 +55,21 @@ impl Engine {
             log::debug!("checking migration {:?}", migration);
             match state {
                 MigrationState::Pending => {
-                    match runner_from_config(&c, &migration.configuration_name) {
-                        Ok(_) => (MigrationResult::Success, migration),
-                        // Ok(boxed_runner) => match boxed_runner.apply(migration) {
-                        //     Ok(_) => (MigrationResult::Success, migration),
-                        //     Err(e) => (
-                        //         MigrationResult::Failure {
-                        //             reason: format!("{}", e),
-                        //         },
-                        //         migration,
-                        //     ),
-                        // },
+                    match driver_from_config(&c, &migration.configuration_name) {
+                        Ok(mut driver) => match driver.apply(&migration) {
+                            Ok(_) => (MigrationResult::Success, migration),
+                            Err(e) => (
+                                MigrationResult::Failure {
+                                    reason: format!("{:?}", e),
+                                },
+                                migration,
+                            ),
+                        },
                         Err(e) => {
                             log::error!("Error getting runner from config {:?}", e);
                             (
                                 MigrationResult::Failure {
-                                    reason: format!("{}", e),
+                                    reason: format!("{:?}", e),
                                 },
                                 migration,
                             )
