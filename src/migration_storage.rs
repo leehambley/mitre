@@ -22,7 +22,7 @@ pub trait MigrationStorage: MigrationList {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
 
     use super::super::{Direction, MigrationStep, MigrationSteps, MigrationStorage};
     use super::*;
@@ -32,7 +32,7 @@ mod tests {
     };
     use std::{array::IntoIter, collections::HashMap, iter::FromIterator, path::PathBuf};
 
-    fn test_mysql_storage_configuration() -> RunnerConfiguration {
+    pub fn test_mysql_storage_configuration() -> RunnerConfiguration {
         RunnerConfiguration {
             _driver: String::from("mysql"),
             database_number: None {},

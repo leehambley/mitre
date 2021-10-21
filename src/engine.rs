@@ -130,6 +130,8 @@ mod tests {
         InMemoryMigrations::new()
     }
 
+    fn mysql_migration_storage() {}
+
     fn non_empty_migration_list() -> impl MigrationStorage {
         let mut imms = empty_migration_list();
         for migration in fixture().iter() {
@@ -185,4 +187,15 @@ mod tests {
             _ => Ok(()),
         }
     }
+
+    #[test]
+    fn test_apply_applies_all_successful_migrations() -> Result<(), String> {
+        let mut imms = empty_migration_list();
+        // let mut storage = /
+        Ok(())
+    }
+
+    // test that given a MySQL + PostgreSQL + Redis driver, for all supported storages
+    // we store the state and can migrate across the board. One each migration each
+    // driver.
 }
