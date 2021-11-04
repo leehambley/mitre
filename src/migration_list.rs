@@ -11,9 +11,6 @@ pub trait MigrationList {
     fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error>;
 }
 
-// Implementation of MigrationList for Box<MigrationList>
-// This implementation _also_ exists in migration_storage.rs which
-// I don't think should be necessary
 impl MigrationList for &mut Box<dyn MigrationList> {
     fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error> {
         (**self).all()

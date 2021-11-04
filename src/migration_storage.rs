@@ -37,8 +37,6 @@ impl MigrationStorage for &mut Box<dyn MigrationStorage> {
     }
 }
 
-// This is a duplicate of a definition in migration_list.rs
-// I do not know why I need to reproduce it verbatim here
 impl MigrationList for &mut Box<dyn MigrationStorage> {
     fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error> {
         (**self).all()
