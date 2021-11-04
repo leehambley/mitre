@@ -21,6 +21,30 @@ pub trait MigrationStorage: MigrationList {
     fn remove(&mut self, _: Migration) -> Result<(), Error>;
 }
 
+// Implementation of MigrationStorage for Box<MigrationStorage>
+impl MigrationStorage for &mut Box<dyn MigrationStorage> {
+    #[cfg(test)]
+    fn reset(&mut self) -> Result<(), Error> {
+        (**self).reset()
+    }
+
+    fn add(&mut self, m: Migration) -> Result<(), Error> {
+        (**self).add(m)
+    }
+
+    fn remove(&mut self, m: Migration) -> Result<(), Error> {
+        (**self).remove(m)
+    }
+}
+
+// This is a duplicate of a definition in migration_list.rs
+// I do not know why I need to reproduce it verbatim here
+impl MigrationList for &mut Box<dyn MigrationStorage> {
+    fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error> {
+        (**self).all()
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
 
