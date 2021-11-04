@@ -117,7 +117,7 @@ pub mod tests {
         }
         Ok(())
     }
-    fn lists_what_it_stores(ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
+    fn lists_what_it_stores(mut ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
         for migration in migration_fixture() {
             match ms.add(migration) {
                 Err(e) => return Err(format!("error: {:#?}", e)),

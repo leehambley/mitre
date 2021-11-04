@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_apply_applies_all_successful_migrations() -> Result<(), String> {
-        let mut imms = empty_migration_list();
+        let _imms = empty_migration_list();
         // let mut storage = /
         Ok(())
     }
