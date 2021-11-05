@@ -11,6 +11,35 @@ use std::path::Path;
 use std::path::PathBuf;
 use yaml_rust::{Yaml, YamlLoader};
 
+pub const DEFAULT_CONFIG: &str = "
+# Mitre Config
+# This document describes the data stores that mitre runs migrations against
+# as well as the data store that stores the migration table for mitre.
+# Below you can find example configurations for the supported data stores:
+
+my-mysql-db: &my-mysql-db
+  _driver: mysql
+  database: mitre
+  ip_or_hostname: 127.0.0.1
+  logLevel: debug
+  password: example
+  port: 3306
+  username: root
+
+my-elasticsearch:
+  _driver: elasticsearch
+  ip_or_hostname: es
+  protocol: http
+  logLevel: debug
+
+# The key mitre signals that this data store is going to be used for mitres migration table
+# It does not necessary need to be a data store you want to run migrations against, but it can be
+mitre:
+  <<: *my-mysql-db # using YAML anchors is optional but encouraged so no duplication is necessary
+                   # this line tells mitre to reuse my-mysql-db to store it's own configuration
+                   # and the state of the applied and pending migrations.
+";
+
 // This is evaluated relative to the configuration file, so the file makes sense
 // in context of itself and doesn't depend so much on the runner's effective CWD.
 pub const DEFAULT_MIGRATIONS_DIR: &str = ".";
@@ -250,36 +279,7 @@ pub fn from_file(p: &Path) -> Result<Configuration, ConfigError> {
 }
 
 pub fn default_config_to_file(p: &Path) -> Result<(), ConfigError> {
-    let default_config = "
-# Mitre Config
-# This document describes the data stores that mitre runs migrations against
-# as well as the data store that stores the migration table for mitre.
-# Below you can find example configurations for the supported data stores:
-
-
-my-mysql-db: &my-mysql-db
-  _driver: mysql
-  database: mitre
-  ip_or_hostname: 127.0.0.1
-  logLevel: debug
-  password: example
-  port: 3306
-  username: root
-
-# Curl Runner Data Stores can not be used as mitre config
-my-elasticsearch:
-  _driver: curl
-  ip_or_hostname: es
-  protocol: http
-  logLevel: debug
-
-# The key mitre signals that this data store is going to be used for mitres migration table
-# It does not necessary need to be a data store you want to run migrations against, but it can be
-mitre:
-  <<: *my-mysql-db # using YAML anchors is optional but encouraged so no duplication is necessary
-";
-
-    std::fs::write(p, default_config).map_err(ConfigError::Io)
+    std::fs::write(p, DEFAULT_CONFIG).map_err(ConfigError::Io)
 }
 
 fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigError> {

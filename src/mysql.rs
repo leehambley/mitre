@@ -47,8 +47,6 @@ impl MySQL {
     }
 
     fn conn(&mut self) -> &mut mysql::Conn {
-        trace!("accessing db connection");
-        debug!("select_db {:?}", self.config.database);
         match &self.config.database {
             Some(database) => match self.conn.select_db(database) {
                 true => trace!("select_db {:?} succeeded", database),
@@ -56,7 +54,6 @@ impl MySQL {
             },
             None => info!("no database name provided, mysql driver might have a problem"),
         }
-        trace!("returning db connection");
         &mut self.conn
     }
 
@@ -124,9 +121,9 @@ impl MySQL {
             }
         };
 
-        let result = match self.conn().query_iter(q) {
+        let result = match self.conn().query_iter(q.clone()) {
             Ok(mut result) => {
-                info!("ran query successfully",);
+                info!("query {:?} ran successfully", q);
                 trace!("consuming query results");
                 while let Some(result_set) = result.next_set() {
                     let result_set = result_set.expect("boom");
@@ -324,6 +321,8 @@ impl MigrationList for MySQL {
 impl MigrationStorage for MySQL {
     #[cfg(test)]
     fn reset(&mut self) -> Result<(), Error> {
+        log::trace!("Running MySQL reset.");
+        log::info!("Bootstrap migration is about to run, this includes dropping Mitre's configuration tables");
         for bootstrap_migration in self.bootstrap_migrations().iter().rev() {
             self.unapply(bootstrap_migration)?;
         }

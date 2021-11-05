@@ -86,13 +86,22 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
+    use crate::config;
+
     use super::super::{
         Direction, InMemoryMigrations, Migration, MigrationStateTuple, MigrationStep,
         MigrationStorage, TIMESTAMP_FORMAT_STR,
     };
     use super::*;
+    use crate::config::Configuration;
+    use crate::mysql::MySQL;
     use log::trace;
     use std::path::PathBuf;
+    use test_case::test_case;
+
+    fn config() -> Configuration {
+        Configuration::load_from_str(config::DEFAULT_CONFIG).unwrap()
+    }
 
     fn fixture() -> Vec<Migration> {
         vec![Migration {
@@ -126,11 +135,18 @@ mod tests {
         }]
     }
 
+    fn empty_migration_storage() -> impl MigrationStorage {
+        InMemoryMigrations::new()
+    }
+
     fn empty_migration_list() -> impl MigrationStorage {
         InMemoryMigrations::new()
     }
 
-    fn mysql_migration_storage() {}
+    #[cfg(feature = "runner_mysql")]
+    fn mysql_migration_storage(c: config::Configuration) -> impl MigrationStorage {
+        MySQL::new(c.get("mitre").unwrap().clone()).unwrap()
+    }
 
     fn non_empty_migration_list() -> impl MigrationStorage {
         let mut imms = empty_migration_list();
@@ -188,11 +204,26 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_apply_applies_all_successful_migrations() -> Result<(), String> {
-        let _imms = empty_migration_list();
-        // let mut storage = /
-        Ok(())
+    #[test_case(config(), empty_migration_list(), empty_migration_storage() ; "with an in-memory store")]
+    #[cfg(feature = "runner_mysql")]
+    #[test_case(config(), empty_migration_list(), mysql_migration_storage(config()) ; "with an mysql store")]
+    fn test_empty_stores_with_no_config_apply_uniformyl(
+        config: Configuration,
+        src: impl MigrationList,
+        mut dest: impl MigrationStorage,
+    ) -> Result<(), String> {
+        // integration fixtures may have external state, reset them noisily
+        dest.reset().unwrap();
+        // let c = config::load
+        match Engine::apply(&config, src, dest, None {}) {
+            Ok(r) => {
+                for result in r {
+                    println!("{:?}", result)
+                }
+                Ok(())
+            }
+            Err(e) => Err(format!("{:?}", e)),
+        }
     }
 
     // test that given a MySQL + PostgreSQL + Redis driver, for all supported storages
