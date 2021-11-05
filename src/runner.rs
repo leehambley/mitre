@@ -12,7 +12,7 @@ pub mod postgresql;
 pub struct Configuration {
     // Runner is not optional, but we need to option it here to maintain
     // serde::Deserialize compatibility
-    pub _runner: String,
+    pub _driver: String,
 
     pub database: Option<String>, // used by MySQL, PostgreSQL runners
 
@@ -109,7 +109,6 @@ impl std::fmt::Display for Error {
         write!(f, "Runner Error {:?}", self)
     }
 }
-
 #[derive(PartialEq, Debug)]
 pub enum MigrationState {
     Pending,
@@ -157,11 +156,11 @@ pub fn from_config(
     log::debug!(
         "Searching for runner {:?} in configured runners {:?}",
         config_name,
-        c.configured_runners.keys(),
+        c.configured_drivers.keys(),
     );
 
     let rc = c
-        .configured_runners
+        .configured_drivers
         .get(config_name)
         .ok_or(Error::NoConfigForRunner {
             name: config_name.to_string(),
@@ -170,24 +169,24 @@ pub fn from_config(
     #[cfg(feature = "runner_mysql")]
     log::trace!(
         "comparing {} to {} and {}",
-        rc._runner.to_lowercase(),
+        rc._driver.to_lowercase(),
         crate::reserved::MYSQL.to_lowercase(),
         crate::reserved::MARIA_DB.to_lowercase()
     );
-    if rc._runner.to_lowercase() == crate::reserved::MYSQL.to_lowercase()
-        || rc._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase()
+    if rc._driver.to_lowercase() == crate::reserved::MYSQL.to_lowercase()
+        || rc._driver.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase()
     {
         log::info!("matched, returning a MySQL runner");
         return Ok(Box::new(mysql::runner::MySql::new_runner(rc.clone())?));
     }
     #[cfg(feature = "runner_postgres")]
-    if rc._runner.to_lowercase() == crate::reserved::POSTGRESQL.to_lowercase() {
+    if rc._driver.to_lowercase() == crate::reserved::POSTGRESQL.to_lowercase() {
         return Ok(Box::new(postgresql::PostgreSql::new_runner(rc.clone())?));
     }
     log::error!(
         "There seems to be no avaiable (not compiled, not enabled) runner for {} (runner: {})",
         config_name,
-        rc._runner,
+        rc._driver,
     );
     Err(Error::CouldNotFindOrCreateRunner {
         config_name: config_name.to_string(),

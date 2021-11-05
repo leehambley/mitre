@@ -48,7 +48,7 @@ const MigrationResult = Struct({
 
 const RunnerConfig = Struct({
   configuration_name: ref.types.CString,
-  _runner: ref.types.CString,
+  _driver: ref.types.CString,
   database: ref.types.CString,
   index: ref.types.CString,
   database_number: ref.types.uint8,
@@ -60,8 +60,8 @@ const RunnerConfig = Struct({
 
 const Configuration = Struct({
   migrations_directory: ref.types.CString,
-  configured_runners: Array(RunnerConfig),
-  number_of_configured_runners: ref.types.size_t,
+  configured_drivers: Array(RunnerConfig),
+  number_of_configured_drivers: ref.types.size_t,
 
   // This retains a pointer to Box<Configuration> with a Rust
   // layout, as needed by diff() and up(), etc. Do not try
@@ -107,25 +107,25 @@ global.mitre = {
 
     let {
       migrations_directory,
-      configured_runners,
-      number_of_configured_runners,
+      configured_drivers,
+      number_of_configured_drivers,
       _rust_config,
     } = config.deref();
 
-    // const runners = ffiArray(configured_runners, number_of_configured_runners);
-    configured_runners.length = number_of_configured_runners;
+    // const runners = ffiArray(configured_drivers, number_of_configured_drivers);
+    configured_drivers.length = number_of_configured_drivers;
 
     let cr = {};
-    for (let i = 0; i < configured_runners.length; i++) {
-      cr[configured_runners[i].configuration_name] = {
-        _runner: configured_runners[i]._runner,
-        database: configured_runners[i].database,
-        index: configured_runners[i].index,
-        databaseNumber: configured_runners[i].database_number,
-        ipOrHostname: configured_runners[i].ip_or_hostname,
-        port: configured_runners[i].port,
-        username: configured_runners[i].username,
-        password: configured_runners[i].password,
+    for (let i = 0; i < configured_drivers.length; i++) {
+      cr[configured_drivers[i].configuration_name] = {
+        _driver: configured_drivers[i]._driver,
+        database: configured_drivers[i].database,
+        index: configured_drivers[i].index,
+        databaseNumber: configured_drivers[i].database_number,
+        ipOrHostname: configured_drivers[i].ip_or_hostname,
+        port: configured_drivers[i].port,
+        username: configured_drivers[i].username,
+        password: configured_drivers[i].password,
       };
     }
 

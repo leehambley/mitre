@@ -351,7 +351,7 @@ impl<'a> MigrationFinder {
     }
 
     // This method looks for a configuration name (key) in the configured runners
-    // where that configuration name has a _runner which supports a given file
+    // where that configuration name has a _driver which supports a given file
     // extension, according to the
     fn is_configured_runner(
         &self,
@@ -362,10 +362,10 @@ impl<'a> MigrationFinder {
             "checking for runner {:?} {:?} in {:?}",
             config_name,
             ext,
-            self.config.configured_runners
+            self.config.configured_drivers
         );
         match self.config.get(config_name) {
-            Some(config) => match runner_meta_by_name(&config._runner) {
+            Some(config) => match runner_meta_by_name(&config._driver) {
                 Some(runner_meta) => match runner_meta.exts.iter().find(|e| e == &&ext) {
                     Some(_) => Ok(RunnerMetaAndConfig {
                         meta: runner_meta,
@@ -379,7 +379,7 @@ impl<'a> MigrationFinder {
                 },
                 None => Err(format!(
                     "no such runner {} in this version of Mitre",
-                    &config._runner
+                    &config._driver
                 )),
             },
             None => Err(format!("no configuration found for runner {}", config_name)),

@@ -37,7 +37,7 @@ Mitre is a cross-platform (stand-alone CLI tool, and bindings for Ruby, Node.js)
 2. Ordinal integers (datetime stamps) to help run migrations in order. UTC is assumed.
 3. Helpful name to give a clue what the migration does.
 4. A configuration name, something specifying connection params in the configuration.
-5. A runner extension name hint, for example `.sql` expects a configuration for either PostgreSQL, MariaDB or MySQL in the configuration with the name `mydb` and `mydb._runner = "mysql"`.
+5. A runner extension name hint, for example `.sql` expects a configuration for either PostgreSQL, MariaDB or MySQL in the configuration with the name `mydb` and `mydb._driver = "mysql"`.
 
 ## Example Configuration & Directory Structure
 
@@ -46,14 +46,14 @@ $ cat config.yml
 ---
 migrations_directory: "."
 appdb: &mitre
-  _runner: "mysql"
+  _driver: "mysql"
   database: "my-awesome-app"
   ip_or_hostname: 127.0.0.1
   port: 3306
   username: "myawesome"
   password: "example"
 searchdb:
-  _runner: "elasticsearch"
+  _driver: "elasticsearch"
   ip_or_hostname: 127.0.0.1
   port: 9200
   index_name: "my-awesome-app"
@@ -83,7 +83,7 @@ $ tree
   ...
 ```
 
-Single files are considered to be "change" migrations, irreversible, and simply applied one-way. Directories with an `up` or `down` file are expected both to be runnable by the same runner defined in their configuration (i.e `.sql` is an allowed extension of the `mysql` specified between the `.appdb` suffix on the directory name, and the `_runner: "mysql` in the configuration.). Migrations are searched in the entire project directory thanks to the `migrations_directory` in the configuration. This allows composition with sub-modules for deploying microliths.
+Single files are considered to be "change" migrations, irreversible, and simply applied one-way. Directories with an `up` or `down` file are expected both to be runnable by the same runner defined in their configuration (i.e `.sql` is an allowed extension of the `mysql` specified between the `.appdb` suffix on the directory name, and the `_driver: "mysql` in the configuration.). Migrations are searched in the entire project directory thanks to the `migrations_directory` in the configuration. This allows composition with sub-modules for deploying microliths.
 
 The anatomy of the file and directory names is specified above.
 
@@ -92,7 +92,7 @@ It is vitally important to understand the relationship between the ends of filen
 - This is a data migration (a kind of tag, applications may permit booting with data migrations un-applied).
 - This is migration uses the `appdb` configuration which knows how to handle `.sql` files.
 
-Whether `appdb` is MySQL, MySQL, PostgreSQL or something else, is defined by the `_runner` in the config.
+Whether `appdb` is MySQL, MySQL, PostgreSQL or something else, is defined by the `_driver` in the config.
 
 ## Bidirectional migrations
 

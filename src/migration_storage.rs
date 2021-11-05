@@ -2,11 +2,11 @@ use super::{Configuration, Error, Migration, MigrationList, MySQL};
 
 pub fn from_config(c: &Configuration) -> Result<impl MigrationStorage, Error> {
     if let Some(config) = c.get("mitre") {
-        if config._runner.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
+        if config._driver.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
             let storage = MySQL::new(config.clone())?;
             Ok(storage)
         } else {
-            Err(Error::UnsupportedRunnerSpecified)
+            Err(Error::UnsupportedDriverSpecified)
         }
     } else {
         Err(Error::NoMitreConfigProvided)
@@ -21,8 +21,30 @@ pub trait MigrationStorage: MigrationList {
     fn remove(&mut self, _: Migration) -> Result<(), Error>;
 }
 
+// Implementation of MigrationStorage for Box<MigrationStorage>
+impl MigrationStorage for &mut Box<dyn MigrationStorage> {
+    #[cfg(test)]
+    fn reset(&mut self) -> Result<(), Error> {
+        (**self).reset()
+    }
+
+    fn add(&mut self, m: Migration) -> Result<(), Error> {
+        (**self).add(m)
+    }
+
+    fn remove(&mut self, m: Migration) -> Result<(), Error> {
+        (**self).remove(m)
+    }
+}
+
+impl MigrationList for &mut Box<dyn MigrationStorage> {
+    fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error> {
+        (**self).all()
+    }
+}
+
 #[cfg(test)]
-mod tests {
+pub mod tests {
 
     use super::super::{Direction, MigrationStep, MigrationSteps, MigrationStorage};
     use super::*;
@@ -32,9 +54,9 @@ mod tests {
     };
     use std::{array::IntoIter, collections::HashMap, iter::FromIterator, path::PathBuf};
 
-    fn test_mysql_storage_configuration() -> RunnerConfiguration {
+    pub fn test_mysql_storage_configuration() -> RunnerConfiguration {
         RunnerConfiguration {
-            _runner: String::from("mysql"),
+            _driver: String::from("mysql"),
             database_number: None {},
             database: Some(String::from("mitre_test")),
             index: None {},
@@ -95,7 +117,7 @@ mod tests {
         }
         Ok(())
     }
-    fn lists_what_it_stores(ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
+    fn lists_what_it_stores(mut ms: &mut Box<dyn MigrationStorage>) -> Result<(), String> {
         for migration in migration_fixture() {
             match ms.add(migration) {
                 Err(e) => return Err(format!("error: {:#?}", e)),

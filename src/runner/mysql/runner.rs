@@ -45,10 +45,10 @@ impl Runner for MySql {
 
     fn new_runner(config: RunnerConfiguration) -> Result<MySql, RunnerError> {
         let runner_name = String::from(crate::reserved::MARIA_DB).to_lowercase();
-        if config._runner.to_lowercase() != runner_name {
+        if config._driver.to_lowercase() != runner_name {
             return Err(RunnerError::RunnerNameMismatch {
                 expected: runner_name,
-                found: config._runner,
+                found: config._driver,
             });
         };
 

@@ -1,7 +1,7 @@
 use crate::Direction;
 
 use super::{
-    runner_from_config, Error, Migration, MigrationList, MigrationResult, MigrationResultTuple,
+    driver_from_config, Error, Migration, MigrationList, MigrationResult, MigrationResultTuple,
     MigrationState, MigrationStateTuple, MigrationStorage,
 };
 use itertools::Itertools;
@@ -55,12 +55,12 @@ impl Engine {
             log::debug!("checking migration {:?}", migration);
             match state {
                 MigrationState::Pending => {
-                    match runner_from_config(&c, &migration.configuration_name) {
-                        Ok(boxed_runner) => match boxed_runner.apply(migration) {
+                    match driver_from_config(&c, &migration.configuration_name) {
+                        Ok(mut driver) => match driver.apply(&migration) {
                             Ok(_) => (MigrationResult::Success, migration),
                             Err(e) => (
                                 MigrationResult::Failure {
-                                    reason: format!("{}", e),
+                                    reason: format!("{:?}", e),
                                 },
                                 migration,
                             ),
@@ -69,7 +69,7 @@ impl Engine {
                             log::error!("Error getting runner from config {:?}", e);
                             (
                                 MigrationResult::Failure {
-                                    reason: format!("{}", e),
+                                    reason: format!("{:?}", e),
                                 },
                                 migration,
                             )
@@ -130,6 +130,8 @@ mod tests {
         InMemoryMigrations::new()
     }
 
+    fn mysql_migration_storage() {}
+
     fn non_empty_migration_list() -> impl MigrationStorage {
         let mut imms = empty_migration_list();
         for migration in fixture().iter() {
@@ -185,4 +187,15 @@ mod tests {
             _ => Ok(()),
         }
     }
+
+    #[test]
+    fn test_apply_applies_all_successful_migrations() -> Result<(), String> {
+        let _imms = empty_migration_list();
+        // let mut storage = /
+        Ok(())
+    }
+
+    // test that given a MySQL + PostgreSQL + Redis driver, for all supported storages
+    // we store the state and can migrate across the board. One each migration each
+    // driver.
 }
