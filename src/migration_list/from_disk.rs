@@ -187,7 +187,7 @@ impl<'a> MigrationFinder {
                                 Some((path.clone(), Direction::Up))
                             }
                             Err(e) => {
-                                warn!("No runner configured for {:?}: {}", path, e);
+                                warn!("No driver configured for {:?}: {}", path, e);
                                 None {}
                             }
                         },

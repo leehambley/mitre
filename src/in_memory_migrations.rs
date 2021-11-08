@@ -1,5 +1,6 @@
 use super::{Error, Migration, MigrationList, MigrationStorage};
 
+#[derive(Clone)]
 pub struct InMemoryMigrations {
     pub m: Vec<Migration>,
 }
