@@ -14,7 +14,6 @@ use mysql::prelude::Queryable;
 const MIGRATION_STATE_TABLE_NAME: &str = "mitre_migration_state";
 const MIGRATION_STEPS_TABLE_NAME: &str = "mitre_migration_steps";
 
-#[derive(Clone)]
 pub struct MySQL {
     conn: mysql::Conn,
     config: RunnerConfiguration,

@@ -11,7 +11,8 @@ pub trait MigrationList {
     fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error>;
 }
 
-impl MigrationList for &mut Box<dyn MigrationList> {
+// https://stackoverflow.com/a/33041872/119669
+impl<ML: MigrationList + ?Sized> MigrationList for Box<ML> {
     fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error> {
         (**self).all()
     }

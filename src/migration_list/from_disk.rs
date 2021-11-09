@@ -50,10 +50,10 @@ struct RunnerMetaAndConfig<'a> {
 ///
 /// Ideally provide an absolute path. When giving a relative path in the config (e.g ".") the relative
 /// path should be appended to the (ideally) absolute path.
-pub fn from_disk(config: &Configuration) -> MigrationFinder {
-    MigrationFinder {
+pub fn from_disk(config: &Configuration) -> Result<Box<dyn MigrationList>, ()> {
+    Ok(Box::new(MigrationFinder {
         config: config.clone(),
-    }
+    }))
 }
 
 pub struct MigrationFinder {

@@ -204,7 +204,10 @@ mitre --help
 
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow
-            match Engine::diff(migration_list(&config), migration_storage(&config)) {
+            match Engine::diff(
+                &mut (*migration_list(&config)),
+                &mut (*migration_storage(&config)),
+            ) {
                 Err(e) => error!("Error: {:?}", e),
                 Ok(migrations) => {
                     for (migration_state, m) in migrations {
@@ -289,21 +292,14 @@ mitre --help
             #[cfg(feature = "ui")]
             {
                 info!("Starting webserver");
-                match mitre::migration_list_from_disk(&config).all() {
-                    Ok(migrations) => {
-                        info!("Opening webserver");
-                        // TODO: Add a flag to enable / disable open
-                        match start_web_ui(config_file.to_path_buf(), migrations.collect(), true) {
-                            Ok(_) => {
-                                info!("Closing webserver")
-                            }
-                            Err(err) => {
-                                info!("Error starting webserver {}", err)
-                            }
-                        }
+                info!("Opening webserver");
+                // TODO: Add a flag to enable / disable open
+                match start_web_ui(config_file.to_path_buf(), true) {
+                    Ok(_) => {
+                        info!("Closing webserver")
                     }
-                    Err(_) => {
-                        info!("Error finding migrations")
+                    Err(err) => {
+                        info!("Error starting webserver {}", err)
                     }
                 }
             }
@@ -381,11 +377,11 @@ mitre --help
     }
 }
 
-fn migration_list(c: &Configuration) -> impl MigrationList {
-    migration_list_from_disk(c)
+fn migration_list(c: &Configuration) -> Box<dyn MigrationList> {
+    migration_list_from_disk(c).expect("should be able to make migration list")
 }
 
-fn migration_storage(c: &Configuration) -> impl MigrationStorage {
+fn migration_storage(c: &Configuration) -> Box<dyn MigrationStorage> {
     migration_storage_from_config(c).expect("should be able to make migration storage")
 }
 
@@ -393,7 +389,12 @@ fn apply<'a>(
     c: &'a Configuration,
     work_list: Option<Vec<&Direction>>,
 ) -> Result<impl Iterator<Item = MigrationResultTuple> + 'a, mitre::Error> {
-    Engine::apply(c, migration_list(c), migration_storage(c), work_list)
+    Engine::apply(
+        c.to_owned(),
+        &mut (*migration_list(c)),
+        &mut (*migration_storage(c)),
+        work_list,
+    )
 }
 
 #[cfg(test)]

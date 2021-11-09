@@ -10,8 +10,8 @@ pub struct Engine {}
 
 impl Engine {
     pub fn diff(
-        mut src: impl MigrationList,
-        mut dest: impl MigrationStorage,
+        src: &mut dyn MigrationList,
+        dest: &mut dyn MigrationStorage,
     ) -> Result<impl Iterator<Item = MigrationStateTuple>, Error> {
         let uniq_fn = |m: &Migration| m.date_time;
         let tuple_uniq_fn = |m: &MigrationStateTuple| m.1.date_time;
@@ -43,12 +43,12 @@ impl Engine {
             .unique_by(tuple_uniq_fn))
     }
 
-    pub fn apply<'a>(
-        config: &'a crate::config::Configuration,
-        src: impl MigrationList + 'a,
-        dest: impl MigrationStorage + 'a,
+    pub fn apply(
+        config: crate::config::Configuration,
+        src: &mut dyn MigrationList,
+        dest: &mut dyn MigrationStorage,
         _work_filter: Option<Vec<&Direction>>,
-    ) -> Result<impl Iterator<Item = MigrationResultTuple> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = MigrationResultTuple>, Error> {
         let work_list = Engine::diff(src, dest)?;
         let c = config.clone();
         let mut failed_at: Option<Migration> = None;
@@ -93,13 +93,12 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use crate::config;
-
     use super::super::{
         Direction, InMemoryMigrations, Migration, MigrationStateTuple, MigrationStep,
         MigrationStorage, TIMESTAMP_FORMAT_STR,
     };
     use super::*;
+    use crate::config;
     use crate::config::Configuration;
     use crate::mysql::MySQL;
     use log::trace;
@@ -143,7 +142,7 @@ mod tests {
         }]
     }
 
-    fn all_success_fixture() -> impl MigrationList {
+    fn all_success_fixture() -> Box<dyn MigrationList> {
         let str = format!("mitre_test_db_{}", rand::thread_rng().gen::<u32>());
         let migrations = vec![
             Migration {
@@ -208,23 +207,23 @@ mod tests {
         for migration in migrations {
             imm.add(migration).unwrap();
         }
-        imm
+        Box::new(imm)
     }
 
-    fn empty_migration_storage() -> impl MigrationStorage {
-        InMemoryMigrations::new()
+    fn empty_migration_storage() -> Box<dyn MigrationStorage> {
+        Box::new(InMemoryMigrations::new())
     }
 
-    fn empty_migration_list() -> impl MigrationStorage {
-        InMemoryMigrations::new()
+    fn empty_migration_list() -> Box<dyn MigrationStorage> {
+        Box::new(InMemoryMigrations::new())
     }
 
     #[cfg(feature = "runner_mysql")]
-    fn mysql_migration_storage(c: config::Configuration) -> impl MigrationStorage {
-        MySQL::new(c.get("mitre").unwrap().clone()).unwrap()
+    fn mysql_migration_storage(c: config::Configuration) -> Box<dyn MigrationStorage> {
+        Box::new(MySQL::new(c.get("mitre").unwrap().clone()).unwrap())
     }
 
-    fn non_empty_migration_list() -> impl MigrationStorage {
+    fn non_empty_migration_list() -> Box<dyn MigrationStorage> {
         let mut imms = empty_migration_list();
         for migration in fixture().iter() {
             trace!("Added migration {}", migration.date_time);
@@ -237,7 +236,10 @@ mod tests {
 
     #[test]
     fn test_diff_lists_unknown_dest_migrations_as_pending() -> Result<(), String> {
-        match Engine::diff(non_empty_migration_list(), empty_migration_list()) {
+        match Engine::diff(
+            &mut (*non_empty_migration_list()),
+            &mut (*empty_migration_list()),
+        ) {
             Ok(r) => {
                 let r_vec = r.collect::<Vec<MigrationStateTuple>>();
                 assert_eq!(r_vec.len(), fixture().len());
@@ -285,8 +287,8 @@ mod tests {
     #[test_case(config(), empty_migration_list(), mysql_migration_storage(config()) ; "with an mysql store")]
     fn test_empty_stores_with_no_config_apply_uniformly(
         config: Configuration,
-        src: impl MigrationList,
-        mut dest: impl MigrationStorage,
+        src: &dyn MigrationList,
+        mut dest: &dyn MigrationStorage,
     ) -> Result<(), String> {
         // integration fixtures may have external state, reset them noisily
         dest.reset().unwrap();
@@ -307,8 +309,8 @@ mod tests {
     #[test_case(config(), all_success_fixture(), mysql_migration_storage(config()) ; "with an mysql store")]
     fn test_all_success_fixture_stores_all_during_apply_uniformly(
         config: Configuration,
-        src: impl MigrationList,
-        mut dest: impl MigrationStorage,
+        src: &dyn MigrationList,
+        mut dest: &dyn MigrationStorage,
     ) -> Result<(), String> {
         // integration fixtures may have external state, reset them noisily
         dest.reset().unwrap();
@@ -333,8 +335,8 @@ mod tests {
     // #[cfg(feature = "runner_mysql")]
     // fn test_engine_stops_applying_after_first_failure(
     //     config: Configuration,
-    //     src: impl MigrationList,
-    //     mut dest: impl MigrationStorage,
+    //     src: &dyn MigrationList,
+    //     mut dest: &dyn MigrationStorage,
     // ) -> Result<(), String> {
     //     // TODO: Ahoy
     //     // Test that we stop processing on the first error and
