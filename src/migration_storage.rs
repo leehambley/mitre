@@ -29,7 +29,7 @@ pub trait MigrationStorage: MigrationList {
 impl<MS: MigrationStorage + ?Sized> MigrationStorage for Box<MS> {
     #[cfg(test)]
     fn reset<'a>(&'a mut self) -> Result<(), Error> {
-        (**self).all()
+        (**self).reset()
     }
     fn add(&mut self, m: Migration) -> Result<(), Error> {
         (**self).add(m)

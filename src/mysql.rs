@@ -157,7 +157,7 @@ impl MySQL {
     }
 
     fn bootstrap(&mut self) -> Result<(), Error> {
-        panic!("in bootstrapping");
+        // panic!("in bootstrapping");
         debug!("bootstrapping mysql driver");
         for bootstrap_migration in self.bootstrap_migrations().iter() {
             trace!("applying {:?}", bootstrap_migration);

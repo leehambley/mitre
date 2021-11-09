@@ -214,7 +214,7 @@ mod tests {
         Box::new(InMemoryMigrations::new())
     }
 
-    fn empty_migration_list() -> Box<dyn MigrationStorage> {
+    fn empty_migration_list() -> Box<dyn MigrationList> {
         Box::new(InMemoryMigrations::new())
     }
 
@@ -223,8 +223,8 @@ mod tests {
         Box::new(MySQL::new(c.get("mitre").unwrap().clone()).unwrap())
     }
 
-    fn non_empty_migration_list() -> Box<dyn MigrationStorage> {
-        let mut imms = empty_migration_list();
+    fn non_empty_migration_storage() -> Box<dyn MigrationStorage> {
+        let mut imms = empty_migration_storage();
         for migration in fixture().iter() {
             trace!("Added migration {}", migration.date_time);
             if let Err(e) = imms.add(migration.clone()) {
@@ -237,8 +237,8 @@ mod tests {
     #[test]
     fn test_diff_lists_unknown_dest_migrations_as_pending() -> Result<(), String> {
         match Engine::diff(
-            &mut (*non_empty_migration_list()),
-            &mut (*empty_migration_list()),
+            &mut non_empty_migration_storage(),
+            &mut empty_migration_storage(),
         ) {
             Ok(r) => {
                 let r_vec = r.collect::<Vec<MigrationStateTuple>>();
@@ -254,7 +254,10 @@ mod tests {
 
     #[test]
     fn test_diff_lists_unknown_src_migrations_as_orphaned() -> Result<(), String> {
-        match Engine::diff(empty_migration_list(), non_empty_migration_list()) {
+        match Engine::diff(
+            &mut empty_migration_list(),
+            &mut non_empty_migration_storage(),
+        ) {
             Ok(r) => {
                 let r_vec = r.collect::<Vec<MigrationStateTuple>>();
                 assert_eq!(r_vec.len(), fixture().len());
@@ -269,7 +272,10 @@ mod tests {
 
     #[test]
     fn test_diff_lists_all_known_in_src_dest_migrations_as_applied() -> Result<(), String> {
-        match Engine::diff(non_empty_migration_list(), non_empty_migration_list()) {
+        match Engine::diff(
+            &mut non_empty_migration_storage(),
+            &mut non_empty_migration_storage(),
+        ) {
             Ok(r) => {
                 let r_vec = r.collect::<Vec<MigrationStateTuple>>();
                 assert_eq!(r_vec.len(), fixture().len());
@@ -287,13 +293,13 @@ mod tests {
     #[test_case(config(), empty_migration_list(), mysql_migration_storage(config()) ; "with an mysql store")]
     fn test_empty_stores_with_no_config_apply_uniformly(
         config: Configuration,
-        src: &dyn MigrationList,
-        mut dest: &dyn MigrationStorage,
+        mut src: Box<dyn MigrationList>,
+        mut dest: Box<dyn MigrationStorage>,
     ) -> Result<(), String> {
         // integration fixtures may have external state, reset them noisily
         dest.reset().unwrap();
         // let c = config::load
-        match Engine::apply(&config, src, dest, None {}) {
+        match Engine::apply(config, &mut src, &mut dest, None {}) {
             Ok(r) => {
                 for result in r {
                     println!("{:?}", result)
@@ -309,13 +315,13 @@ mod tests {
     #[test_case(config(), all_success_fixture(), mysql_migration_storage(config()) ; "with an mysql store")]
     fn test_all_success_fixture_stores_all_during_apply_uniformly(
         config: Configuration,
-        src: &dyn MigrationList,
-        mut dest: &dyn MigrationStorage,
+        mut src: Box<dyn MigrationList>,
+        mut dest: Box<dyn MigrationStorage>,
     ) -> Result<(), String> {
         // integration fixtures may have external state, reset them noisily
         dest.reset().unwrap();
         // let c = config::load
-        match Engine::apply(&config, src, &dest, None {}) {
+        match Engine::apply(config, &mut src, &mut dest, None {}) {
             Ok(r) => {
                 // Every migration should report as success
                 for (result, _migration) in r {

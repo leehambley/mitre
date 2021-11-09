@@ -205,8 +205,8 @@ mitre --help
             // TODO: return something from error_code module in this crate
             // TODO: sort the migrations, list somehow
             match Engine::diff(
-                &mut (*migration_list(&config)),
-                &mut (*migration_storage(&config)),
+                &mut migration_list(&config),
+                &mut migration_storage(&config),
             ) {
                 Err(e) => error!("Error: {:?}", e),
                 Ok(migrations) => {
@@ -391,8 +391,8 @@ fn apply<'a>(
 ) -> Result<impl Iterator<Item = MigrationResultTuple> + 'a, mitre::Error> {
     Engine::apply(
         c.to_owned(),
-        &mut (*migration_list(c)),
-        &mut (*migration_storage(c)),
+        &mut migration_list(c),
+        &mut migration_storage(c),
         work_list,
     )
 }

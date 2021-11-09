@@ -239,7 +239,7 @@ unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut Migratio
 
     let migration_states = match migration_storage_from_config(&rc) {
         Ok(mut migration_storage) => {
-            match Engine::diff(&mut (*migrations_from_disk), &mut (*migration_storage)) {
+            match Engine::diff(&mut migrations_from_disk, &mut migration_storage) {
                 Ok(diff_results) => {
                     let mut num_migration_states: usize = 0;
                     let mut migration_states: Vec<MigrationState> = vec![];
