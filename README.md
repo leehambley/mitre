@@ -242,5 +242,5 @@ Please install [pre-commit](https://pre-commit.com/#install) and run `pre-commit
 
 ### Testing
 
-1. Start the test databases with `docker-compose up -d` (on Silicon run `docker-compose up -f docker-compose.silicon.yml -d`)
+1. Start the test databases with `docker-compose up -d`
 2. Run `cargo test`
