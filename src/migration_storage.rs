@@ -1,10 +1,9 @@
 use super::{Configuration, Error, Migration, MigrationList, MySQL};
 
-pub fn from_config(c: &Configuration) -> Result<impl MigrationStorage, Error> {
+pub fn from_config(c: &Configuration) -> Result<Box<dyn MigrationStorage>, Error> {
     if let Some(config) = c.get("mitre") {
         if config._driver.to_lowercase() == crate::reserved::MARIA_DB.to_lowercase() {
-            let storage = MySQL::new(config.clone())?;
-            Ok(storage)
+            Ok(Box::new(MySQL::new(config.clone())?))
         } else {
             Err(Error::UnsupportedDriverSpecified)
         }
@@ -21,25 +20,22 @@ pub trait MigrationStorage: MigrationList {
     fn remove(&mut self, _: Migration) -> Result<(), Error>;
 }
 
-// Implementation of MigrationStorage for Box<MigrationStorage>
-impl MigrationStorage for &mut Box<dyn MigrationStorage> {
+// impl<MS: MigrationStorage + ?Sized> MigrationList for Box<MS> {
+//     fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error> {
+//         (**self).all()
+//     }
+// }
+
+impl<MS: MigrationStorage + ?Sized> MigrationStorage for Box<MS> {
     #[cfg(test)]
-    fn reset(&mut self) -> Result<(), Error> {
+    fn reset<'a>(&'a mut self) -> Result<(), Error> {
         (**self).reset()
     }
-
     fn add(&mut self, m: Migration) -> Result<(), Error> {
         (**self).add(m)
     }
-
     fn remove(&mut self, m: Migration) -> Result<(), Error> {
         (**self).remove(m)
-    }
-}
-
-impl MigrationList for &mut Box<dyn MigrationStorage> {
-    fn all<'a>(&'a mut self) -> Result<Box<(dyn Iterator<Item = Migration> + 'a)>, Error> {
-        (**self).all()
     }
 }
 

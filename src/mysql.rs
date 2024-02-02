@@ -148,7 +148,7 @@ impl MySQL {
                 error!("running query failed {:?}", e,);
                 Err(Error::QueryFailed {
                     reason: Some(e),
-                    msg: String::from("Could not run the mysql query for bootstrapping"),
+                    msg: String::from("Could not run the mysql query"),
                 })
             }
         };
@@ -157,6 +157,7 @@ impl MySQL {
     }
 
     fn bootstrap(&mut self) -> Result<(), Error> {
+        // panic!("in bootstrapping");
         debug!("bootstrapping mysql driver");
         for bootstrap_migration in self.bootstrap_migrations().iter() {
             trace!("applying {:?}", bootstrap_migration);

@@ -6,10 +6,9 @@ use crate::{
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer, Result};
 use askama::Template;
 use log::info;
-use std::ops::DerefMut;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::Mutex;
-
 struct MigrationTableRow {
     state: String,
     date_time: String,
@@ -26,8 +25,8 @@ struct MigrationsTemplate<'a> {
 }
 
 struct AppData {
-    migration_list: Mutex<Box<dyn MigrationList>>,
-    migration_storage: Mutex<Box<dyn MigrationStorage>>,
+    migration_list: Arc<Mutex<Box<dyn MigrationList>>>,
+    migration_storage: Arc<Mutex<Box<dyn MigrationStorage>>>,
 }
 
 async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
@@ -36,20 +35,20 @@ async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
 
     let mut v: Vec<MigrationTableRow> = Vec::new();
 
-    for (migration_state, m) in
-        Engine::diff(migration_list.deref_mut(), migration_storage.deref_mut()).expect("boom")
-    {
-        m.clone().steps.into_iter().for_each(|(direction, s)| {
-            v.push(MigrationTableRow {
-                state: format!("{:?}", migration_state),
-                built_in: m.built_in,
-                date_time: format!("{:?}", m.date_time),
-                path: format!("{:?}", s.path),
-                runner_name: m.configuration_name.to_string(),
-                direction: format!("{:?}", direction),
-            })
-        })
-    }
+    // for (migration_state, m) in
+    //     Engine::diff((mut migration_list.to_owned()), mut migration_storage.to_owned()).expect("boom")
+    // {
+    //     m.clone().steps.into_iter().for_each(|(direction, s)| {
+    //         v.push(MigrationTableRow {
+    //             state: format!("{:?}", migration_state),
+    //             built_in: m.built_in,
+    //             date_time: format!("{:?}", m.date_time),
+    //             path: format!("{:?}", s.path),
+    //             runner_name: m.configuration_name.to_string(),
+    //             direction: format!("{:?}", direction),
+    //         })
+    //     })
+    // }
 
     let template = MigrationsTemplate { migrations: &v };
     Ok(HttpResponse::Ok()
@@ -58,12 +57,7 @@ async fn index(data: web::Data<AppData>) -> Result<HttpResponse> {
 }
 
 #[actix_web::main]
-pub async fn start_web_ui(
-    config_file: PathBuf,
-    migrations: Vec<Migration>,
-    open: bool,
-) -> Result<(), std::io::Error> {
-    info!("mig {:?}", migrations);
+pub async fn start_web_ui(config_file: PathBuf, open: bool) -> Result<(), std::io::Error> {
     let listen = "127.0.0.1:8000";
     let server = HttpServer::new(move || {
         let config = Box::new(config::from_file(&config_file).expect("could not read config"));
@@ -72,8 +66,10 @@ pub async fn start_web_ui(
         App::new()
             .wrap(Logger::new("%a %{User-Agent}i %r %s %b %Dms %U"))
             .app_data(AppData {
-                migration_list: Mutex::new(Box::new(migration_list_from_disk(c))),
-                migration_storage: Mutex::new(Box::new(
+                migration_list: Arc::new(Mutex::new(
+                    migration_list_from_disk(c).expect("could not make migration list"),
+                )),
+                migration_storage: Arc::new(Mutex::new(
                     migration_storage_from_config(c).expect("could not make migration storage"),
                 )),
             })

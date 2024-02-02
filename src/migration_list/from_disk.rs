@@ -50,10 +50,10 @@ struct RunnerMetaAndConfig<'a> {
 ///
 /// Ideally provide an absolute path. When giving a relative path in the config (e.g ".") the relative
 /// path should be appended to the (ideally) absolute path.
-pub fn from_disk(config: &Configuration) -> MigrationFinder {
-    MigrationFinder {
+pub fn from_disk(config: &Configuration) -> Result<Box<dyn MigrationList>, ()> {
+    Ok(Box::new(MigrationFinder {
         config: config.clone(),
-    }
+    }))
 }
 
 pub struct MigrationFinder {
@@ -187,7 +187,7 @@ impl<'a> MigrationFinder {
                                 Some((path.clone(), Direction::Up))
                             }
                             Err(e) => {
-                                warn!("No runner configured for {:?}: {}", path, e);
+                                warn!("No driver configured for {:?}: {}", path, e);
                                 None {}
                             }
                         },
@@ -472,7 +472,7 @@ mod tests {
             Err(e) => Err(format!("couldn't make config {}", e))?,
         };
 
-        match from_disk(&config.clone()).all() {
+        match from_disk(&config.clone()).unwrap().all() {
             Err(e) => Err(format!("Error: {:?}", e)),
             Ok(migrations) => {
                 assert_eq!(migrations.collect::<Vec<Migration>>().len(), 3); // built-in migrations are being deprecated

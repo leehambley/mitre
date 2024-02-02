@@ -229,57 +229,66 @@ unsafe extern "C" fn free_config_from_file(c: *mut Configuration) {
 #[no_mangle]
 unsafe extern "C" fn diff(c: *mut crate::config::Configuration) -> *mut MigrationStates {
     let rc = Box::from_raw(c);
-    let migrations_from_disk = migration_list_from_disk(&rc);
+    let mut migrations_from_disk = match migration_list_from_disk(&rc) {
+        Ok(migrations_from_disk) => migrations_from_disk,
+        Err(e) => {
+            error!("could not run get a migration list from disk {:?}", e);
+            return std::ptr::null_mut();
+        }
+    };
 
     let migration_states = match migration_storage_from_config(&rc) {
-        Ok(migration_storage) => match Engine::diff(migrations_from_disk, migration_storage) {
-            Ok(diff_results) => {
-                let mut num_migration_states: usize = 0;
-                let mut migration_states: Vec<MigrationState> = vec![];
-                for (migration_state, migration) in diff_results {
-                    num_migration_states += 1;
-                    let mut num_steps: usize = 0;
-                    let mut steps: Vec<MigrationStep> = vec![];
-                    for (direction, step) in migration.steps {
-                        num_steps += 1;
-                        steps.push(MigrationStep {
-                            direction: CString::new(format!("{:?}", direction))
+        Ok(mut migration_storage) => {
+            match Engine::diff(&mut migrations_from_disk, &mut migration_storage) {
+                Ok(diff_results) => {
+                    let mut num_migration_states: usize = 0;
+                    let mut migration_states: Vec<MigrationState> = vec![];
+                    for (migration_state, migration) in diff_results {
+                        num_migration_states += 1;
+                        let mut num_steps: usize = 0;
+                        let mut steps: Vec<MigrationStep> = vec![];
+                        for (direction, step) in migration.steps {
+                            num_steps += 1;
+                            steps.push(MigrationStep {
+                                direction: CString::new(format!("{:?}", direction))
+                                    .unwrap_or_default()
+                                    .into_raw(),
+                                path: CString::new(step.path.to_str().unwrap_or_default())
+                                    .unwrap_or_default()
+                                    .into_raw(),
+                                source: CString::new(step.source).unwrap().into_raw(),
+                            })
+                        }
+                        migration_states.push(MigrationState {
+                            state: CString::new(format!("{:?}", migration_state))
                                 .unwrap_or_default()
                                 .into_raw(),
-                            path: CString::new(step.path.to_str().unwrap_or_default())
+                            migration: Box::into_raw(Box::new(Migration {
+                                date_time: CString::new(format!(
+                                    "{}",
+                                    migration.date_time.format(crate::migrations::FORMAT_STR)
+                                ))
                                 .unwrap_or_default()
                                 .into_raw(),
-                            source: CString::new(step.source).unwrap().into_raw(),
-                        })
+                                steps: Box::into_raw(steps.into_boxed_slice())
+                                    as *mut MigrationStep,
+                                built_in: 1,
+                                num_steps,
+                            })),
+                        });
                     }
-                    migration_states.push(MigrationState {
-                        state: CString::new(format!("{:?}", migration_state))
-                            .unwrap_or_default()
-                            .into_raw(),
-                        migration: Box::into_raw(Box::new(Migration {
-                            date_time: CString::new(format!(
-                                "{}",
-                                migration.date_time.format(crate::migrations::FORMAT_STR)
-                            ))
-                            .unwrap_or_default()
-                            .into_raw(),
-                            steps: Box::into_raw(steps.into_boxed_slice()) as *mut MigrationStep,
-                            built_in: 1,
-                            num_steps,
-                        })),
-                    });
+                    MigrationStates {
+                        migration_state: Box::into_raw(migration_states.into_boxed_slice())
+                            as *mut MigrationState,
+                        num_migration_states,
+                    }
                 }
-                MigrationStates {
-                    migration_state: Box::into_raw(migration_states.into_boxed_slice())
-                        as *mut MigrationState,
-                    num_migration_states,
+                Err(e) => {
+                    error!("could not run diff() on state store {:?}", e);
+                    return std::ptr::null_mut();
                 }
             }
-            Err(e) => {
-                error!("could not run diff() on state store {:?}", e);
-                return std::ptr::null_mut();
-            }
-        },
+        }
         Err(e) => {
             error!("could not make state store from config: {:?}", e);
             return std::ptr::null_mut();

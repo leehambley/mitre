@@ -62,7 +62,7 @@ pub enum ConfigError {
     /// will cause an error. If a language binding is used, and the language provides the config, we may not have a parsing-time
     /// opportunity to notice this problem in the config file, so the [`ConfigProblem::UnsupportedDriverSpecified`] may manifest
     /// (e.g if the language binding provides an empty string for the runner).
-    NoRunnerSpecified {
+    NoDriverSpecified {
         config_name: String,
     },
     /// YAML supports ["arbitrarily sized finite mathematical integers"](https://yaml.org/type/int.html) however we may not need or want that.
@@ -85,8 +85,8 @@ impl fmt::Display for ConfigError {
             ConfigError::NoYamlHash => {
                 write!(f, "YAML error: the top level doc in the yaml wasn't a hash")
             }
-            ConfigError::NoRunnerSpecified { config_name } => {
-                write!(f, "No runner specified in config block `{}'", config_name)
+            ConfigError::NoDriverSpecified { config_name } => {
+                write!(f, "No driver specified in config block `{}'", config_name)
             }
             ConfigError::IntegerOutOfRange { value, max } => write!(
                 f,
@@ -123,7 +123,7 @@ pub enum ConfigProblem {
     /// "Anchors and Aliases" functions to specify a `mitre:\n<<: *myappdb` block when
     /// Mitre should store state in the same database to which we are applying migrations.
     NoMitreConfiguration,
-    /// Unsupported runner specified. See [crate::reserved] for supported runners.
+    /// Unsupported driver/runner specified. See [crate::reserved] for supported runners/drivers.
     UnsupportedDriverSpecified,
     /// Certain databases (e.g ElasticSearch) have a concept of an index. This configuration option
     /// is exposed as `{indexName}` within the templates of migrations targeting a runner where this
@@ -336,7 +336,7 @@ fn from_yaml(yaml_docs: Vec<yaml_rust::Yaml>) -> Result<Configuration, ConfigErr
                 _driver: match dig_string(config_value, &String::from("_driver")) {
                     Some(s) => s,
                     None => {
-                        return Err(ConfigError::NoRunnerSpecified {
+                        return Err(ConfigError::NoDriverSpecified {
                             config_name: as_string(k),
                         })
                     }
